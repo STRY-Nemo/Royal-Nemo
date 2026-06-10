@@ -128,9 +128,11 @@
   const CORAL_SPACING = 240;
   const GROUND_H = 90;
   const NEMO_R = 19; // collision radius
-  const LVL2_AT = 30;  // space rocket level
-  const LVL3_AT = 60;  // samurai level
-  const WIN_AT = LVL3_AT + 75; // level 3 ends after 5 difficulty steps (15 pts each)
+  const LVL2_AT = 30;   // space rocket level
+  const LVL3_AT = 60;   // samurai level
+  const LVL4_AT = 90;   // neon rave level
+  const LVL5_AT = 120;  // royal kingdom finale
+  const WIN_AT = 150;   // beat level 5 to win the game
 
   // dev/test shortcut: ?start=39 begins one point before level 2, etc.
   // (debug runs don't touch the leaderboard or best score)
@@ -158,26 +160,55 @@
       'and swing the katana. ⚔️',
       'Slice EVERY steel block in two!',
       'If a block touches you, you die.',
-      'If a block gets past you, you die!',
-      'Survive 5 difficulty levels to WIN 🏆'
+      'If a block gets past you, you die!'
     ],
     prompt: 'Tap to accept your destiny'
   };
+  const SPLASH_4 = {
+    title: 'LEVEL 4',
+    subtitle: '🪩 NEON RAVE 🪩',
+    lines: [
+      'Nemo hits the deep-sea disco!',
+      'Every tap drops a bass note 🎵',
+      'The neon gates PULSE to the beat —',
+      'squeeze through when they breathe open!'
+    ],
+    prompt: 'Tap to drop the bass!'
+  };
+  const SPLASH_5 = {
+    title: 'LEVEL 5',
+    subtitle: '👑 THE ROYL KINGDOM 👑',
+    warning: 'THE FINAL LEVEL!',
+    lines: [
+      'Welcome home, your majesty.',
+      'Golden gates guard the throne,',
+      'and their gaps DRIFT up and down!',
+      'Survive the royal gauntlet to be',
+      'crowned ROYL #1 forever 🏆'
+    ],
+    prompt: 'Tap to claim your destiny'
+  };
 
   // ---------- Difficulty (steps up slightly every 15 points) ----------
-  const level = () => Math.min(Math.floor(score / 15), 9);
+  const level = () => Math.min(Math.floor(score / 15), 10);
   const coralSpeed = () => CORAL_SPEED * (1 + 0.08 * level());
   const coralGap = () => Math.max(CORAL_GAP - 8 * level(), 130);
 
   // ---------- State ----------
-  const ST = { READY: 0, PLAYING: 1, DEAD: 2, SPLASH: 3, WIN: 4 };
+  const ST = { READY: 0, PLAYING: 1, DEAD: 2, SPLASH: 3, WIN: 4, OUTRO: 5 };
   let state = ST.READY;
   let nemo, corals, steels, debris, score, best, t, deathT, flashT, winT;
   let drift, sparkles, fireworks, fwTexts, farts, molten, bgScroll;
   let splashLevel = 2, splashT = 0;
+  let outroT = 0, outroFrom = 1, outroLanded = false, outroStart = null;
+  let anemone = { x: 0 };
+  let raveNote = 0; // which bass note the next rave tap plays
   best = +(localStorage.getItem('royalNemoBest') || 0);
 
-  const phase = () => score < LVL2_AT ? 1 : score < LVL3_AT ? 2 : 3;
+  const phase = () => {
+    if (state === ST.OUTRO) return outroFrom; // keep the finished level's world during the landing
+    return score < LVL2_AT ? 1 : score < LVL3_AT ? 2 : score < LVL4_AT ? 3 : score < LVL5_AT ? 4 : 5;
+  };
 
   // ---------- Player name + leaderboard (saved on this device) ----------
   let playerName = localStorage.getItem('royalNemoName') || '';
@@ -260,6 +291,16 @@
     } else if (ph === 2) {
       for (let i = 0; i < 30; i++) {
         drift.push({ x: Math.random() * W, y: Math.random() * H, s: (0.3 + Math.random()) * S(), v: 8 + Math.random() * 20, tw: Math.random() * 7 });
+      }
+    } else if (ph === 4) {
+      // glowing rave orbs floating up
+      for (let i = 0; i < 16; i++) {
+        drift.push({ x: Math.random() * W, y: Math.random() * H, s: (0.4 + Math.random()) * S(), v: 14 + Math.random() * 22, hue: Math.random() * 360 });
+      }
+    } else if (ph === 5) {
+      // royal confetti raining down
+      for (let i = 0; i < 22; i++) {
+        drift.push({ x: Math.random() * W, y: Math.random() * H, s: (0.4 + Math.random()) * S(), v: 30 + Math.random() * 40, hue: Math.random() * 360, sw: Math.random() * 7 });
       }
     } else {
       for (let i = 0; i < 14; i++) {
@@ -361,6 +402,43 @@
     setTimeout(() => beep(784, 0.12, 'triangle', 0.08), 200);
     setTimeout(() => beep(1046, 0.25, 'triangle', 0.09), 300);
   };
+  const RAVE_SCALE = [110, 131, 147, 165, 196, 220, 196, 165];
+  const sndRave = () => {
+    // each tap plays the next note of a bass riff — the player makes the music
+    const f = RAVE_SCALE[raveNote++ % RAVE_SCALE.length];
+    beep(f, 0.18, 'sawtooth', 0.13, f * 0.5);
+    beep(f * 2, 0.09, 'square', 0.05);
+  };
+  const sndTrumpet = () => {
+    // regal brass blast: two detuned saws + a sub note
+    const f = [392, 523, 587, 659][Math.floor(Math.random() * 4)];
+    beep(f, 0.22, 'sawtooth', 0.09);
+    beep(f * 1.006, 0.22, 'sawtooth', 0.07);
+    beep(f / 2, 0.22, 'square', 0.04);
+  };
+  const sndOutro = (lvl) => {
+    if (lvl === 1) {
+      // bubbly descent
+      [880, 660, 520, 392].forEach((f, i) => setTimeout(() => beep(f, 0.16, 'sine', 0.09, f * 0.8), i * 180));
+    } else if (lvl === 2) {
+      // twinkling re-entry chime
+      [1047, 1319, 1568, 2093].forEach((f, i) => setTimeout(() => beep(f, 0.22, 'triangle', 0.07), i * 150));
+    } else if (lvl === 3) {
+      // temple gong and a settling whoosh
+      beep(98, 1.4, 'sine', 0.13);
+      setTimeout(() => beep(700, 0.5, 'triangle', 0.05, 120), 200);
+    } else if (lvl === 4) {
+      // the bass drop to end the set
+      beep(300, 0.9, 'sawtooth', 0.13, 40);
+      setTimeout(() => beep(150, 0.5, 'square', 0.08, 55), 350);
+    } else {
+      // royal fanfare home-coming
+      sndTrumpet();
+      setTimeout(sndTrumpet, 250);
+      setTimeout(sndTrumpet, 500);
+    }
+  };
+
   const snd1Up = () => {
     // quick rising arpeggio, 1-up-mushroom style
     const seq = [659, 784, 1319, 1047, 1175, 1568];
@@ -407,6 +485,12 @@
       spawnFart();
       sndFart();
       sndSlice();
+    } else if (ph === 4) {
+      sndRave();
+      burstParticles(nemo.x, nemo.y, ['#00ffd0', '#ff00d0', '#ffe600'], 6, 0.6);
+    } else if (ph === 5) {
+      sndTrumpet();
+      burstParticles(nemo.x, nemo.y, ['#ffd94a', '#fff'], 5, 0.5);
     } else {
       sndSwim();
     }
@@ -441,6 +525,32 @@
   }
 
   // ---------- Level transitions ----------
+  // Each level ends with a cinematic: the world clears, an anemone rises
+  // from the ground, and Nemo glides down for a dramatic landing in his home.
+  const OUTRO_LEN = 3.6;
+  const ANEMONE_THEMES = {
+    1: { body: '#d8527c', tent: '#ff9eb0', tip: '#ffe1e8',
+         burst: ['#7fdcff', '#ffffff', '#ff9eb0'] },
+    2: { body: '#4b2a78', tent: '#b06ad6', tip: '#ffffff',
+         burst: ['#ffffff', '#ffd94a', '#b06ad6'] },
+    3: { body: '#7a1f2b', tent: '#ff95a5', tip: '#ffd1da',
+         burst: ['#ffb7d3', '#ff95a5', '#ffffff'] },
+    4: { body: '#16162a', tent: 'NEON', tip: '#ffffff',
+         burst: ['#00ffd0', '#ff00d0', '#ffe600', '#00a0ff'] },
+    5: { body: '#9a6a08', tent: '#ffd94a', tip: '#e0455c',
+         burst: ['#ffd94a', '#ff5c5c', '#ffffff', '#aef1b8'] }
+  };
+  function startOutro(finishedLvl) {
+    state = ST.OUTRO;
+    outroT = 0;
+    outroFrom = finishedLvl;
+    outroLanded = false;
+    outroStart = { x: nemo.x, y: nemo.y };
+    anemone.x = W * 0.62;
+    corals = [];
+    steels = [];
+    sndOutro(finishedLvl);
+  }
   function startSplash(lvl) {
     state = ST.SPLASH;
     splashLevel = lvl;
@@ -454,6 +564,7 @@
     debris = [];
     molten = [];
     farts = [];
+    nemo.x = W * 0.3;
     nemo.y = H * 0.45;
     nemo.vy = 0;
     nemo.rot = 0;
@@ -464,15 +575,31 @@
     score++;
     sndScore();
     burstSparkles();
-    if (score === LVL2_AT) { startSplash(2); return; }
-    if (score === LVL3_AT) { startSplash(3); return; }
-    if (score >= WIN_AT) { winGame(); return; }
+    if (score === LVL2_AT) { startOutro(1); return; }
+    if (score === LVL3_AT) { startOutro(2); return; }
+    if (score === LVL4_AT) { startOutro(3); return; }
+    if (score === LVL5_AT) { startOutro(4); return; }
+    if (score >= WIN_AT) { startOutro(5); return; }
     const difficultyStep = score % 15 === 0;
     if (difficultyStep) snd1Up();
     if (score % 5 === 0) {
       launchFireworks(!difficultyStep); // 1-up replaces the jingle
       // samurai level: layer an ever-fancier fart song on top
       if (phase() === 3) sndFartSong(Math.min(Math.floor((score - LVL3_AT) / 5), 4));
+    }
+  }
+
+  function burstParticles(x, y, colors, n = 20, speed = 1) {
+    const s = S();
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = (60 + Math.random() * 160) * s * speed;
+      fireworks.push({
+        x, y,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 0.7 + Math.random() * 0.5,
+        color: colors[i % colors.length]
+      });
     }
   }
 
@@ -524,14 +651,15 @@
     }
   }
 
-  // ---------- Coral / tower columns (levels 1 & 2) ----------
+  // ---------- Coral / tower columns (levels 1, 2, 4, 5) ----------
   function spawnCoral(x) {
     const s = S();
     const gap = coralGap() * s;
-    const margin = 70 * s;
+    // level 5's gaps drift vertically, so leave headroom for the motion
+    const margin = (70 + (phase() === 5 ? 28 : 0)) * s;
     const groundY = H - GROUND_H * s;
     const gapY = margin + Math.random() * (groundY - margin * 2 - gap);
-    corals.push({ x, gapY, gap, scored: false });
+    corals.push({ x, gapY, gap, gapY0: gapY, gap0: gap, seed: Math.random() * 7, scored: false });
   }
 
   // ---------- Steel blocks (level 3) ----------
@@ -597,10 +725,10 @@
     const s = S();
     t += dt;
 
-    // ambient particles
+    // ambient particles: bubbles/orbs rise, stars stream, petals/confetti fall
     const ph = phase();
     for (const b of drift) {
-      if (ph === 1) {
+      if (ph === 1 || ph === 4) {
         b.y -= b.v * dt;
         b.x += Math.sin(t * 2 + b.y * 0.02) * 12 * dt;
         if (b.y < -20 * b.s) { b.y = H + 20 * b.s; b.x = Math.random() * W; }
@@ -644,6 +772,31 @@
       return;
     }
 
+    if (state === ST.OUTRO) {
+      outroT += dt;
+      const k = Math.min(1, outroT / 2.2);
+      const e = 1 - Math.pow(1 - k, 3); // ease out: fast start, gentle touchdown
+      const groundY = H - GROUND_H * s;
+      const tx = anemone.x, ty = groundY - 30 * s;
+      nemo.x = outroStart.x + (tx - outroStart.x) * e;
+      nemo.y = outroStart.y + (ty - outroStart.y) * e + Math.sin(outroT * 5) * (1 - k) * 8 * s;
+      nemo.rot *= 1 - e;
+      if (!outroLanded && k >= 1) {
+        outroLanded = true;
+        const th = ANEMONE_THEMES[outroFrom];
+        burstParticles(tx, ty, th.burst, 26, 1.2);
+        beep(80, 0.18, 'sine', 0.1); // soft touchdown thump
+      }
+      updateSparkles(dt);
+      updateFireworks(dt);
+      updateEffects(dt);
+      if (outroT > OUTRO_LEN) {
+        if (outroFrom === 5) winGame();
+        else startSplash(outroFrom + 1);
+      }
+      return;
+    }
+
     if (state === ST.DEAD) {
       deathT += dt;
       flashT = Math.max(0, flashT - dt * 3);
@@ -670,9 +823,19 @@
     const r = NEMO_R * s;
     const groundY = H - GROUND_H * s;
 
-    if (ph <= 2) {
+    if (ph !== 3) {
       // column levels: dodge through the gaps
-      for (const p of corals) p.x -= coralSpeed() * s * dt;
+      for (const p of corals) {
+        p.x -= coralSpeed() * s * dt;
+        if (ph === 4) {
+          // rave gates breathe to the beat
+          p.gap = p.gap0 * (1 + 0.12 * Math.sin(t * 4.4 + p.seed));
+          p.gapY = p.gapY0 + (p.gap0 - p.gap) / 2; // keep the gap centered as it breathes
+        } else if (ph === 5) {
+          // royal gates drift up and down
+          p.gapY = p.gapY0 + Math.sin(t * 1.6 + p.seed) * 26 * s;
+        }
+      }
       if (corals.length === 0 || corals[corals.length - 1].x < W - CORAL_SPACING * s) {
         spawnCoral(Math.max(W + 40, corals.length ? corals[corals.length - 1].x + CORAL_SPACING * s : W + 40));
       }
@@ -780,6 +943,7 @@
   function winGame() {
     state = ST.WIN;
     winT = 0;
+    nemo.x = W * 0.5;
     sndChest();
     setTimeout(snd1Up, 900);
     if (!START) {
@@ -826,6 +990,14 @@
       g.addColorStop(0, '#04040f');
       g.addColorStop(0.6, '#0b0b28');
       g.addColorStop(1, '#181339');
+    } else if (ph === 4) {
+      g.addColorStop(0, '#0b001a');
+      g.addColorStop(0.6, '#1a0033');
+      g.addColorStop(1, '#2d0a4e');
+    } else if (ph === 5) {
+      g.addColorStop(0, '#2a0a3a');
+      g.addColorStop(0.55, '#7a1f4f');
+      g.addColorStop(1, '#b8722a');
     } else {
       g.addColorStop(0, '#f5b16b');
       g.addColorStop(0.55, '#e0455c');
@@ -839,8 +1011,9 @@
     ctx.font = `900 ${fs}px -apple-system, "Segoe UI", Arial, sans-serif`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = ph === 1 ? 'rgba(255,255,255,0.09)'
-                  : ph === 2 ? 'rgba(255,217,74,0.08)'
+    ctx.fillStyle = ph === 2 ? 'rgba(255,217,74,0.08)'
+                  : ph === 4 ? `hsla(${(t * 50) % 360}, 90%, 60%, 0.1)`
+                  : ph === 5 ? 'rgba(255,217,74,0.12)'
                   : 'rgba(255,255,255,0.09)';
     const tw = ctx.measureText('ROYL').width + W * 0.45;
     for (let x = -(bgScroll % tw); x < W; x += tw) {
@@ -880,6 +1053,71 @@
       ctx.strokeStyle = '#ffd94a';
       ctx.lineWidth = 3 * s;
       ctx.beginPath(); ctx.ellipse(px, py, 48 * s, 12 * s, -0.3, 0, Math.PI * 2); ctx.stroke();
+    } else if (ph === 4) {
+      // beat strobe washing over the whole club
+      const pulse = Math.max(0, Math.sin(t * 8.8));
+      ctx.fillStyle = `hsla(${(t * 60) % 360}, 90%, 60%, ${0.04 + pulse * pulse * 0.06})`;
+      ctx.fillRect(0, 0, W, H);
+      // sweeping laser beams
+      for (let i = 0; i < 4; i++) {
+        const a = Math.PI / 2 + Math.sin(t * (0.7 + i * 0.17) + i * 2) * 0.9;
+        const ox = W * (0.2 + i * 0.2);
+        ctx.strokeStyle = `hsla(${(t * 80 + i * 90) % 360}, 100%, 60%, 0.25)`;
+        ctx.lineWidth = 4 * s;
+        ctx.beginPath();
+        ctx.moveTo(ox, -10);
+        ctx.lineTo(ox + Math.cos(a) * H * 1.3, H);
+        ctx.stroke();
+      }
+      // disco ball
+      const dx = W / 2, dy = H * 0.09, dr = 26 * s;
+      ctx.fillStyle = '#c9d4e0';
+      ctx.beginPath(); ctx.arc(dx, dy, dr, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(40,50,70,0.5)';
+      ctx.lineWidth = 1;
+      for (let i = -2; i <= 2; i++) {
+        ctx.beginPath(); ctx.ellipse(dx, dy, dr * Math.cos(i * 0.5), dr, 0, 0, Math.PI * 2); ctx.stroke();
+      }
+      // glints flying off the ball
+      for (let i = 0; i < 6; i++) {
+        const ga = t * 2 + i;
+        ctx.fillStyle = `hsla(${(t * 100 + i * 60) % 360}, 100%, 75%, 0.9)`;
+        ctx.beginPath();
+        ctx.arc(dx + Math.cos(ga) * dr * 0.8, dy + Math.sin(ga * 1.3) * dr * 0.8, 2.2 * s, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // glow orbs floating up
+      for (const b of drift) {
+        ctx.fillStyle = `hsla(${(b.hue + t * 40) % 360}, 95%, 62%, 0.5)`;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 5 * b.s, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (ph === 5) {
+      // golden sunburst radiating from the heavens
+      ctx.save();
+      ctx.translate(W / 2, -H * 0.05);
+      ctx.rotate(t * 0.1);
+      ctx.fillStyle = 'rgba(255, 217, 74, 0.07)';
+      for (let i = 0; i < 12; i++) {
+        ctx.rotate(Math.PI / 6);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(-H * 0.12, H * 1.6);
+        ctx.lineTo(H * 0.12, H * 1.6);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+      // royal confetti
+      for (const b of drift) {
+        ctx.save();
+        ctx.translate(b.x, b.y);
+        ctx.rotate(t * 3 + (b.sw || 0));
+        ctx.fillStyle = `hsla(${b.hue}, 90%, 65%, 0.9)`;
+        ctx.fillRect(-4 * b.s, -2 * b.s, 8 * b.s, 4 * b.s);
+        ctx.restore();
+      }
     } else {
       // big red sun
       ctx.fillStyle = 'rgba(255, 70, 70, 0.85)';
@@ -899,9 +1137,11 @@
       }
     }
 
-    // distant ridge silhouette (reef / moon hills / mountains)
+    // distant ridge silhouette (reef / moon hills / mountains / skyline / palace)
     ctx.fillStyle = ph === 1 ? 'rgba(10, 50, 90, 0.55)'
                   : ph === 2 ? 'rgba(40, 40, 70, 0.8)'
+                  : ph === 4 ? 'rgba(20, 5, 45, 0.85)'
+                  : ph === 5 ? 'rgba(90, 50, 10, 0.6)'
                   : 'rgba(50, 20, 55, 0.75)';
     ctx.beginPath();
     ctx.moveTo(0, H - GROUND_H * s);
@@ -931,15 +1171,25 @@
     const s = S();
     const gy = H - GROUND_H * s;
     const ph = phase();
-    const base = ph === 1 ? '#e8d59a' : ph === 2 ? '#8d8d99' : '#8a5a33';
-    const edge = ph === 1 ? '#d9c280' : ph === 2 ? '#a3a3af' : '#a06a3e';
+    const base = ph === 1 ? '#e8d59a' : ph === 2 ? '#8d8d99' : ph === 4 ? '#14141f' : ph === 5 ? '#8a1422' : '#8a5a33';
+    const edge = ph === 1 ? '#d9c280' : ph === 2 ? '#a3a3af' : ph === 4 ? '#262640' : ph === 5 ? '#d4a532' : '#a06a3e';
     ctx.fillStyle = base;
     ctx.fillRect(0, gy, W, GROUND_H * s);
     ctx.fillStyle = edge;
     ctx.fillRect(0, gy, W, 12 * s);
+    if (ph === 4) {
+      // light-up dance floor tiles
+      const tile = 52 * s;
+      const off4 = (state === ST.PLAYING ? (t * CORAL_SPEED * s) % (tile * 2) : 0);
+      for (let x = -off4; x < W; x += tile) {
+        ctx.fillStyle = `hsla(${(x * 0.6 + t * 120) % 360}, 90%, 55%, ${0.25 + 0.2 * Math.max(0, Math.sin(t * 8.8 + x * 0.05))})`;
+        ctx.fillRect(x + 2 * s, gy + 14 * s, tile - 4 * s, GROUND_H * s - 16 * s);
+      }
+      return;
+    }
     // scrolling texture stripes
     const off = (state === ST.PLAYING ? (t * CORAL_SPEED * s) % (40 * s) : 0);
-    ctx.fillStyle = ph === 2 ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.18)';
+    ctx.fillStyle = ph === 2 ? 'rgba(0,0,0,0.15)' : ph === 5 ? 'rgba(255,217,74,0.15)' : 'rgba(255,255,255,0.18)';
     for (let x = -off; x < W; x += 40 * s) {
       ctx.beginPath();
       ctx.moveTo(x, gy + 12 * s);
@@ -972,13 +1222,24 @@
     const pw = CORAL_W * s;
     const gy = H - GROUND_H * s;
     const lip = 14 * s;
-    const space = phase() === 2;
+    const ph = phase();
+    const space = ph === 2;
 
     const body = ctx.createLinearGradient(p.x, 0, p.x + pw, 0);
     if (space) {
       body.addColorStop(0, '#6a7686');
       body.addColorStop(0.5, '#b9c4d2');
       body.addColorStop(1, '#5d6878');
+    } else if (ph === 4) {
+      // neon equalizer gates, color cycling with the music
+      const hue = (t * 60 + p.seed * 50) % 360;
+      body.addColorStop(0, `hsl(${hue}, 95%, 35%)`);
+      body.addColorStop(0.5, `hsl(${hue}, 100%, 65%)`);
+      body.addColorStop(1, `hsl(${hue}, 95%, 30%)`);
+    } else if (ph === 5) {
+      body.addColorStop(0, '#9a6a08');
+      body.addColorStop(0.5, '#ffd94a');
+      body.addColorStop(1, '#8a5a06');
     } else {
       body.addColorStop(0, '#d8527c');
       body.addColorStop(0.5, '#ff7fa5');
@@ -991,19 +1252,26 @@
     ctx.fillRect(p.x, p.gapY + p.gap + lip, pw, gy - (p.gapY + p.gap + lip));
     roundRect(p.x - 5 * s, p.gapY + p.gap, pw + 10 * s, lip, 5 * s);
 
-    // ridges (coral) or seams + rivets (metal)
-    ctx.strokeStyle = space ? 'rgba(20, 25, 40, 0.3)' : 'rgba(110, 20, 50, 0.25)';
+    // ridges (coral), seams + rivets (metal), glow bars (rave), jewels (royal)
+    ctx.strokeStyle = space ? 'rgba(20, 25, 40, 0.3)'
+                    : ph === 4 ? 'rgba(255, 255, 255, 0.35)'
+                    : ph === 5 ? 'rgba(120, 80, 0, 0.4)'
+                    : 'rgba(110, 20, 50, 0.25)';
     ctx.lineWidth = 2 * s;
+    let jewel = 0;
     const ridge = y => {
       ctx.beginPath();
       ctx.moveTo(p.x + 3 * s, y);
-      if (space) ctx.lineTo(p.x + pw - 3 * s, y);
+      if (space || ph === 4) ctx.lineTo(p.x + pw - 3 * s, y);
       else ctx.quadraticCurveTo(p.x + pw / 2, y + 6 * s, p.x + pw - 3 * s, y);
       ctx.stroke();
       if (space) {
         ctx.fillStyle = 'rgba(20, 25, 40, 0.4)';
         ctx.beginPath(); ctx.arc(p.x + 8 * s, y, 2 * s, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.arc(p.x + pw - 8 * s, y, 2 * s, 0, Math.PI * 2); ctx.fill();
+      } else if (ph === 5 && jewel++ % 2 === 0) {
+        ctx.fillStyle = '#e0455c';
+        ctx.beginPath(); ctx.arc(p.x + pw / 2, y, 3 * s, 0, Math.PI * 2); ctx.fill();
       }
     };
     for (let y = 10 * s; y < p.gapY - lip; y += 16 * s) ridge(y);
@@ -1095,12 +1363,40 @@
     const rideOffset = ph === 2 ? -10 : 0;
     ctx.translate(0, rideOffset);
 
+    if (ph === 5) drawCape(k);
     drawFishBody(k);
-    if (ph === 3) drawHeadband(); else drawCrown();
-    drawShades();
+    if (ph === 3) {
+      drawHeadband();
+    } else if (ph === 5) {
+      // the final level deserves a bigger crown
+      ctx.save();
+      ctx.translate(12.5, -13);
+      ctx.scale(1.35, 1.35);
+      ctx.translate(-12.5, 13);
+      drawCrown();
+      ctx.restore();
+    } else {
+      drawCrown();
+    }
+    drawShades(ph);
     if (ph === 3) drawKatana(k);
 
     ctx.restore();
+  }
+
+  function drawCape(k) {
+    // flowing royal cape with gold trim
+    const fl = Math.sin(k.tail * 1.3) * 4;
+    ctx.fillStyle = '#c1272d';
+    ctx.beginPath();
+    ctx.moveTo(-2, -8);
+    ctx.quadraticCurveTo(-22, -4 + fl, -32, 10 + fl);
+    ctx.quadraticCurveTo(-16, 9, -4, 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#ffd94a';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
   }
 
   function drawRocket(k) {
@@ -1280,7 +1576,7 @@
     ctx.stroke();
   }
 
-  function drawShades() {
+  function drawShades(ph) {
     const dead = state === ST.DEAD;
     if (dead) {
       ctx.strokeStyle = '#3a2a16';
@@ -1293,7 +1589,8 @@
       ctx.moveTo(8.5, -5);
       ctx.quadraticCurveTo(3, -7, -1, -5);
       ctx.stroke();
-      ctx.fillStyle = '#141414';
+      // rave level: LED lenses that cycle colors with the lights
+      ctx.fillStyle = ph === 4 ? `hsl(${(t * 120) % 360}, 100%, 55%)` : '#141414';
       ctx.beginPath();
       ctx.ellipse(12.5, -4, 5, 4, 0, 0, Math.PI * 2);
       ctx.fill();
@@ -1342,6 +1639,40 @@
     }
   }
 
+  function drawAnemone(front) {
+    if (state !== ST.OUTRO) return;
+    const s = S();
+    const th = ANEMONE_THEMES[outroFrom];
+    const gy = H - GROUND_H * s;
+    const ax = anemone.x;
+    const grow = Math.min(1, outroT / 0.8); // rises out of the ground
+    if (!front) {
+      ctx.fillStyle = th.body;
+      ctx.beginPath();
+      ctx.ellipse(ax, gy + 6 * s, 54 * s * grow, 24 * s * grow, 0, Math.PI, 0);
+      ctx.fill();
+    }
+    const n = 11;
+    for (let i = 0; i < n; i++) {
+      const isFront = i % 3 === 0;
+      if (front !== isFront) continue;
+      const fx = ax + (i - (n - 1) / 2) * 9 * s;
+      const len = (38 + (i % 4) * 9) * s * grow;
+      const sway = Math.sin(t * 2.4 + i * 1.3) * 8 * s;
+      ctx.strokeStyle = th.tent === 'NEON' ? `hsl(${(t * 60 + i * 33) % 360}, 95%, 60%)` : th.tent;
+      ctx.lineWidth = 6 * s;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(fx, gy + 4 * s);
+      ctx.quadraticCurveTo(fx + sway * 0.5, gy - len * 0.6, fx + sway, gy - len);
+      ctx.stroke();
+      ctx.fillStyle = th.tip;
+      ctx.beginPath();
+      ctx.arc(fx + sway, gy - len, 3.5 * s, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   function drawSparkles() {
     for (const sp of sparkles) {
       ctx.globalAlpha = Math.min(1, sp.life * 2);
@@ -1375,15 +1706,19 @@
       text('🐠', W / 2, H * 0.32, 26 * s);
       text('Tap to swim!', W / 2, H * 0.62, 26 * s);
       if (best > 0) text(`Best: ${best}`, W / 2, H * 0.68, 20 * s, '#cdeef5');
+    } else if (state === ST.OUTRO) {
+      const pop = Math.max(0.2, Math.min(1, outroT / 0.4));
+      text(`LEVEL ${outroFrom} CLEAR!`, W / 2, H * 0.16, 40 * s * pop, '#ffd94a');
+      if (outroT > 0.8) text('Nemo heads home... 🐠', W / 2, H * 0.24, 20 * s, '#fff');
     } else if (state === ST.SPLASH) {
       ctx.fillStyle = 'rgba(0, 0, 20, 0.78)';
       ctx.fillRect(0, 0, W, H);
-      const sp = splashLevel === 2 ? SPLASH_2 : SPLASH_3;
+      const sp = { 2: SPLASH_2, 3: SPLASH_3, 4: SPLASH_4, 5: SPLASH_5 }[splashLevel];
+      const subCol = { 2: ['#b06ad6', '#1c1c1e'], 3: ['#c1272d', '#fff'],
+                       4: ['#00ffd0', '#0a0a1e'], 5: ['#ffd94a', '#7a1f1f'] }[splashLevel];
       const u = Math.min(s, W / 430); // shrink text on narrow phones so lines fit
       const rows = [[sp.title, 48, '#ffd94a', undefined]];
-      rows.push([sp.subtitle, 28,
-                 splashLevel === 2 ? '#b06ad6' : '#c1272d',
-                 splashLevel === 2 ? '#1c1c1e' : '#fff']);
+      rows.push([sp.subtitle, 28, subCol[0], subCol[1]]);
       if (sp.warning) rows.push([sp.warning, 20, '#ff8b6b', undefined]);
       for (const ln of sp.lines) rows.push([ln, 19, '#fff', undefined]);
       rows.push([sp.prompt, 22, '#ffd94a', undefined]);
@@ -1456,15 +1791,17 @@
     update(dt);
 
     drawBackground();
-    if (phase() <= 2) for (const p of corals) drawCoral(p);
-    else drawSteels();
+    if (phase() === 3) drawSteels();
+    else for (const p of corals) drawCoral(p);
     drawGround();
+    drawAnemone(false); // home base rises behind the fish during outros
     drawSparkles();
     drawNemo();
+    drawAnemone(true); // front tentacles wrap around the landed fish
     drawFireworks();
     drawUI();
 
-    nameBtn.style.display = (state === ST.PLAYING || state === ST.SPLASH) ? 'none' : 'block';
+    nameBtn.style.display = (state === ST.PLAYING || state === ST.SPLASH || state === ST.OUTRO) ? 'none' : 'block';
 
     requestAnimationFrame(frame);
   }
