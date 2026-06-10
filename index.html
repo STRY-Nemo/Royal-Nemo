@@ -290,11 +290,21 @@
     setTimeout(() => beep(784, 0.12, 'triangle', 0.08), 200);
     setTimeout(() => beep(1046, 0.25, 'triangle', 0.09), 300);
   };
-  const sndLevelUp = () => {
-    beep(392, 0.15, 'triangle', 0.09);
-    setTimeout(() => beep(523, 0.15, 'triangle', 0.09), 140);
-    setTimeout(() => beep(659, 0.15, 'triangle', 0.09), 280);
-    setTimeout(() => beep(784, 0.35, 'triangle', 0.1), 420);
+  const snd1Up = () => {
+    // quick rising arpeggio, 1-up-mushroom style
+    const seq = [659, 784, 1319, 1047, 1175, 1568];
+    seq.forEach((f, i) => setTimeout(() => beep(f, 0.13, 'square', 0.06), i * 85));
+  };
+  const sndChest = () => {
+    // treasure-chest fanfare: chromatic suspense rise, then a big held chord
+    const rise = [440, 466, 494, 523, 554, 587];
+    rise.forEach((f, i) => setTimeout(() => beep(f, 0.1, 'triangle', 0.06), i * 90));
+    setTimeout(() => {
+      beep(659, 0.8, 'square', 0.05);
+      beep(831, 0.8, 'square', 0.045);
+      beep(988, 0.8, 'square', 0.045);
+      beep(1319, 0.8, 'triangle', 0.06);
+    }, 560);
   };
 
   // ---------- Input ----------
@@ -363,7 +373,7 @@
     splashLevel = lvl;
     splashT = 0;
     initAmbient(); // switch backdrop particles to the new level's theme
-    sndLevelUp();
+    sndChest();
   }
   function resumeFromSplash() {
     corals = [];
@@ -383,12 +393,14 @@
     burstSparkles();
     if (score === LVL2_AT) { startSplash(2); return; }
     if (score === LVL3_AT) { startSplash(3); return; }
-    if (score % 5 === 0) launchFireworks();
+    const difficultyStep = score % 15 === 0;
+    if (difficultyStep) snd1Up();
+    if (score % 5 === 0) launchFireworks(!difficultyStep); // 1-up replaces the jingle
   }
 
   // ---------- Fireworks (every 5 points: "ROYL #1") ----------
-  function launchFireworks() {
-    sndFireworks();
+  function launchFireworks(jingle = true) {
+    if (jingle) sndFireworks();
     const s = S();
     const colors = ['#ffd94a', '#ff8c2e', '#ffffff', '#ff5c8a'];
     for (let i = 0; i < 26; i++) {
