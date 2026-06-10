@@ -39,6 +39,59 @@
     padding: 7px 14px;
     cursor: pointer;
   }
+  #lbBtn {
+    position: fixed;
+    top: max(10px, env(safe-area-inset-top));
+    right: 10px;
+    z-index: 5;
+    font: bold 14px -apple-system, "Segoe UI", Arial, sans-serif;
+    color: #fff;
+    background: rgba(13, 50, 90, 0.7);
+    border: 2px solid #ffd94a;
+    border-radius: 18px;
+    padding: 7px 14px;
+    cursor: pointer;
+  }
+  #lbOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 20, 40, 0.75);
+  }
+  #lbOverlay.open { display: flex; }
+  #lbCard {
+    background: #0d4a7a;
+    border: 3px solid #ffd94a;
+    border-radius: 16px;
+    padding: 16px;
+    width: min(88vw, 360px);
+    max-height: 78vh;
+    display: flex;
+    flex-direction: column;
+    font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+    color: #fff;
+  }
+  #lbCard h2 { font-size: 20px; color: #ffd94a; text-align: center; margin-bottom: 2px; }
+  #lbCard .lbSub { font-size: 12px; color: #9fc6dd; text-align: center; margin-bottom: 10px; }
+  #lbList { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .lbRow { display: flex; align-items: center; padding: 7px 6px; border-bottom: 1px solid rgba(255,255,255,0.12); font-size: 15px; }
+  .lbRow .rank { width: 36px; color: #9fc6dd; font-weight: 600; }
+  .lbRow .nm { flex: 1; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lbRow .nm.me { color: #ffd94a; }
+  .lbRow .sc { font-weight: 800; color: #ffd94a; margin-left: 8px; }
+  #lbClose {
+    margin-top: 12px;
+    font: bold 16px inherit;
+    color: #123a5c;
+    background: #ffd94a;
+    border: none;
+    border-radius: 10px;
+    padding: 10px;
+    cursor: pointer;
+  }
   #nameOverlay {
     position: fixed;
     inset: 0;
@@ -85,6 +138,15 @@
 <body>
 <canvas id="game"></canvas>
 <button id="nameBtn" type="button">👤</button>
+<button id="lbBtn" type="button">🏆 Top 100</button>
+<div id="lbOverlay">
+  <div id="lbCard">
+    <h2>🏆 TOP 100</h2>
+    <div class="lbSub" id="lbSub">loading…</div>
+    <div id="lbList"></div>
+    <button id="lbClose" type="button">Close</button>
+  </div>
+</div>
 <div id="nameOverlay">
   <div id="nameCard">
     <h2>What's your name?</h2>
@@ -95,13 +157,18 @@
 </div>
 <script>
 (() => {
-  const VERSION = 'v23'; // shown on the title screen so you know which build you're playing
+  const VERSION = 'v24'; // shown on the title screen so you know which build you're playing
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const nameBtn = document.getElementById('nameBtn');
   const nameOverlay = document.getElementById('nameOverlay');
   const nameInput = document.getElementById('nameInput');
   const nameSave = document.getElementById('nameSave');
+  const lbBtn = document.getElementById('lbBtn');
+  const lbOverlay = document.getElementById('lbOverlay');
+  const lbList = document.getElementById('lbList');
+  const lbSub = document.getElementById('lbSub');
+  const lbClose = document.getElementById('lbClose');
 
   // ---------- Sizing (crisp on Retina) ----------
   let W = 0, H = 0, dpr = 1;
@@ -230,7 +297,7 @@
     const lb = getLB();
     lb.push({ name, score: sc });
     lb.sort((a, b) => b.score - a.score);
-    saveLB(lb.slice(0, 10));
+    saveLB(lb.slice(0, 100));
   }
   function setName(newName) {
     newName = (newName || '').trim().slice(0, 12) || 'Nemo';
@@ -261,7 +328,7 @@
       const data = await res.json() || {};
       const all = Object.values(data).filter(e => e && e.name && typeof e.score === 'number');
       all.sort((a, b) => b.score - a.score);
-      remoteLB = all.slice(0, 10);
+      remoteLB = all.slice(0, 100);
     } catch (e) { /* offline: keep showing the last list we had */ }
   }
   function pushRemoteScore(name, sc) {
@@ -614,8 +681,28 @@
       }).catch(() => {});
     } catch (e) { /* logging is best-effort */ }
   }
+  function escapeHtml(x) {
+    return String(x).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+  function renderLBOverlay() {
+    const lb = lbTop().slice(0, 100);
+    lbSub.textContent = remoteLB ? 'global — all devices' : 'this device only';
+    lbList.innerHTML = lb.length
+      ? lb.map((e, i) =>
+          `<div class="lbRow"><span class="rank">${i + 1}</span>` +
+          `<span class="nm${e.name === playerName ? ' me' : ''}">${escapeHtml(e.name)}</span>` +
+          `<span class="sc">${e.score}</span></div>`).join('')
+      : '<div class="lbRow">No scores yet — be the first!</div>';
+  }
+  lbBtn.addEventListener('click', () => {
+    lbOverlay.classList.add('open');
+    renderLBOverlay();
+    Promise.resolve(refreshRemoteLB()).then(renderLBOverlay).catch(() => {});
+  });
+  lbClose.addEventListener('click', () => lbOverlay.classList.remove('open'));
+
   function tapAction() {
-    if (nameOverlay.classList.contains('open')) return;
+    if (nameOverlay.classList.contains('open') || lbOverlay.classList.contains('open')) return;
     if (state === ST.READY) {
       state = ST.PLAYING;
       nemo.vy = SWIM_VY * S();
@@ -2233,17 +2320,17 @@
       if (winT > 0.3) {
         ctx.fillStyle = 'rgba(0, 0, 20, 0.45)';
         ctx.fillRect(0, 0, W, H);
-        text('🏆', W / 2, H * 0.09, 30 * s);
-        text('YOU WIN!', W / 2, H * 0.16, 40 * s, '#ffd94a');
-        text('ROYL #1 CHAMPION', W / 2, H * 0.24, 24 * s, '#aef1b8');
-        text(`Score: ${score}`, W / 2, H * 0.32, 30 * s);
-        const lb = lbTop().slice(0, 5);
+        text('🏆', W / 2, H * 0.06, 28 * s);
+        text('YOU WIN!', W / 2, H * 0.12, 38 * s, '#ffd94a');
+        text('ROYL #1 CHAMPION', W / 2, H * 0.19, 22 * s, '#aef1b8');
+        text(`Score: ${score}`, W / 2, H * 0.25, 28 * s);
+        const lb = lbTop().slice(0, 10);
         if (lb.length) {
-          text(remoteLB ? 'GLOBAL LEADERBOARD' : 'LEADERBOARD', W / 2, H * 0.43, 20 * s, '#ffd94a');
+          text(remoteLB ? 'GLOBAL TOP 10' : 'TOP 10', W / 2, H * 0.32, 19 * s, '#ffd94a');
           lb.forEach((e, i) => {
             const mine = e.name === playerName;
-            text(`${i + 1}. ${e.name} — ${e.score}`, W / 2, H * (0.49 + i * 0.045),
-                 17 * s, mine ? '#ffd94a' : '#fff');
+            text(`${i + 1}. ${e.name} — ${e.score}`, W / 2, H * (0.365 + i * 0.031),
+                 14 * s, mine ? '#ffd94a' : '#fff');
           });
         }
         if (winT > 1 && Math.floor(winT * 2) % 2 === 0) {
@@ -2258,18 +2345,18 @@
       if (deathT > 0.4) {
         ctx.fillStyle = 'rgba(0,0,0,0.45)';
         ctx.fillRect(0, 0, W, H);
-        text('Blub... Game Over', W / 2, H * 0.2, 36 * s, '#ff8b6b');
-        text(`Score: ${score}`, W / 2, H * 0.29, 30 * s);
-        text(`Best: ${best}`, W / 2, H * 0.35, 22 * s, '#ffd94a');
-        if (score >= best && score > 0 && !START) text('New record!', W / 2, H * 0.405, 20 * s, '#aef1b8');
+        text('Blub... Game Over', W / 2, H * 0.16, 34 * s, '#ff8b6b');
+        text(`Score: ${score}`, W / 2, H * 0.24, 28 * s);
+        text(`Best: ${best}`, W / 2, H * 0.30, 20 * s, '#ffd94a');
+        if (score >= best && score > 0 && !START) text('New record!', W / 2, H * 0.345, 18 * s, '#aef1b8');
 
-        const lb = lbTop().slice(0, 5);
+        const lb = lbTop().slice(0, 10);
         if (lb.length) {
-          text(remoteLB ? 'GLOBAL LEADERBOARD' : 'LEADERBOARD', W / 2, H * 0.47, 20 * s, '#ffd94a');
+          text(remoteLB ? 'GLOBAL TOP 10' : 'TOP 10', W / 2, H * 0.40, 19 * s, '#ffd94a');
           lb.forEach((e, i) => {
             const mine = e.name === playerName;
-            text(`${i + 1}. ${e.name} — ${e.score}`, W / 2, H * (0.53 + i * 0.045),
-                 17 * s, mine ? '#ffd94a' : '#fff');
+            text(`${i + 1}. ${e.name} — ${e.score}`, W / 2, H * (0.445 + i * 0.031),
+                 14 * s, mine ? '#ffd94a' : '#fff');
           });
         }
 
@@ -2300,6 +2387,7 @@
     drawUI();
 
     nameBtn.style.display = (state === ST.PLAYING || state === ST.SPLASH || state === ST.OUTRO) ? 'none' : 'block';
+    lbBtn.style.display = state === ST.READY ? 'block' : 'none';
 
     requestAnimationFrame(frame);
   }
