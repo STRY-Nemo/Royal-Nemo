@@ -169,12 +169,56 @@
   function setName(newName) {
     newName = (newName || '').trim().slice(0, 12) || 'Nemo';
     // renaming carries all of your existing leaderboard scores with you
+    const oldName = playerName;
     const lb = getLB();
-    for (const e of lb) if (e.name === playerName) e.name = newName;
+    for (const e of lb) if (e.name === oldName) e.name = newName;
     saveLB(lb);
     playerName = newName;
     localStorage.setItem('royalNemoName', newName);
     nameBtn.textContent = '👤 ' + newName;
+    renameRemote(oldName, newName);
+  }
+
+  // ---------- Cross-device leaderboard (Firebase Realtime DB over REST) ----------
+  // Set to a Firebase Realtime Database URL, e.g.
+  // 'https://royal-nemo-default-rtdb.firebaseio.com' — empty = this device only.
+  const REMOTE_DB = '';
+  let remoteLB = null; // latest fetched global top-10
+
+  function lbTop() {
+    return remoteLB || getLB();
+  }
+  async function refreshRemoteLB() {
+    if (!REMOTE_DB) return;
+    try {
+      const res = await fetch(REMOTE_DB + '/scores.json');
+      const data = await res.json() || {};
+      const all = Object.values(data).filter(e => e && e.name && typeof e.score === 'number');
+      all.sort((a, b) => b.score - a.score);
+      remoteLB = all.slice(0, 10);
+    } catch (e) { /* offline: keep showing the last list we had */ }
+  }
+  function pushRemoteScore(name, sc) {
+    if (!REMOTE_DB) return;
+    fetch(REMOTE_DB + '/scores.json', {
+      method: 'POST',
+      body: JSON.stringify({ name, score: sc, ts: Date.now() })
+    }).then(refreshRemoteLB).catch(() => {});
+  }
+  async function renameRemote(oldName, newName) {
+    if (!REMOTE_DB || !oldName || oldName === newName) return;
+    try {
+      const res = await fetch(REMOTE_DB + '/scores.json');
+      const data = await res.json() || {};
+      const updates = {};
+      for (const [k, e] of Object.entries(data)) {
+        if (e && e.name === oldName) updates[k + '/name'] = newName;
+      }
+      if (Object.keys(updates).length) {
+        await fetch(REMOTE_DB + '/scores.json', { method: 'PATCH', body: JSON.stringify(updates) });
+      }
+      refreshRemoteLB();
+    } catch (e) { /* offline */ }
   }
 
   // ---------- Ambient particles (bubbles / stars / petals per level) ----------
@@ -213,6 +257,7 @@
     molten = [];
     initAmbient();
     state = ST.READY;
+    refreshRemoteLB(); // keep the global top-10 fresh between runs
   }
 
   // ---------- Sound (tiny WebAudio bleeps, no assets) ----------
@@ -622,7 +667,10 @@
         best = score;
         localStorage.setItem('royalNemoBest', best);
       }
-      if (score > 0) addToLB(playerName, score);
+      if (score > 0) {
+        addToLB(playerName, score);
+        pushRemoteScore(playerName, score);
+      }
     }
   }
 
@@ -1235,9 +1283,9 @@
         text(`Best: ${best}`, W / 2, H * 0.35, 22 * s, '#ffd94a');
         if (score >= best && score > 0 && !START) text('New record! 👑', W / 2, H * 0.405, 20 * s, '#aef1b8');
 
-        const lb = getLB().slice(0, 5);
+        const lb = lbTop().slice(0, 5);
         if (lb.length) {
-          text('🏆 Leaderboard', W / 2, H * 0.47, 22 * s, '#ffd94a');
+          text(remoteLB ? '🌍 Global Leaderboard' : '🏆 Leaderboard', W / 2, H * 0.47, 22 * s, '#ffd94a');
           lb.forEach((e, i) => {
             const mine = e.name === playerName;
             text(`${i + 1}. ${e.name} — ${e.score}`, W / 2, H * (0.53 + i * 0.045),
@@ -1275,6 +1323,7 @@
   }
 
   reset();
+  refreshRemoteLB();
   requestAnimationFrame(frame);
 })();
 </script>
