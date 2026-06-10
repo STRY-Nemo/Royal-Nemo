@@ -95,7 +95,7 @@
 </div>
 <script>
 (() => {
-  const VERSION = 'v13'; // shown on the title screen so you know which build you're playing
+  const VERSION = 'v14'; // shown on the title screen so you know which build you're playing
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const nameBtn = document.getElementById('nameBtn');
@@ -202,6 +202,7 @@
   let drift, sparkles, fireworks, fwTexts, farts, molten, bgScroll;
   let splashLevel = 2, splashT = 0;
   let outroT = 0, outroFrom = 1, outroLanded = false, outroStart = null;
+  let outroSlashed = false, outroBeatN = -1, outroFlash = 0, outroProp = null;
   let anemone = { x: 0 };
   let raveNote = 0; // which bass note the next rave tap plays
   best = +(localStorage.getItem('royalNemoBest') || 0);
@@ -417,26 +418,40 @@
     beep(f * 1.006, 0.22, 'sawtooth', 0.07);
     beep(f / 2, 0.22, 'square', 0.04);
   };
+  const sndKick = () => beep(130, 0.12, 'sine', 0.2, 40);
+  const sndVictory = () => {
+    // the coronation theme (~6s): fanfare, answer, grand held finale
+    const N = (f, at, d = 0.16, v = 0.09) => setTimeout(() => {
+      beep(f, d, 'sawtooth', v);
+      beep(f * 1.006, d, 'sawtooth', v * 0.7);
+      beep(f / 2, d, 'triangle', v * 0.6);
+    }, at);
+    N(392, 0); N(523, 150); N(659, 300); N(784, 450, 0.3);
+    N(659, 800); N(784, 950); N(880, 1100, 0.3);
+    N(784, 1500, 0.2); N(880, 1700, 0.2); N(1047, 1900, 0.9, 0.1);
+    N(880, 3100); N(1047, 3250); N(1175, 3400, 0.3);
+    N(1319, 3800, 1.2, 0.11);
+    setTimeout(() => {
+      beep(523, 1.8, 'triangle', 0.08);
+      beep(659, 1.8, 'triangle', 0.07);
+      beep(784, 1.8, 'triangle', 0.07);
+      beep(1047, 1.8, 'triangle', 0.08);
+    }, 5200);
+  };
   const sndOutro = (lvl) => {
     if (lvl === 1) {
-      // bubbly descent
-      [880, 660, 520, 392].forEach((f, i) => setTimeout(() => beep(f, 0.16, 'sine', 0.09, f * 0.8), i * 180));
+      // cheerful little victory ditty
+      [392, 523, 660, 880].forEach((f, i) => setTimeout(() => beep(f, 0.14, 'sine', 0.09, f * 1.4), i * 120));
     } else if (lvl === 2) {
-      // twinkling re-entry chime
-      [1047, 1319, 1568, 2093].forEach((f, i) => setTimeout(() => beep(f, 0.22, 'triangle', 0.07), i * 150));
+      // engines spooling to full burn, then twinkles as he leaves the screen
+      beep(50, 2.2, 'sawtooth', 0.12, 320);
+      setTimeout(() => [1047, 1319, 1568, 2093].forEach((f, i) => setTimeout(() => beep(f, 0.2, 'triangle', 0.07), i * 120)), 1300);
     } else if (lvl === 3) {
-      // temple gong and a settling whoosh
-      beep(98, 1.4, 'sine', 0.13);
-      setTimeout(() => beep(700, 0.5, 'triangle', 0.05, 120), 200);
+      beep(55, 2.0, 'sine', 0.09); // tense drone before the slash
     } else if (lvl === 4) {
-      // the bass drop to end the set
-      beep(300, 0.9, 'sawtooth', 0.13, 40);
-      setTimeout(() => beep(150, 0.5, 'square', 0.08, 55), 350);
+      beep(300, 0.9, 'sawtooth', 0.13, 40); // the drop hits, beats follow
     } else {
-      // royal fanfare home-coming
-      sndTrumpet();
-      setTimeout(sndTrumpet, 250);
-      setTimeout(sndTrumpet, 500);
+      sndVictory();
     }
   };
 
@@ -526,30 +541,29 @@
   }
 
   // ---------- Level transitions ----------
-  // Each level ends with a cinematic: the world clears, an anemone rises
-  // from the ground, and Nemo glides down for a dramatic landing in his home.
-  const OUTRO_LEN = 3.6;
-  const ANEMONE_THEMES = {
-    1: { body: '#d8527c', tent: '#ff9eb0', tip: '#ffe1e8',
-         burst: ['#7fdcff', '#ffffff', '#ff9eb0'] },
-    2: { body: '#4b2a78', tent: '#b06ad6', tip: '#ffffff',
-         burst: ['#ffffff', '#ffd94a', '#b06ad6'] },
-    3: { body: '#7a1f2b', tent: '#ff95a5', tip: '#ffd1da',
-         burst: ['#ffb7d3', '#ff95a5', '#ffffff'] },
-    4: { body: '#16162a', tent: 'NEON', tip: '#ffffff',
-         burst: ['#00ffd0', '#ff00d0', '#ffe600', '#00a0ff'] },
-    5: { body: '#9a6a08', tent: '#ffd94a', tip: '#e0455c',
-         burst: ['#ffd94a', '#ff5c5c', '#ffffff', '#aef1b8'] }
-  };
+  // Each level ends with its own cinematic, escalating in drama:
+  // 1 loop-the-loop, 2 blast-off, 3 monolith slash, 4 encore beat drop,
+  // 5 the full coronation onto the golden anemone throne.
+  const OUTRO_LENS = { 1: 2.4, 2: 3.4, 3: 4.6, 4: 5.6, 5: 9.5 };
   function startOutro(finishedLvl) {
     state = ST.OUTRO;
     outroT = 0;
     outroFrom = finishedLvl;
     outroLanded = false;
+    outroSlashed = false;
+    outroBeatN = -1;
+    outroFlash = 0;
     outroStart = { x: nemo.x, y: nemo.y };
     anemone.x = W * 0.62;
     corals = [];
     steels = [];
+    if (finishedLvl === 3) {
+      // the final monolith awaits one perfect slash
+      const s = S();
+      outroProp = { x: W + 120 * s, y: H * 0.26, w: 95 * s, h: H * 0.36 };
+    } else {
+      outroProp = null;
+    }
     sndOutro(finishedLvl);
   }
   function startSplash(lvl) {
@@ -688,6 +702,10 @@
   }
 
   function sliceSteel(st, cutY) {
+    splitSteel(st, cutY);
+    onScore();
+  }
+  function splitSteel(st, cutY) {
     const s = S();
     cutY = Math.max(st.y + 8 * s, Math.min(cutY, st.y + st.h - 8 * s));
     // two halves, separated exactly at the cut line, edges glowing molten
@@ -711,7 +729,6 @@
       });
     }
     sndSizzle();
-    onScore();
   }
 
   function circleRect(cx, cy, r, rx, ry, rw, rh) {
@@ -734,8 +751,14 @@
         b.x += Math.sin(t * 2 + b.y * 0.02) * 12 * dt;
         if (b.y < -20 * b.s) { b.y = H + 20 * b.s; b.x = Math.random() * W; }
       } else if (ph === 2) {
-        b.x -= b.v * dt;
-        if (b.x < -10) { b.x = W + 10; b.y = Math.random() * H; }
+        if (state === ST.OUTRO) {
+          // warp: stars rush downward as the rocket climbs
+          b.y += (120 + outroT * 280) * dt;
+          if (b.y > H + 20) { b.y = -20; b.x = Math.random() * W; }
+        } else {
+          b.x -= b.v * dt;
+          if (b.x < -10) { b.x = W + 10; b.y = Math.random() * H; }
+        }
       } else {
         b.y += b.v * dt;
         b.x += Math.sin(t * 1.5 + (b.sw || 0)) * 18 * dt;
@@ -764,7 +787,8 @@
 
     if (state === ST.WIN) {
       winT += dt;
-      nemo.y = H * 0.45 + Math.sin(t * 3) * 12 * s;
+      // the king stays on his throne, bobbing gently in the glory
+      nemo.y = H - GROUND_H * s - 38 * s + Math.sin(t * 3) * 4 * s;
       nemo.rot = 0;
       if (Math.random() < dt * 2) launchFireworks(false); // celebration barrage
       updateSparkles(dt);
@@ -775,23 +799,90 @@
 
     if (state === ST.OUTRO) {
       outroT += dt;
-      const k = Math.min(1, outroT / 2.2);
-      const e = 1 - Math.pow(1 - k, 3); // ease out: fast start, gentle touchdown
       const groundY = H - GROUND_H * s;
-      const tx = anemone.x, ty = groundY - 30 * s;
-      nemo.x = outroStart.x + (tx - outroStart.x) * e;
-      nemo.y = outroStart.y + (ty - outroStart.y) * e + Math.sin(outroT * 5) * (1 - k) * 8 * s;
-      nemo.rot *= 1 - e;
-      if (!outroLanded && k >= 1) {
-        outroLanded = true;
-        const th = ANEMONE_THEMES[outroFrom];
-        burstParticles(tx, ty, th.burst, 26, 1.2);
-        beep(80, 0.18, 'sine', 0.1); // soft touchdown thump
+      if (outroFrom === 1) {
+        // victory loop-the-loop with a bubble trail, then dart off ahead
+        if (outroT < 1.4) {
+          const a = (outroT / 1.4) * Math.PI * 2;
+          nemo.x = outroStart.x + Math.sin(a) * 70 * s;
+          nemo.y = outroStart.y - (1 - Math.cos(a)) * 70 * s;
+          nemo.rot = -a;
+          if (Math.random() < dt * 25) {
+            sparkles.push({ x: nemo.x - 14 * s, y: nemo.y, vx: -40, vy: 30, life: 0.5 });
+          }
+        } else {
+          nemo.rot *= 1 - dt * 8;
+          nemo.x += 620 * s * dt;
+          nemo.y += (H * 0.45 - nemo.y) * dt * 2;
+        }
+      } else if (outroFrom === 2) {
+        // pitch the rocket up and blast off the top of the screen
+        nemo.flame = 1;
+        if (outroT < 0.9) {
+          nemo.rot += (-1.15 - nemo.rot) * dt * 4;
+          nemo.x += (W * 0.5 - nemo.x) * dt * 2;
+        } else {
+          nemo.y -= (200 + (outroT - 0.9) * 900) * s * dt;
+          if (Math.random() < dt * 40) {
+            burstParticles(nemo.x - 8 * s, nemo.y + 24 * s, ['#ff8c2e', '#ffe26b'], 2, 0.4);
+          }
+        }
+      } else if (outroFrom === 3) {
+        // the standoff: a giant monolith slides in... one perfect dash-slash
+        const blk = outroProp;
+        if (blk && !outroSlashed) {
+          blk.x += (W * 0.55 - blk.x) * dt * 2.5;
+          nemo.x += (W * 0.16 - nemo.x) * dt * 2;
+          nemo.y += (blk.y + blk.h / 2 - nemo.y) * dt * 2;
+          nemo.rot *= 0.9;
+          if (outroT > 2.0) {
+            outroSlashed = true;
+            outroFlash = 1;
+            nemo.slice = 0.25;
+            nemo.x = blk.x + blk.w + 60 * s; // through it before the eye can follow
+            splitSteel(blk, blk.y + blk.h / 2);
+            outroProp = null;
+            sndSlice();
+            beep(98, 1.6, 'sine', 0.13); // gong
+          }
+        } else {
+          nemo.rot *= 0.92;
+        }
+        outroFlash = Math.max(0, outroFlash - dt * 2);
+      } else if (outroFrom === 4) {
+        // encore at center stage: spin to the beat, explosions on every kick
+        nemo.x += (W * 0.5 - nemo.x) * dt * 2.5;
+        nemo.y += (H * 0.42 + Math.sin(t * 3) * 10 * s - nemo.y) * dt * 2.5;
+        const beat = Math.floor(outroT / 0.46);
+        if (beat > outroBeatN && outroT < 4.6) {
+          outroBeatN = beat;
+          sndKick();
+          if (beat % 2 === 0) sndRave();
+          burstParticles(Math.random() * W, Math.random() * H * 0.6,
+                         ['#00ffd0', '#ff00d0', '#ffe600', '#00a0ff'], 14, 1.1);
+          nemo.spinV = 11;
+        }
+        nemo.spinV = (nemo.spinV || 0) * (1 - dt * 3);
+        if (nemo.spinV > 0.3) nemo.rot += nemo.spinV * dt;
+        else nemo.rot *= 1 - dt * 5;
+      } else {
+        // the coronation: a long, regal descent onto the golden throne
+        const k = Math.min(1, outroT / 3.4);
+        const e = 1 - Math.pow(1 - k, 3);
+        const tx = anemone.x, ty = groundY - 38 * s;
+        nemo.x = outroStart.x + (tx - outroStart.x) * e;
+        nemo.y = outroStart.y + (ty - outroStart.y) * e + Math.sin(outroT * 4) * (1 - k) * 10 * s;
+        nemo.rot *= 1 - e;
+        if (!outroLanded && k >= 1) {
+          outroLanded = true;
+          burstParticles(tx, ty, ['#ffd94a', '#ff5c5c', '#ffffff', '#aef1b8'], 40, 1.4);
+        }
+        if (outroLanded && Math.random() < dt * 3) launchFireworks(false);
       }
       updateSparkles(dt);
       updateFireworks(dt);
       updateEffects(dt);
-      if (outroT > OUTRO_LEN) {
+      if (outroT > OUTRO_LENS[outroFrom]) {
         if (outroFrom === 5) winGame();
         else startSplash(outroFrom + 1);
       }
@@ -944,7 +1035,6 @@
   function winGame() {
     state = ST.WIN;
     winT = 0;
-    nemo.x = W * 0.5;
     sndChest();
     setTimeout(snd1Up, 900);
     if (!START) {
@@ -1036,13 +1126,22 @@
       }
       for (const b of drift) drawBubble(b.x, b.y, b.s);
     } else if (ph === 2) {
-      // stars
+      // stars (stretched into warp streaks during the blast-off)
       for (const b of drift) {
         ctx.globalAlpha = 0.45 + 0.55 * (Math.sin(t * 3 + (b.tw || 0)) + 1) / 2;
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(b.x, b.y, 1.6 * b.s, 0, Math.PI * 2);
-        ctx.fill();
+        if (state === ST.OUTRO) {
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 1.5 * b.s;
+          ctx.beginPath();
+          ctx.moveTo(b.x, b.y);
+          ctx.lineTo(b.x, b.y + (8 + outroT * 50) * b.s);
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, 1.6 * b.s, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
       ctx.globalAlpha = 1;
       // ringed planet
@@ -1055,23 +1154,25 @@
       ctx.lineWidth = 3 * s;
       ctx.beginPath(); ctx.ellipse(px, py, 48 * s, 12 * s, -0.3, 0, Math.PI * 2); ctx.stroke();
     } else if (ph === 4) {
-      // beat strobe washing over the whole club
+      // beat strobe washing over the whole club (doubled for the encore)
+      const enc = state === ST.OUTRO;
       const pulse = Math.max(0, Math.sin(t * 8.8));
-      ctx.fillStyle = `hsla(${(t * 60) % 360}, 90%, 60%, ${0.04 + pulse * pulse * 0.06})`;
+      ctx.fillStyle = `hsla(${(t * 60) % 360}, 90%, 60%, ${(0.04 + pulse * pulse * 0.06) * (enc ? 2 : 1)})`;
       ctx.fillRect(0, 0, W, H);
-      // sweeping laser beams
+      // laser beams — sweeping, or converging on the star of the show
       for (let i = 0; i < 4; i++) {
-        const a = Math.PI / 2 + Math.sin(t * (0.7 + i * 0.17) + i * 2) * 0.9;
         const ox = W * (0.2 + i * 0.2);
-        ctx.strokeStyle = `hsla(${(t * 80 + i * 90) % 360}, 100%, 60%, 0.25)`;
+        const a = enc ? Math.atan2(nemo.y + 10, nemo.x - ox)
+                      : Math.PI / 2 + Math.sin(t * (0.7 + i * 0.17) + i * 2) * 0.9;
+        ctx.strokeStyle = `hsla(${(t * 80 + i * 90) % 360}, 100%, 60%, ${enc ? 0.45 : 0.25})`;
         ctx.lineWidth = 4 * s;
         ctx.beginPath();
         ctx.moveTo(ox, -10);
-        ctx.lineTo(ox + Math.cos(a) * H * 1.3, H);
+        ctx.lineTo(ox + Math.cos(a) * H * 1.3, -10 + Math.sin(a) * H * 1.3);
         ctx.stroke();
       }
-      // disco ball
-      const dx = W / 2, dy = H * 0.09, dr = 26 * s;
+      // disco ball (drops toward the dance floor for the finale)
+      const dx = W / 2, dy = H * 0.09 + (enc ? Math.min(1, outroT / 2) * H * 0.13 : 0), dr = 26 * s;
       ctx.fillStyle = '#c9d4e0';
       ctx.beginPath(); ctx.arc(dx, dy, dr, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = 'rgba(40,50,70,0.5)';
@@ -1310,6 +1411,9 @@
 
   function drawSteels() {
     for (const st of steels) drawSteelBlock(st.x, st.y, st.w, st.h, 0, null);
+    if (outroProp && state === ST.OUTRO) {
+      drawSteelBlock(outroProp.x, outroProp.y, outroProp.w, outroProp.h, 0, null);
+    }
     for (const d of debris) {
       ctx.save();
       ctx.translate(d.x + d.w / 2, d.y + d.h / 2);
@@ -1641,35 +1745,46 @@
   }
 
   function drawAnemone(front) {
-    if (state !== ST.OUTRO) return;
+    // the golden throne only appears for the level-5 coronation (and stays for the win)
+    if (!((state === ST.OUTRO || state === ST.WIN) && outroFrom === 5)) return;
     const s = S();
-    const th = ANEMONE_THEMES[outroFrom];
     const gy = H - GROUND_H * s;
     const ax = anemone.x;
-    const grow = Math.min(1, outroT / 0.8); // rises out of the ground
+    const grow = Math.min(1, outroT / 0.8); // rises out of the red carpet
     if (!front) {
-      ctx.fillStyle = th.body;
+      // heavenly light beam once the king has landed
+      if (outroLanded) {
+        ctx.fillStyle = 'rgba(255, 217, 74, 0.16)';
+        ctx.beginPath();
+        ctx.moveTo(ax - 26 * s, 0);
+        ctx.lineTo(ax + 26 * s, 0);
+        ctx.lineTo(ax + 72 * s, gy);
+        ctx.lineTo(ax - 72 * s, gy);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.fillStyle = '#9a6a08';
       ctx.beginPath();
-      ctx.ellipse(ax, gy + 6 * s, 54 * s * grow, 24 * s * grow, 0, Math.PI, 0);
+      ctx.ellipse(ax, gy + 6 * s, 70 * s * grow, 30 * s * grow, 0, Math.PI, 0);
       ctx.fill();
     }
-    const n = 11;
+    const n = 13;
     for (let i = 0; i < n; i++) {
       const isFront = i % 3 === 0;
       if (front !== isFront) continue;
-      const fx = ax + (i - (n - 1) / 2) * 9 * s;
-      const len = (38 + (i % 4) * 9) * s * grow;
-      const sway = Math.sin(t * 2.4 + i * 1.3) * 8 * s;
-      ctx.strokeStyle = th.tent === 'NEON' ? `hsl(${(t * 60 + i * 33) % 360}, 95%, 60%)` : th.tent;
-      ctx.lineWidth = 6 * s;
+      const fx = ax + (i - (n - 1) / 2) * 10 * s;
+      const len = (50 + (i % 4) * 12) * s * grow;
+      const sway = Math.sin(t * 2.4 + i * 1.3) * 9 * s;
+      ctx.strokeStyle = '#ffd94a';
+      ctx.lineWidth = 7 * s;
       ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(fx, gy + 4 * s);
       ctx.quadraticCurveTo(fx + sway * 0.5, gy - len * 0.6, fx + sway, gy - len);
       ctx.stroke();
-      ctx.fillStyle = th.tip;
+      ctx.fillStyle = '#e0455c';
       ctx.beginPath();
-      ctx.arc(fx + sway, gy - len, 3.5 * s, 0, Math.PI * 2);
+      ctx.arc(fx + sway, gy - len, 4 * s, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -1711,7 +1826,13 @@
     } else if (state === ST.OUTRO) {
       const pop = Math.max(0.2, Math.min(1, outroT / 0.4));
       text(`LEVEL ${outroFrom} CLEAR!`, W / 2, H * 0.16, 40 * s * pop, '#ffd94a');
-      if (outroT > 0.8) text('Nemo heads home... 🐠', W / 2, H * 0.24, 20 * s, '#fff');
+      const caption = { 1: 'Nice swimming! 🐠', 2: 'TO THE STARS! 🚀', 3: 'FLAWLESS BLADE. ⚔️',
+                        4: 'ENCORE!! 🪩', 5: 'ALL HAIL KING NEMO 👑' }[outroFrom];
+      if (outroT > 0.8) text(caption, W / 2, H * 0.24, 22 * s, '#fff');
+      if (outroFlash > 0) {
+        ctx.fillStyle = `rgba(255,255,255,${outroFlash * 0.85})`;
+        ctx.fillRect(0, 0, W, H);
+      }
     } else if (state === ST.SPLASH) {
       ctx.fillStyle = 'rgba(0, 0, 20, 0.78)';
       ctx.fillRect(0, 0, W, H);
