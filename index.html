@@ -95,7 +95,7 @@
 </div>
 <script>
 (() => {
-  const VERSION = 'v17'; // shown on the title screen so you know which build you're playing
+  const VERSION = 'v18'; // shown on the title screen so you know which build you're playing
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const nameBtn = document.getElementById('nameBtn');
@@ -333,6 +333,8 @@
     ssCharges = (START >= 15 ? 1 : 0) + (START >= 75 ? 1 : 0);
     ssActive = 0;
     ssUnlockT = 0;
+    clearTimeout(ssLoopTimer);
+    if (ssGain) ssGain.gain.value = 0;
     initAmbient();
     state = ST.READY;
     refreshRemoteLB(); // keep the global top-10 fresh between runs
@@ -427,7 +429,17 @@
   const sndSSUnlock = () => {
     [262, 330, 392, 523, 659, 784].forEach((f, i) => setTimeout(() => beep(f, 0.12, 'square', 0.07), i * 70));
   };
-  function gtr(f, at, dur = 0.18, vol = 0.16, slide = 0) {
+  let ssGain = null, ssLoopTimer = null;
+  function ssMasterGain() {
+    // the sustain riff routes through this so its volume can track ssActive
+    if (!ssGain) {
+      ssGain = actx.createGain();
+      ssGain.gain.value = 1;
+      ssGain.connect(actx.destination);
+    }
+    return ssGain;
+  }
+  function gtr(f, at, dur = 0.18, vol = 0.16, slide = 0, sustain = false) {
     // distorted power chord: detuned saws + fifth + octave through a tanh waveshaper
     setTimeout(() => {
       try {
@@ -452,18 +464,35 @@
           o.start();
           o.stop(actx.currentTime + dur);
         });
-        ws.connect(lp); lp.connect(g); g.connect(actx.destination);
+        ws.connect(lp); lp.connect(g);
+        g.connect(sustain ? ssMasterGain() : actx.destination);
       } catch (e) { /* audio is optional */ }
     }, at);
   }
+  function ssRiffBar() {
+    // one bar of galloping power chords; loops for as long as he's transformed,
+    // fading as the power runs out (ssGain tracks ssActive in update)
+    if (ssActive <= 0) return;
+    const P = (f, at, dur = 0.13, vol = 0.15, slide = 0) => gtr(f, at, dur, vol, slide, true);
+    P(82, 0); P(82, 140); P(98, 280, 0.15);
+    P(82, 420); P(110, 560, 0.15);
+    P(82, 700); P(123, 840, 0.18);
+    P(98, 1020, 0.15);
+    P(110, 1160, 0.22, 0.15, 104); // little dive at the turnaround
+    ssLoopTimer = setTimeout(ssRiffBar, 1400);
+  }
   const sndSSGo = () => {
-    // power-up roar + a shredding E-minor riff with a screaming bend
-    beep(80, 1.4, 'sawtooth', 0.12, 700);
-    gtr(82, 0, 0.12); gtr(82, 120, 0.12); gtr(98, 240, 0.14);
-    gtr(110, 380, 0.16); gtr(98, 540, 0.12); gtr(82, 660, 0.16);
-    gtr(147, 820, 0.22);
-    gtr(165, 1050, 0.55, 0.16, 220); // the whammy scream
-    setTimeout(() => beep(1568, 0.4, 'triangle', 0.06, 2400), 1050);
+    // power-up roar, pick-scrape riser, gallop, then a screaming octave bend
+    beep(60, 1.6, 'sawtooth', 0.12, 800);
+    gtr(55, 0, 0.5, 0.12, 220); // pick scrape climbing the strings
+    gtr(82, 450, 0.12); gtr(82, 580, 0.12); gtr(98, 710, 0.14);
+    gtr(110, 850, 0.14); gtr(123, 990, 0.16);
+    gtr(147, 1130, 0.2);
+    gtr(165, 1330, 0.7, 0.17, 330); // the scream
+    setTimeout(() => beep(1568, 0.5, 'triangle', 0.06, 3000), 1330);
+    // hand off to the sustain loop once the intro lands
+    clearTimeout(ssLoopTimer);
+    ssLoopTimer = setTimeout(ssRiffBar, 2100);
   };
   const sndVictory = () => {
     // the coronation theme (~6s): fanfare, answer, grand held finale
@@ -649,6 +678,7 @@
     if (state !== ST.PLAYING || ssActive > 0 || ssCharges <= 0) return;
     ssCharges--;
     ssActive = 3; // invincible for the next 3 points
+    if (ssGain) ssGain.gain.value = 1; // riff comes back at full power
     sndSSGo();
     burstParticles(nemo.x, nemo.y, ['#ffe34d', '#ffffff', '#ffd94a'], 30, 1.3);
   }
@@ -855,6 +885,11 @@
     nemo.flame = Math.max(0, nemo.flame - dt * 3);
     nemo.slice = Math.max(0, nemo.slice - dt);
     ssUnlockT = Math.max(0, ssUnlockT - dt);
+    if (ssGain) {
+      // guitar volume follows the remaining power: 3 points loud, 1 point faint
+      const target = ssActive > 0 ? ssActive / 3 : 0;
+      ssGain.gain.value += (target - ssGain.gain.value) * Math.min(1, dt * 2.5);
+    }
     if (ssActive > 0 && Math.random() < dt * 25) {
       // golden energy rising off the transformed fish
       fireworks.push({
