@@ -6,15 +6,15 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Cass' Tappy">
-<meta name="theme-color" content="#87ceeb">
-<title>Cass' Tappy Adventure 🐱</title>
+<meta name="apple-mobile-web-app-title" content="Royal Nemo">
+<meta name="theme-color" content="#1a6ea8">
+<title>Royal Nemo's Reef Adventure 🐠</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
     width: 100%; height: 100%;
     overflow: hidden;
-    background: #4ec0ca;
+    background: #1a6ea8;
     touch-action: none;
     -webkit-user-select: none; user-select: none;
     -webkit-touch-callout: none;
@@ -53,38 +53,38 @@
 
   // ---------- Game constants (scaled to screen height) ----------
   const S = () => H / 700; // scale factor relative to a 700px-tall design
-  const GRAVITY = 1500;
-  const FLAP_VY = -480;
-  const PIPE_SPEED = 160;
-  const PIPE_GAP = 185;
-  const PIPE_W = 70;
-  const PIPE_SPACING = 240;
-  const GROUND_H = 90;
-  const KITTY_R = 19; // collision radius
+  const GRAVITY = 1300;      // a touch lighter than air — we're underwater
+  const SWIM_VY = -440;
+  const CORAL_SPEED = 160;
+  const CORAL_GAP = 185;
+  const CORAL_W = 70;
+  const CORAL_SPACING = 240;
+  const SEABED_H = 90;
+  const NEMO_R = 19; // collision radius
 
   // ---------- State ----------
   const ST = { READY: 0, PLAYING: 1, DEAD: 2 };
   let state = ST.READY;
-  let kitty, pipes, score, best, t, deathT, flashT, clouds, stars;
-  best = +(localStorage.getItem('flappyKittyBest') || 0);
+  let nemo, corals, score, best, t, deathT, flashT, drift, sparkles;
+  best = +(localStorage.getItem('royalNemoBest') || 0);
 
   function reset() {
-    kitty = { x: W * 0.3, y: H * 0.45, vy: 0, rot: 0, wing: 0, tail: 0 };
-    pipes = [];
+    nemo = { x: W * 0.3, y: H * 0.45, vy: 0, rot: 0, fin: 0, tail: 0 };
+    corals = [];
     score = 0;
     t = 0;
     deathT = 0;
     flashT = 0;
-    clouds = [];
-    for (let i = 0; i < 6; i++) {
-      clouds.push({
+    drift = []; // ambient bubbles drifting up through the water
+    for (let i = 0; i < 10; i++) {
+      drift.push({
         x: Math.random() * W,
-        y: Math.random() * H * 0.5,
-        s: (0.5 + Math.random()) * S(),
-        v: 10 + Math.random() * 18
+        y: Math.random() * H,
+        s: (0.4 + Math.random()) * S(),
+        v: 18 + Math.random() * 26
       });
     }
-    stars = []; // celebration particles on point scored
+    sparkles = []; // celebration bubbles on point scored
     state = ST.READY;
   }
 
@@ -104,39 +104,39 @@
       o.start(); o.stop(actx.currentTime + dur);
     } catch (e) { /* audio is optional */ }
   }
-  const sndFlap = () => beep(500, 0.08, 'triangle', 0.1, 800);
-  const sndScore = () => { beep(880, 0.08, 'square', 0.06); setTimeout(() => beep(1320, 0.12, 'square', 0.06), 80); };
-  const sndHit = () => beep(220, 0.25, 'sawtooth', 0.12, 60);
-  const sndMeow = () => beep(700, 0.18, 'triangle', 0.09, 350);
+  const sndSwim = () => beep(350, 0.1, 'sine', 0.1, 900);
+  const sndScore = () => { beep(880, 0.08, 'triangle', 0.07); setTimeout(() => beep(1320, 0.12, 'triangle', 0.07), 80); };
+  const sndHit = () => beep(180, 0.3, 'sawtooth', 0.12, 50);
+  const sndBlub = () => beep(300, 0.25, 'sine', 0.09, 90);
 
   // ---------- Input ----------
-  function flap() {
+  function swim() {
     if (state === ST.READY) {
       state = ST.PLAYING;
-      kitty.vy = FLAP_VY * S();
-      sndFlap();
+      nemo.vy = SWIM_VY * S();
+      sndSwim();
     } else if (state === ST.PLAYING) {
-      kitty.vy = FLAP_VY * S();
-      kitty.wing = 1;
-      sndFlap();
+      nemo.vy = SWIM_VY * S();
+      nemo.fin = 1;
+      sndSwim();
     } else if (state === ST.DEAD && deathT > 0.6) {
       reset();
     }
   }
-  window.addEventListener('touchstart', e => { e.preventDefault(); flap(); }, { passive: false });
-  window.addEventListener('mousedown', flap);
+  window.addEventListener('touchstart', e => { e.preventDefault(); swim(); }, { passive: false });
+  window.addEventListener('mousedown', swim);
   window.addEventListener('keydown', e => {
-    if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); flap(); }
+    if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); swim(); }
   });
 
-  // ---------- Pipes ----------
-  function spawnPipe(x) {
+  // ---------- Coral columns ----------
+  function spawnCoral(x) {
     const s = S();
-    const gap = PIPE_GAP * s;
+    const gap = CORAL_GAP * s;
     const margin = 70 * s;
-    const groundY = H - GROUND_H * s;
-    const gapY = margin + Math.random() * (groundY - margin * 2 - gap);
-    pipes.push({ x, gapY, gap, scored: false });
+    const seabedY = H - SEABED_H * s;
+    const gapY = margin + Math.random() * (seabedY - margin * 2 - gap);
+    corals.push({ x, gapY, gap, scored: false });
   }
 
   // ---------- Update ----------
@@ -144,182 +144,208 @@
     const s = S();
     t += dt;
 
-    for (const c of clouds) {
-      c.x -= c.v * dt * (state === ST.DEAD ? 0.3 : 1);
-      if (c.x < -120 * c.s) { c.x = W + 120 * c.s; c.y = Math.random() * H * 0.5; }
+    for (const b of drift) {
+      b.y -= b.v * dt * (state === ST.DEAD ? 0.3 : 1);
+      b.x += Math.sin(t * 2 + b.y * 0.02) * 12 * dt;
+      if (b.y < -20 * b.s) { b.y = H + 20 * b.s; b.x = Math.random() * W; }
     }
 
-    kitty.tail += dt * 6;
+    nemo.tail += dt * 7;
 
     if (state === ST.READY) {
-      kitty.y = H * 0.45 + Math.sin(t * 3) * 12 * s;
-      kitty.wing = (Math.sin(t * 8) + 1) / 2;
+      nemo.y = H * 0.45 + Math.sin(t * 3) * 12 * s;
+      nemo.fin = (Math.sin(t * 8) + 1) / 2;
       return;
     }
 
     if (state === ST.DEAD) {
       deathT += dt;
       flashT = Math.max(0, flashT - dt * 3);
-      // fall to the ground
-      const groundY = H - GROUND_H * s;
-      if (kitty.y < groundY - KITTY_R * s) {
-        kitty.vy += GRAVITY * s * dt;
-        kitty.y += kitty.vy * dt;
-        kitty.rot = Math.min(kitty.rot + dt * 6, Math.PI / 2);
-        if (kitty.y > groundY - KITTY_R * s) kitty.y = groundY - KITTY_R * s;
+      // sink to the seabed
+      const seabedY = H - SEABED_H * s;
+      if (nemo.y < seabedY - NEMO_R * s) {
+        nemo.vy += GRAVITY * s * dt;
+        nemo.y += nemo.vy * dt;
+        nemo.rot = Math.min(nemo.rot + dt * 6, Math.PI / 2);
+        if (nemo.y > seabedY - NEMO_R * s) nemo.y = seabedY - NEMO_R * s;
       }
-      updateStars(dt);
+      updateSparkles(dt);
       return;
     }
 
     // PLAYING
-    kitty.vy += GRAVITY * s * dt;
-    kitty.y += kitty.vy * dt;
-    kitty.rot = Math.max(-0.45, Math.min(1.2, kitty.vy / (600 * s)));
-    kitty.wing = Math.max(0, kitty.wing - dt * 4);
+    nemo.vy += GRAVITY * s * dt;
+    nemo.y += nemo.vy * dt;
+    nemo.rot = Math.max(-0.45, Math.min(1.2, nemo.vy / (600 * s)));
+    nemo.fin = Math.max(0, nemo.fin - dt * 4);
 
-    // pipes
-    for (const p of pipes) p.x -= PIPE_SPEED * s * dt;
-    if (pipes.length === 0 || pipes[pipes.length - 1].x < W - PIPE_SPACING * s) {
-      spawnPipe(Math.max(W + 40, pipes.length ? pipes[pipes.length - 1].x + PIPE_SPACING * s : W + 40));
+    // coral columns
+    for (const p of corals) p.x -= CORAL_SPEED * s * dt;
+    if (corals.length === 0 || corals[corals.length - 1].x < W - CORAL_SPACING * s) {
+      spawnCoral(Math.max(W + 40, corals.length ? corals[corals.length - 1].x + CORAL_SPACING * s : W + 40));
     }
-    while (pipes.length && pipes[0].x < -PIPE_W * s - 20) pipes.shift();
+    while (corals.length && corals[0].x < -CORAL_W * s - 20) corals.shift();
 
-    const r = KITTY_R * s;
-    const groundY = H - GROUND_H * s;
+    const r = NEMO_R * s;
+    const seabedY = H - SEABED_H * s;
 
     // score + collisions
-    for (const p of pipes) {
-      const pw = PIPE_W * s;
-      if (!p.scored && p.x + pw < kitty.x) {
+    for (const p of corals) {
+      const pw = CORAL_W * s;
+      if (!p.scored && p.x + pw < nemo.x) {
         p.scored = true;
         score++;
         sndScore();
-        burstStars();
+        burstSparkles();
       }
-      // circle vs pipe rects
-      if (kitty.x + r > p.x && kitty.x - r < p.x + pw) {
-        if (kitty.y - r < p.gapY || kitty.y + r > p.gapY + p.gap) {
+      // circle vs coral rects
+      if (nemo.x + r > p.x && nemo.x - r < p.x + pw) {
+        if (nemo.y - r < p.gapY || nemo.y + r > p.gapY + p.gap) {
           die();
           break;
         }
       }
     }
 
-    // ground & ceiling
-    if (kitty.y + r > groundY) { kitty.y = groundY - r; die(); }
-    if (kitty.y - r < 0) { kitty.y = r; kitty.vy = 50; }
+    // seabed & surface
+    if (nemo.y + r > seabedY) { nemo.y = seabedY - r; die(); }
+    if (nemo.y - r < 0) { nemo.y = r; nemo.vy = 50; }
 
-    updateStars(dt);
+    updateSparkles(dt);
   }
 
   function die() {
     if (state === ST.DEAD) return;
     state = ST.DEAD;
     flashT = 1;
-    kitty.vy = Math.min(kitty.vy, 0);
+    nemo.vy = Math.min(nemo.vy, 0);
     sndHit();
-    setTimeout(sndMeow, 250);
+    setTimeout(sndBlub, 250);
     if (score > best) {
       best = score;
-      localStorage.setItem('flappyKittyBest', best);
+      localStorage.setItem('royalNemoBest', best);
     }
   }
 
-  function burstStars() {
+  function burstSparkles() {
     for (let i = 0; i < 8; i++) {
       const a = Math.random() * Math.PI * 2;
-      stars.push({
-        x: kitty.x, y: kitty.y,
+      sparkles.push({
+        x: nemo.x, y: nemo.y,
         vx: Math.cos(a) * (60 + Math.random() * 120),
         vy: Math.sin(a) * (60 + Math.random() * 120) - 60,
         life: 0.6 + Math.random() * 0.3
       });
     }
   }
-  function updateStars(dt) {
-    for (const st of stars) {
-      st.x += st.vx * dt;
-      st.y += st.vy * dt;
-      st.vy += 400 * dt;
-      st.life -= dt;
+  function updateSparkles(dt) {
+    for (const sp of sparkles) {
+      sp.x += sp.vx * dt;
+      sp.y += sp.vy * dt;
+      sp.vy -= 250 * dt; // bubbles float upward
+      sp.life -= dt;
     }
-    stars = stars.filter(st => st.life > 0);
+    sparkles = sparkles.filter(sp => sp.life > 0);
   }
 
   // ---------- Drawing ----------
   function drawBackground() {
     const s = S();
-    const sky = ctx.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, '#6ad7f0');
-    sky.addColorStop(0.7, '#b8ecf5');
-    sky.addColorStop(1, '#d9f6e8');
-    ctx.fillStyle = sky;
+    const water = ctx.createLinearGradient(0, 0, 0, H);
+    water.addColorStop(0, '#39a9d8');
+    water.addColorStop(0.6, '#1a6ea8');
+    water.addColorStop(1, '#0d4a7a');
+    ctx.fillStyle = water;
     ctx.fillRect(0, 0, W, H);
 
-    // sun
-    ctx.fillStyle = 'rgba(255, 240, 160, 0.9)';
-    ctx.beginPath();
-    ctx.arc(W * 0.82, H * 0.13, 36 * s, 0, Math.PI * 2);
-    ctx.fill();
-
-    // clouds
-    for (const c of clouds) drawCloud(c.x, c.y, c.s);
-
-    // distant hills
-    ctx.fillStyle = '#a5e3b2';
-    ctx.beginPath();
-    ctx.moveTo(0, H - GROUND_H * s);
-    for (let x = 0; x <= W; x += 8) {
-      ctx.lineTo(x, H - GROUND_H * s - 30 * s - Math.sin(x * 0.01 + 2) * 22 * s);
+    // shafts of sunlight filtering down
+    ctx.fillStyle = 'rgba(255, 250, 200, 0.08)';
+    for (let i = 0; i < 3; i++) {
+      const bx = W * (0.18 + i * 0.3) + Math.sin(t * 0.4 + i * 2) * 30 * s;
+      ctx.beginPath();
+      ctx.moveTo(bx - 18 * s, 0);
+      ctx.lineTo(bx + 18 * s, 0);
+      ctx.lineTo(bx + 90 * s, H);
+      ctx.lineTo(bx - 90 * s, H);
+      ctx.closePath();
+      ctx.fill();
     }
-    ctx.lineTo(W, H - GROUND_H * s);
+
+    // ambient bubbles
+    for (const b of drift) drawBubble(b.x, b.y, b.s);
+
+    // distant reef silhouette
+    ctx.fillStyle = 'rgba(10, 50, 90, 0.55)';
+    ctx.beginPath();
+    ctx.moveTo(0, H - SEABED_H * s);
+    for (let x = 0; x <= W; x += 8) {
+      ctx.lineTo(x, H - SEABED_H * s - 30 * s - Math.sin(x * 0.01 + 2) * 22 * s);
+    }
+    ctx.lineTo(W, H - SEABED_H * s);
     ctx.closePath();
     ctx.fill();
   }
 
-  function drawCloud(x, y, sc) {
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  function drawBubble(x, y, sc) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1.5 * sc;
     ctx.beginPath();
-    ctx.arc(x, y, 22 * sc, 0, Math.PI * 2);
-    ctx.arc(x + 24 * sc, y - 8 * sc, 18 * sc, 0, Math.PI * 2);
-    ctx.arc(x + 48 * sc, y, 20 * sc, 0, Math.PI * 2);
-    ctx.arc(x + 24 * sc, y + 8 * sc, 18 * sc, 0, Math.PI * 2);
+    ctx.arc(x, y, 9 * sc, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath();
+    ctx.arc(x - 3 * sc, y - 3 * sc, 2.2 * sc, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  function drawGround() {
+  function drawSeabed() {
     const s = S();
-    const gy = H - GROUND_H * s;
-    ctx.fillStyle = '#8bd06b';
-    ctx.fillRect(0, gy, W, GROUND_H * s);
-    ctx.fillStyle = '#79c25a';
+    const gy = H - SEABED_H * s;
+    ctx.fillStyle = '#e8d59a';
+    ctx.fillRect(0, gy, W, SEABED_H * s);
+    ctx.fillStyle = '#d9c280';
     ctx.fillRect(0, gy, W, 12 * s);
-    // scrolling stripes
-    const off = (state !== ST.DEAD ? (t * PIPE_SPEED * s) % (40 * s) : 0);
+    // scrolling sand ripples
+    const off = (state !== ST.DEAD ? (t * CORAL_SPEED * s) % (40 * s) : 0);
     ctx.fillStyle = 'rgba(255,255,255,0.18)';
     for (let x = -off; x < W; x += 40 * s) {
       ctx.beginPath();
       ctx.moveTo(x, gy + 12 * s);
       ctx.lineTo(x + 20 * s, gy + 12 * s);
-      ctx.lineTo(x + 8 * s, gy + GROUND_H * s);
-      ctx.lineTo(x - 12 * s, gy + GROUND_H * s);
+      ctx.lineTo(x + 8 * s, gy + SEABED_H * s);
+      ctx.lineTo(x - 12 * s, gy + SEABED_H * s);
       ctx.closePath();
       ctx.fill();
     }
+    // a few seaweed tufts swaying
+    ctx.strokeStyle = '#2e8b57';
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 5; i++) {
+      const sx = ((i * 0.23 + 0.08) * W + (state !== ST.DEAD ? -(t * CORAL_SPEED * s * 0.25) : 0)) % (W + 40 * s);
+      const wx = sx < 0 ? sx + W + 40 * s : sx;
+      const sway = Math.sin(t * 2 + i * 1.7) * 6 * s;
+      ctx.lineWidth = 4 * s;
+      ctx.beginPath();
+      ctx.moveTo(wx, gy + 10 * s);
+      ctx.quadraticCurveTo(wx + sway, gy - 14 * s, wx + sway * 1.6, gy - 26 * s);
+      ctx.stroke();
+    }
   }
 
-  function drawPipe(p) {
+  function drawCoral(p) {
     const s = S();
-    const pw = PIPE_W * s;
-    const gy = H - GROUND_H * s;
+    const pw = CORAL_W * s;
+    const gy = H - SEABED_H * s;
     const lip = 14 * s;
 
-    // styled as yarn-spool towers
+    // styled as pink coral towers
     const body = ctx.createLinearGradient(p.x, 0, p.x + pw, 0);
-    body.addColorStop(0, '#e8743c');
-    body.addColorStop(0.5, '#ff9a5c');
-    body.addColorStop(1, '#d6602e');
+    body.addColorStop(0, '#d8527c');
+    body.addColorStop(0.5, '#ff7fa5');
+    body.addColorStop(1, '#c2406a');
 
     // top tower
     ctx.fillStyle = body;
@@ -329,8 +355,8 @@
     ctx.fillRect(p.x, p.gapY + p.gap + lip, pw, gy - (p.gapY + p.gap + lip));
     roundRect(p.x - 5 * s, p.gapY + p.gap, pw + 10 * s, lip, 5 * s);
 
-    // yarn winding lines
-    ctx.strokeStyle = 'rgba(120, 40, 10, 0.25)';
+    // coral ridge lines
+    ctx.strokeStyle = 'rgba(110, 20, 50, 0.25)';
     ctx.lineWidth = 2 * s;
     for (let y = 10 * s; y < p.gapY - lip; y += 14 * s) {
       ctx.beginPath();
@@ -357,178 +383,165 @@
     ctx.fill();
   }
 
-  function drawKitty() {
+  function drawNemo() {
+    const k = nemo;
     const s = S();
-    const k = kitty;
     ctx.save();
     ctx.translate(k.x, k.y);
     ctx.rotate(k.rot);
     ctx.scale(s, s);
 
-    // Cass: gray-brown tabby, white bib + socks, green eyes
-    const fur = '#a08c74';
-    const furDark = '#5f4f3c';
-    const cream = '#fdf7ec';
+    // Royal Nemo: orange clownfish, white bands, golden crown
+    const orange = '#ff8c2e';
+    const orangeDark = '#d96a10';
+    const band = '#fdf7ec';
 
-    // tail (wavy, with tabby rings)
-    ctx.lineCap = 'round';
-    const tw = Math.sin(k.tail) * 6;
-    const tailPath = () => {
-      ctx.beginPath();
-      ctx.moveTo(-16, 4);
-      ctx.quadraticCurveTo(-30, 0 + tw, -34, -10 + tw);
-    };
-    ctx.strokeStyle = fur;
-    ctx.lineWidth = 7;
-    tailPath();
-    ctx.stroke();
-    ctx.strokeStyle = furDark;
-    ctx.lineWidth = 7;
-    ctx.setLineDash([3, 5]);
-    tailPath();
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // wing (white, flaps)
-    const wingUp = -10 - kitty.wing * 16;
-    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    // tail fin (wags)
+    const tw = Math.sin(k.tail) * 5;
+    ctx.fillStyle = orange;
     ctx.beginPath();
-    ctx.moveTo(-4, -2);
-    ctx.quadraticCurveTo(-18, wingUp, -28, wingUp + 4);
-    ctx.quadraticCurveTo(-20, 2, -4, 4);
+    ctx.moveTo(-14, 0);
+    ctx.quadraticCurveTo(-26, -12 + tw, -30, -8 + tw);
+    ctx.quadraticCurveTo(-24, 0 + tw * 0.5, -30, 8 + tw);
+    ctx.quadraticCurveTo(-26, 12 + tw, -14, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = orangeDark;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // dorsal fin
+    ctx.fillStyle = orange;
+    ctx.beginPath();
+    ctx.moveTo(-6, -10);
+    ctx.quadraticCurveTo(-2, -20, 8, -12);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = orangeDark;
+    ctx.stroke();
+
+    // body
+    ctx.fillStyle = orange;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 18, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = orangeDark;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // white bands with dark edges (clip to body)
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 18, 12, 0, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.fillStyle = band;
+    ctx.strokeStyle = '#3a2a16';
+    ctx.lineWidth = 1.2;
+    // head band
+    ctx.beginPath();
+    ctx.moveTo(8, -13); ctx.quadraticCurveTo(4, 0, 8, 13);
+    ctx.lineTo(13, 13); ctx.quadraticCurveTo(9, 0, 13, -13);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // middle band
+    ctx.beginPath();
+    ctx.moveTo(-3, -13); ctx.quadraticCurveTo(-7, 0, -3, 13);
+    ctx.lineTo(3, 13); ctx.quadraticCurveTo(-1, 0, 3, -13);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // tail band
+    ctx.beginPath();
+    ctx.moveTo(-13, -13); ctx.quadraticCurveTo(-16, 0, -13, 13);
+    ctx.lineTo(-10, 13); ctx.quadraticCurveTo(-13, 0, -10, -13);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+
+    // pectoral fin (flaps on tap)
+    const finUp = k.fin * 10;
+    ctx.fillStyle = orangeDark;
+    ctx.beginPath();
+    ctx.moveTo(0, 2);
+    ctx.quadraticCurveTo(-6, 10 - finUp, -12, 12 - finUp);
+    ctx.quadraticCurveTo(-5, 12, 0, 7);
     ctx.closePath();
     ctx.fill();
 
-    // body
-    ctx.fillStyle = fur;
+    // black & gold royal crown
+    ctx.fillStyle = '#1c1c1e';
+    ctx.strokeStyle = '#d4a532';
+    ctx.lineWidth = 1.3;
     ctx.beginPath();
-    ctx.ellipse(-4, 4, 16, 13, 0, 0, Math.PI * 2);
+    ctx.moveTo(5, -13);
+    ctx.lineTo(6, -21);
+    ctx.lineTo(9.5, -16);
+    ctx.lineTo(12.5, -23);
+    ctx.lineTo(15.5, -16);
+    ctx.lineTo(19, -21);
+    ctx.lineTo(20, -13);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // gold band at the base
+    ctx.fillStyle = '#d4a532';
+    ctx.fillRect(5, -14, 15, 1.8);
+    // gold tips on the points
+    ctx.beginPath(); ctx.arc(6, -21, 1.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(12.5, -23, 1.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(19, -21, 1.2, 0, Math.PI * 2); ctx.fill();
+    // jewel
+    ctx.fillStyle = '#e0455c';
+    ctx.beginPath();
+    ctx.arc(12.5, -17, 1.6, 0, Math.PI * 2);
     ctx.fill();
 
-    // body tabby stripes
-    ctx.strokeStyle = furDark;
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(-14, -3); ctx.quadraticCurveTo(-12, 2, -14, 7); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(-8, -6); ctx.quadraticCurveTo(-6, 0, -8, 6); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(-2, -7); ctx.quadraticCurveTo(0, -2, -2, 3); ctx.stroke();
-
-    // white bib (chest)
-    ctx.fillStyle = cream;
-    ctx.beginPath();
-    ctx.ellipse(2, 8, 9, 8, -0.3, 0, Math.PI * 2);
-    ctx.fill();
-
-    // white front paw
-    ctx.fillStyle = cream;
-    ctx.beginPath();
-    ctx.ellipse(6, 15, 4.5, 3, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // head
-    ctx.fillStyle = fur;
-    ctx.beginPath();
-    ctx.arc(10, -6, 13, 0, Math.PI * 2);
-    ctx.fill();
-
-    // ears
-    ctx.beginPath();
-    ctx.moveTo(2, -14); ctx.lineTo(0, -25); ctx.lineTo(9, -17);
-    ctx.closePath(); ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(13, -17); ctx.lineTo(18, -27); ctx.lineTo(21, -14);
-    ctx.closePath(); ctx.fill();
-    // inner ears
-    ctx.fillStyle = '#ff9eb0';
-    ctx.beginPath();
-    ctx.moveTo(3.5, -16); ctx.lineTo(2.5, -22); ctx.lineTo(8, -17.5);
-    ctx.closePath(); ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(14.5, -17.5); ctx.lineTo(17.5, -24); ctx.lineTo(19.5, -15.5);
-    ctx.closePath(); ctx.fill();
-
-    // forehead tabby "M"
-    ctx.strokeStyle = furDark;
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(8, -17); ctx.lineTo(8.5, -12); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(12, -18); ctx.lineTo(12, -12.5); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(16, -17); ctx.lineTo(15.5, -12); ctx.stroke();
-    // cheek stripes
-    ctx.beginPath(); ctx.moveTo(22, -12); ctx.lineTo(19, -10); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(23, -8); ctx.lineTo(20, -7); ctx.stroke();
-
-    // white muzzle
-    ctx.fillStyle = cream;
-    ctx.beginPath();
-    ctx.ellipse(13.5, 0, 6.5, 5, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // eyes
+    // eyes: cool black sunglasses (knocked off when dead)
     const dead = state === ST.DEAD;
     if (dead) {
       ctx.strokeStyle = '#3a2a16';
       ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(6, -10); ctx.lineTo(11, -5); ctx.moveTo(11, -10); ctx.lineTo(6, -5); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(15, -10); ctx.lineTo(20, -5); ctx.moveTo(20, -10); ctx.lineTo(15, -5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(9, -6); ctx.lineTo(14, -1); ctx.moveTo(14, -6); ctx.lineTo(9, -1); ctx.stroke();
     } else {
-      // big green eyes like Cass
-      ctx.fillStyle = '#9db657';
-      ctx.beginPath(); ctx.arc(8.5, -7.5, 3, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(17.5, -7.5, 3, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#26221a';
-      ctx.beginPath(); ctx.arc(8.8, -7.3, 1.6, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(17.8, -7.3, 1.6, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(9.5, -8.5, 1, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(18.5, -8.5, 1, 0, Math.PI * 2); ctx.fill();
+      // arm hooking back over the head
+      ctx.strokeStyle = '#141414';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(8.5, -5);
+      ctx.quadraticCurveTo(3, -7, -1, -5);
+      ctx.stroke();
+      // lens
+      ctx.fillStyle = '#141414';
+      ctx.beginPath();
+      ctx.ellipse(12.5, -4, 5, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#d4a532';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // glint on the lens
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(10, -6.5);
+      ctx.lineTo(13.5, -2);
+      ctx.stroke();
     }
 
-    // nose + mouth
-    ctx.fillStyle = '#d98a80';
-    ctx.beginPath();
-    ctx.moveTo(12, -2.5); ctx.lineTo(15, -2.5); ctx.lineTo(13.5, -0.5);
-    ctx.closePath(); ctx.fill();
+    // mouth
     ctx.strokeStyle = '#3a2a16';
     ctx.lineWidth = 1.4;
     ctx.beginPath();
-    ctx.moveTo(13.5, -0.5);
-    ctx.quadraticCurveTo(13.5, 2, 11, 2);
-    ctx.moveTo(13.5, -0.5);
-    ctx.quadraticCurveTo(13.5, 2, 16, 2);
-    ctx.stroke();
-
-    // whiskers
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(4, -2); ctx.lineTo(-3, -3);
-    ctx.moveTo(4, 0); ctx.lineTo(-3, 1);
-    ctx.moveTo(22, -2); ctx.lineTo(29, -3);
-    ctx.moveTo(22, 0); ctx.lineTo(29, 1);
+    ctx.arc(17, 3, 2.5, 0.2, Math.PI - 0.4);
     ctx.stroke();
 
     ctx.restore();
   }
 
-  function drawStars() {
-    ctx.fillStyle = '#ffd94a';
-    for (const st of stars) {
-      ctx.save();
-      ctx.translate(st.x, st.y);
-      ctx.rotate(st.life * 8);
-      ctx.globalAlpha = Math.min(1, st.life * 2);
-      const r = 5 * S();
-      ctx.beginPath();
-      for (let i = 0; i < 5; i++) {
-        const a = (i * 4 * Math.PI) / 5 - Math.PI / 2;
-        ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
-      }
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
+  function drawSparkles() {
+    for (const sp of sparkles) {
+      ctx.globalAlpha = Math.min(1, sp.life * 2);
+      drawBubble(sp.x, sp.y, 0.55 * S());
     }
     ctx.globalAlpha = 1;
   }
 
-  function text(str, x, y, size, fill = '#fff', stroke = '#4a3621', align = 'center') {
+  function text(str, x, y, size, fill = '#fff', stroke = '#123a5c', align = 'center') {
     ctx.font = `bold ${size}px -apple-system, "Segoe UI", Arial, sans-serif`;
     ctx.textAlign = align;
     ctx.textBaseline = 'middle';
@@ -542,16 +555,16 @@
 
   function drawUI() {
     const s = S();
-    const safeTop = 40 * s + (window.visualViewport ? 0 : 0);
+    const safeTop = 40 * s;
 
     if (state === ST.PLAYING) {
       text(score, W / 2, safeTop + 30 * s, 52 * s);
     } else if (state === ST.READY) {
-      text("Cass' Tappy", W / 2, H * 0.19, 40 * s, '#ffd94a');
-      text('Adventure', W / 2, H * 0.26, 40 * s, '#ffd94a');
-      text('🐾', W / 2, H * 0.32, 26 * s);
-      text('Tap to flap!', W / 2, H * 0.62, 26 * s);
-      if (best > 0) text(`Best: ${best}`, W / 2, H * 0.68, 20 * s, '#ffe9c9');
+      text('Royal Nemo', W / 2, H * 0.19, 40 * s, '#ffd94a');
+      text('Reef Adventure', W / 2, H * 0.26, 40 * s, '#ffd94a');
+      text('🐠', W / 2, H * 0.32, 26 * s);
+      text('Tap to swim!', W / 2, H * 0.62, 26 * s);
+      if (best > 0) text(`Best: ${best}`, W / 2, H * 0.68, 20 * s, '#cdeef5');
     } else if (state === ST.DEAD) {
       // flash on hit
       if (flashT > 0) {
@@ -561,12 +574,12 @@
       if (deathT > 0.4) {
         ctx.fillStyle = 'rgba(0,0,0,0.35)';
         ctx.fillRect(0, 0, W, H);
-        text('Game Over', W / 2, H * 0.3, 44 * s, '#ff8b6b');
+        text('Blub... Game Over', W / 2, H * 0.3, 40 * s, '#ff8b6b');
         text(`Score: ${score}`, W / 2, H * 0.42, 32 * s);
         text(`Best: ${best}`, W / 2, H * 0.49, 24 * s, '#ffd94a');
-        if (score >= best && score > 0) text('New record! 🎉', W / 2, H * 0.56, 22 * s, '#aef1b8');
+        if (score >= best && score > 0) text('New record! 👑', W / 2, H * 0.56, 22 * s, '#aef1b8');
         if (deathT > 0.6 && Math.floor(deathT * 2) % 2 === 0) {
-          text('Tap to try again', W / 2, H * 0.68, 22 * s);
+          text('Tap to swim again', W / 2, H * 0.68, 22 * s);
         }
       }
     }
@@ -581,10 +594,10 @@
     update(dt);
 
     drawBackground();
-    for (const p of pipes) drawPipe(p);
-    drawGround();
-    drawStars();
-    drawKitty();
+    for (const p of corals) drawCoral(p);
+    drawSeabed();
+    drawSparkles();
+    drawNemo();
     drawUI();
 
     requestAnimationFrame(frame);
