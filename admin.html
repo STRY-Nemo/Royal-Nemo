@@ -101,6 +101,13 @@
   <h2>Most active players</h2>
   <table><thead><tr><th>player</th><th>plays</th><th>best score</th><th>last played</th></tr></thead>
   <tbody id="byPlayer"></tbody></table>
+  <h2>Bulk rename <span class="muted" style="font-weight:normal">(pre-v25 entries only — newer scores are protected by device id)</span></h2>
+  <div class="toolbar">
+    <input id="bulkFrom" value="Lucas" placeholder="from name" style="font:14px inherit;padding:9px;border-radius:8px;border:1px solid #1f4a78;background:#0d2440;color:#fff;width:110px">
+    <span class="muted">→</span>
+    <input id="bulkTo" value="Nemo" placeholder="to name" style="font:14px inherit;padding:9px;border-radius:8px;border:1px solid #1f4a78;background:#0d2440;color:#fff;width:110px">
+    <button onclick="bulkRename()">Rename all</button>
+  </div>
   <h2>Leaderboard entries <span class="muted" style="font-weight:normal">(✏️ rename / 🗑 delete)</span></h2>
   <table><thead><tr><th>player</th><th>score</th><th></th></tr></thead>
   <tbody id="scoreRows"></tbody></table>
@@ -172,6 +179,25 @@ async function loadScores() {
       `<button class="ghost" onclick="delScore('${k}')">🗑</button></td></tr>`).join('')
       || '<tr><td colspan="3" class="muted">no scores yet</td></tr>';
   } catch (e) { /* leave section empty */ }
+}
+async function bulkRename() {
+  const from = $('bulkFrom').value.trim(), to = $('bulkTo').value.trim().slice(0, 12);
+  if (!from || !to) return;
+  const res = await fetch(DB + '/scores.json');
+  const data = await res.json() || {};
+  const updates = {};
+  let n = 0;
+  for (const [k, e] of Object.entries(data)) {
+    // only legacy entries without a device id: post-v25 scores belong
+    // verifiably to their device and shouldn't be mass-renamed
+    if (e && e.name === from && !e.pid) { updates[k + '/name'] = to; n++; }
+  }
+  if (!n) { alert('No legacy entries named "' + from + '" found.'); return; }
+  if (!confirm('Rename ' + n + ' entr' + (n > 1 ? 'ies' : 'y') + ' from "' + from + '" to "' + to + '"?')) return;
+  const r = await fetch(DB + '/scores.json?auth=' + encodeURIComponent(getKey()),
+    { method: 'PATCH', body: JSON.stringify(updates) });
+  if (!r.ok) alert('Bulk rename failed (' + r.status + ') — is your admin key set?');
+  loadScores();
 }
 async function renameScore(key, cur) {
   const nn = prompt('New name for this entry:', cur);
