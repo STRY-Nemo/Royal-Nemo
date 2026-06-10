@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>💨 The Fart Lab</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+    background: #0d2440;
+    color: #eaf4fb;
+    min-height: 100vh;
+    padding: 20px 14px 40px;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 24px; color: #ffd94a; margin-bottom: 4px; }
+  .sub { color: #8fb8d4; font-size: 14px; margin-bottom: 20px; line-height: 1.5; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  button {
+    font: bold 15px inherit;
+    color: #eaf4fb;
+    background: #14365c;
+    border: 2px solid #1f4a78;
+    border-radius: 14px;
+    padding: 16px 10px;
+    cursor: pointer;
+    text-align: center;
+    transition: transform 0.05s;
+  }
+  button:active { transform: scale(0.96); background: #1d4a7c; border-color: #ffd94a; }
+  button .emoji { font-size: 26px; display: block; margin-bottom: 6px; }
+  button .num { color: #ffd94a; }
+  button .desc { display: block; font-size: 11px; color: #8fb8d4; font-weight: normal; margin-top: 4px; }
+  .note {
+    margin-top: 22px;
+    background: #14365c;
+    border: 1px solid #1f4a78;
+    border-radius: 12px;
+    padding: 14px;
+    font-size: 13px;
+    color: #cdeef5;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+<h1>💨 The Fart Lab</h1>
+<div class="sub">Tap each one (sound on, silent mode off). Pick your favorite and tell the developer its <b>number</b>.</div>
+<div class="grid" id="grid"></div>
+<div class="note">
+  None of them funny enough? Find a fart you love (Pixabay and Mixkit have free ones —
+  search "whoopee cushion"), download it, and send the file to the developer — the real
+  recording can be embedded in the game directly.
+</div>
+<script>
+let actx = null;
+function ac() {
+  if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+  if (actx.state === 'suspended') actx.resume();
+  return actx;
+}
+
+// one flexible fart engine, many personalities
+function playFart(p) {
+  const a = ac();
+  const sr = a.sampleRate;
+  const dur = p.dur;
+  const n = Math.floor(sr * dur);
+  const buf = a.createBuffer(1, n, sr);
+  const d = buf.getChannelData(0);
+  let phase = 0, sput = 0, open = true;
+  const wob = Math.random() * 6;
+  for (let i = 0; i < n; i++) {
+    const tt = i / sr;
+    const prog = i / n;
+    let flap;
+    if (p.stutter) {
+      if (--sput <= 0) {
+        open = Math.random() < 0.7;
+        sput = (0.005 + Math.random() * 0.015) * sr;
+      }
+      flap = open ? 1 : 0.07;
+    } else {
+      const flapHz = p.flapA + (p.flapB - p.flapA) * prog + Math.sin(tt * 9 + wob) * (p.wob || 4);
+      phase += (flapHz * 2 * Math.PI) / sr;
+      flap = Math.sin(phase) > -(p.gate ?? 0.35) ? 1 : 0.07;
+    }
+    const rasp = Math.sin(phase * 2 + Math.sin(tt * 47) * 1.6) * (p.rasp ?? 0.45);
+    const subHz = p.f * (0.62 - prog * 0.2);
+    const sub = Math.sin(2 * Math.PI * subHz * tt) * (p.sub ?? 0);
+    d[i] = ((Math.random() * 2 - 1) * (p.noise ?? 0.65) + rasp + sub) * flap;
+  }
+  const src = a.createBufferSource();
+  src.buffer = buf;
+  const lp = a.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.Q.value = p.q ?? 10;
+  lp.frequency.setValueAtTime(p.f * 2.6, a.currentTime);
+  lp.frequency.exponentialRampToValueAtTime(p.f * (p.pitchEnd ?? 0.55), a.currentTime + dur);
+  const g = a.createGain();
+  g.gain.setValueAtTime(p.vol ?? 0.4, a.currentTime);
+  g.gain.setValueAtTime(p.vol ?? 0.4, a.currentTime + dur * 0.6);
+  g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + dur);
+  src.connect(lp); lp.connect(g); g.connect(a.destination);
+  src.start();
+}
+
+const PRESETS = [
+  { name: 'Current game fart', emoji: '🐠', desc: 'what v21 ships with',
+    p: { dur: 0.45, f: 140, flapA: 46, flapB: 22, rasp: 0.45, noise: 0.65 } },
+  { name: 'Classic Whoopee', emoji: '🪑', desc: 'slow rubbery flaps',
+    p: { dur: 0.75, f: 130, flapA: 30, flapB: 13, rasp: 0.5, noise: 0.5, q: 9 } },
+  { name: 'Wet Raspberry', emoji: '👅', desc: 'extra blubbery',
+    p: { dur: 0.6, f: 105, flapA: 38, flapB: 20, rasp: 0.85, noise: 0.45, q: 12 } },
+  { name: 'Squeaky Balloon', emoji: '🎈', desc: 'high & pinched',
+    p: { dur: 0.5, f: 280, flapA: 62, flapB: 40, rasp: 0.4, noise: 0.55, q: 13, pitchEnd: 1.6 } },
+  { name: 'Deep Tuba Blat', emoji: '🎺', desc: 'low & proud',
+    p: { dur: 0.5, f: 80, flapA: 34, flapB: 22, rasp: 0.3, noise: 0.25, sub: 0.7, q: 8 } },
+  { name: 'Machine Gun', emoji: '🥁', desc: 'rapid sputters',
+    p: { dur: 0.55, f: 140, stutter: true, rasp: 0.3, noise: 0.8, q: 9 } },
+  { name: 'Long Deflate', emoji: '🛞', desc: 'the slow goodbye',
+    p: { dur: 1.7, f: 120, flapA: 40, flapB: 7, rasp: 0.5, noise: 0.55, q: 10 } },
+  { name: 'Quick Honk', emoji: '📯', desc: 'short & punchy',
+    p: { dur: 0.28, f: 190, flapA: 50, flapB: 34, rasp: 0.5, noise: 0.6, q: 14 } },
+  { name: 'Bubbly Swamp', emoji: '🫧', desc: 'gurgly bottom end',
+    p: { dur: 0.7, f: 95, flapA: 18, flapB: 9, rasp: 0.7, noise: 0.5, q: 11, gate: 0.1, wob: 8 } },
+  { name: 'Two-Stage Squeaker', emoji: '🐭', desc: 'squeak... BLAST',
+    two: [{ dur: 0.16, f: 320, flapA: 70, flapB: 60, rasp: 0.4, noise: 0.5, q: 13, vol: 0.3 },
+          { dur: 0.6, f: 110, flapA: 36, flapB: 16, rasp: 0.6, noise: 0.6, q: 10, at: 220 }] },
+  { name: 'Nervous Stepper', emoji: '🚶', desc: 'three polite toots',
+    three: [{ dur: 0.14, f: 150 }, { dur: 0.14, f: 170, at: 220 }, { dur: 0.35, f: 130, at: 440 }] },
+  { name: 'The Judge', emoji: '⚖️', desc: 'long, stern, final',
+    p: { dur: 1.1, f: 100, flapA: 26, flapB: 12, rasp: 0.6, noise: 0.5, sub: 0.4, q: 11 } }
+];
+
+const grid = document.getElementById('grid');
+PRESETS.forEach((pr, i) => {
+  const b = document.createElement('button');
+  b.innerHTML = `<span class="emoji">${pr.emoji}</span><span class="num">#${i + 1}</span> ${pr.name}<span class="desc">${pr.desc}</span>`;
+  b.onclick = () => {
+    if (pr.two) pr.two.forEach(q => setTimeout(() => playFart({ flapA: 40, flapB: 20, ...q }), q.at || 0));
+    else if (pr.three) pr.three.forEach(q => setTimeout(() => playFart({ flapA: 44, flapB: 26, rasp: 0.5, ...q }), q.at || 0));
+    else playFart(pr.p);
+  };
+  grid.appendChild(b);
+});
+</script>
+</body>
+</html>
