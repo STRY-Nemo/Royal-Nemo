@@ -305,7 +305,24 @@
   }
   const sndSwim = () => beep(350, 0.1, 'sine', 0.1, 900);
   const sndRocket = () => beep(160, 0.18, 'sawtooth', 0.1, 60);
-  const sndFart = () => beep(110, 0.3, 'sawtooth', 0.12, 45);
+  const sndFart = () => {
+    // funny little sputtery toot: three quick low wobbles, random pitch
+    const base = 85 + Math.random() * 55;
+    beep(base, 0.12, 'sawtooth', 0.13, base * 0.55);
+    setTimeout(() => beep(base * 1.35, 0.08, 'sawtooth', 0.1, base * 0.6), 70);
+    setTimeout(() => beep(base * 0.8, 0.15, 'sawtooth', 0.11, base * 0.4), 150);
+  };
+  const sndFartSong = (fancy) => {
+    // jaunty tuba-fart melody; longer and fancier as the score climbs
+    const tune = [98, 110, 98, 131, 117, 147, 131, 165, 147, 196, 175, 220];
+    const n = Math.min(4 + fancy * 2, tune.length);
+    for (let i = 0; i < n; i++) {
+      const f = tune[i] * (0.97 + Math.random() * 0.06);
+      setTimeout(() => beep(f, 0.14, 'sawtooth', 0.12, f * 0.7), i * 130);
+    }
+    // big finishing blat on the fancier renditions
+    if (fancy >= 2) setTimeout(() => beep(65, 0.5, 'sawtooth', 0.14, 40), n * 130);
+  };
   const sndSlice = () => beep(900, 0.1, 'sine', 0.09, 180);
   const sndSizzle = () => beep(1500, 0.2, 'sawtooth', 0.04, 200);
   const sndScore = () => { beep(880, 0.08, 'triangle', 0.07); setTimeout(() => beep(1320, 0.12, 'triangle', 0.07), 80); };
@@ -422,7 +439,11 @@
     if (score === LVL3_AT) { startSplash(3); return; }
     const difficultyStep = score % 15 === 0;
     if (difficultyStep) snd1Up();
-    if (score % 5 === 0) launchFireworks(!difficultyStep); // 1-up replaces the jingle
+    if (score % 5 === 0) {
+      launchFireworks(!difficultyStep); // 1-up replaces the jingle
+      // samurai level: layer an ever-fancier fart song on top
+      if (phase() === 3) sndFartSong(Math.min(Math.floor((score - LVL3_AT) / 5), 4));
+    }
   }
 
   // ---------- Fireworks (every 5 points: "ROYL #1") ----------
