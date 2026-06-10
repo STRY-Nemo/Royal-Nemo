@@ -128,16 +128,16 @@
   const CORAL_SPACING = 240;
   const GROUND_H = 90;
   const NEMO_R = 19; // collision radius
-  const LVL2_AT = 40;  // space rocket level
-  const LVL3_AT = 80;  // samurai level
+  const LVL2_AT = 30;  // space rocket level
+  const LVL3_AT = 60;  // samurai level
 
   // dev/test shortcut: ?start=39 begins one point before level 2, etc.
   // (debug runs don't touch the leaderboard or best score)
   let START = 0;
   try { START = Math.min(500, Math.max(0, +new URLSearchParams(location.search).get('start') || 0)); } catch (e) {}
 
-  // ---------- Difficulty (steps up slightly every 20 points) ----------
-  const level = () => Math.min(Math.floor(score / 20), 8);
+  // ---------- Difficulty (steps up slightly every 15 points) ----------
+  const level = () => Math.min(Math.floor(score / 15), 8);
   const coralSpeed = () => CORAL_SPEED * (1 + 0.08 * level());
   const coralGap = () => Math.max(CORAL_GAP - 8 * level(), 130);
 
