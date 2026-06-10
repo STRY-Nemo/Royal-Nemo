@@ -95,7 +95,7 @@
 </div>
 <script>
 (() => {
-  const VERSION = 'v22'; // shown on the title screen so you know which build you're playing
+  const VERSION = 'v23'; // shown on the title screen so you know which build you're playing
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const nameBtn = document.getElementById('nameBtn');
@@ -143,7 +143,8 @@
   // ---------- Splash screen wording (edit freely) ----------
   const SPLASH_2 = {
     title: 'LEVEL 2',
-    subtitle: '🚀 SPACE 🚀',
+    emoji: '🚀',
+    subtitle: 'SPACE',
     lines: [
       'Nemo blasts off on a rocket!',
       'Every tap fires the thrusters',
@@ -153,12 +154,13 @@
   };
   const SPLASH_3 = {
     title: 'LEVEL 3',
-    subtitle: '⚔️ SAMURAI NEMO ⚔️',
+    emoji: '⚔️',
+    subtitle: 'SAMURAI NEMO',
     warning: 'NEW RULES — read carefully!',
     lines: [
       'Nemo is now a samurai.',
-      'Tap = fart to fly up 💨',
-      'and swing the katana. ⚔️',
+      'Tap = fart to fly up',
+      'and swing the katana.',
       'Slice EVERY steel block in two!',
       'If a block touches you, you die.',
       'If a block gets past you, you die!'
@@ -167,10 +169,11 @@
   };
   const SPLASH_4 = {
     title: 'LEVEL 4',
-    subtitle: '🪩 NEON RAVE 🪩',
+    emoji: '🪩',
+    subtitle: 'NEON RAVE',
     lines: [
       'Nemo hits the deep-sea disco!',
-      'Every tap drops a bass note 🎵',
+      'Every tap drops a bass note',
       'The neon gates PULSE to the beat —',
       'squeeze through when they breathe open!'
     ],
@@ -178,14 +181,15 @@
   };
   const SPLASH_5 = {
     title: 'LEVEL 5',
-    subtitle: '👑 THE ROYL KINGDOM 👑',
+    emoji: '👑',
+    subtitle: 'THE ROYL KINGDOM',
     warning: 'THE FINAL LEVEL!',
     lines: [
       'Welcome home, your majesty.',
       'Golden gates guard the throne,',
       'and their gaps DRIFT up and down!',
       'Survive the royal gauntlet to be',
-      'crowned ROYL #1 forever 🏆'
+      'crowned ROYL #1 forever'
     ],
     prompt: 'Tap to claim your destiny'
   };
@@ -2156,9 +2160,9 @@
 
       // unlock banner flashes with the how-to
       if (ssUnlockT > 0 && Math.floor(ssUnlockT * 3) % 3 !== 0) {
-        text('⚡ SUPER SAIYAN UNLOCKED! ⚡', W / 2, H * 0.3, Math.min(26 * s, W * 0.055), '#ffe34d', '#7a4a00');
-        text('Tap the ⚡ button or 2-finger tap', W / 2, H * 0.36, 18 * s);
-        text('to transform!', W / 2, H * 0.41, 18 * s);
+        text('SUPER SAIYAN UNLOCKED!', W / 2, H * 0.3, Math.min(26 * s, W * 0.055), '#ffe34d', '#7a4a00');
+        text('Tap the glowing button below', W / 2, H * 0.36, 18 * s);
+        text('or 2-finger tap to transform!', W / 2, H * 0.41, 18 * s);
       }
 
       // super saiyan inventory button / active countdown
@@ -2195,8 +2199,8 @@
     } else if (state === ST.OUTRO) {
       const pop = Math.max(0.2, Math.min(1, outroT / 0.4));
       text(`LEVEL ${outroFrom} CLEAR!`, W / 2, H * 0.16, 40 * s * pop, '#ffd94a');
-      const caption = { 1: 'Nice swimming! 🐠', 2: 'TO THE STARS! 🚀', 3: 'FLAWLESS BLADE. ⚔️',
-                        4: 'ENCORE!! 🪩', 5: 'ALL HAIL KING NEMO 👑' }[outroFrom];
+      const caption = { 1: 'Nice swimming!', 2: 'TO THE STARS!', 3: 'FLAWLESS BLADE.',
+                        4: 'ENCORE!!', 5: 'ALL HAIL KING NEMO' }[outroFrom];
       if (outroT > 0.8) text(caption, W / 2, H * 0.24, 22 * s, '#fff');
       if (outroFlash > 0) {
         ctx.fillStyle = `rgba(255,255,255,${outroFlash * 0.85})`;
@@ -2210,6 +2214,7 @@
                        4: ['#00ffd0', '#0a0a1e'], 5: ['#ffd94a', '#7a1f1f'] }[splashLevel];
       const u = Math.min(s, W / 430); // shrink text on narrow phones so lines fit
       const rows = [[sp.title, 48, '#ffd94a', undefined]];
+      if (sp.emoji) rows.push([sp.emoji, 30, '#fff', undefined]);
       rows.push([sp.subtitle, 28, subCol[0], subCol[1]]);
       if (sp.warning) rows.push([sp.warning, 20, '#ff8b6b', undefined]);
       for (const ln of sp.lines) rows.push([ln, 19, '#fff', undefined]);
@@ -2228,12 +2233,13 @@
       if (winT > 0.3) {
         ctx.fillStyle = 'rgba(0, 0, 20, 0.45)';
         ctx.fillRect(0, 0, W, H);
-        text('🏆 YOU WIN! 🏆', W / 2, H * 0.16, 40 * s, '#ffd94a');
+        text('🏆', W / 2, H * 0.09, 30 * s);
+        text('YOU WIN!', W / 2, H * 0.16, 40 * s, '#ffd94a');
         text('ROYL #1 CHAMPION', W / 2, H * 0.24, 24 * s, '#aef1b8');
         text(`Score: ${score}`, W / 2, H * 0.32, 30 * s);
         const lb = lbTop().slice(0, 5);
         if (lb.length) {
-          text(remoteLB ? '🌍 Global Leaderboard' : '🏆 Leaderboard', W / 2, H * 0.43, 22 * s, '#ffd94a');
+          text(remoteLB ? 'GLOBAL LEADERBOARD' : 'LEADERBOARD', W / 2, H * 0.43, 20 * s, '#ffd94a');
           lb.forEach((e, i) => {
             const mine = e.name === playerName;
             text(`${i + 1}. ${e.name} — ${e.score}`, W / 2, H * (0.49 + i * 0.045),
@@ -2255,11 +2261,11 @@
         text('Blub... Game Over', W / 2, H * 0.2, 36 * s, '#ff8b6b');
         text(`Score: ${score}`, W / 2, H * 0.29, 30 * s);
         text(`Best: ${best}`, W / 2, H * 0.35, 22 * s, '#ffd94a');
-        if (score >= best && score > 0 && !START) text('New record! 👑', W / 2, H * 0.405, 20 * s, '#aef1b8');
+        if (score >= best && score > 0 && !START) text('New record!', W / 2, H * 0.405, 20 * s, '#aef1b8');
 
         const lb = lbTop().slice(0, 5);
         if (lb.length) {
-          text(remoteLB ? '🌍 Global Leaderboard' : '🏆 Leaderboard', W / 2, H * 0.47, 22 * s, '#ffd94a');
+          text(remoteLB ? 'GLOBAL LEADERBOARD' : 'LEADERBOARD', W / 2, H * 0.47, 20 * s, '#ffd94a');
           lb.forEach((e, i) => {
             const mine = e.name === playerName;
             text(`${i + 1}. ${e.name} — ${e.score}`, W / 2, H * (0.53 + i * 0.045),
