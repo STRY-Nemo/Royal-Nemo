@@ -157,7 +157,7 @@
 </div>
 <script>
 (() => {
-  const VERSION = 'v24'; // shown on the title screen so you know which build you're playing
+  const VERSION = 'v25'; // shown on the title screen so you know which build you're playing
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const nameBtn = document.getElementById('nameBtn');
@@ -286,6 +286,13 @@
 
   // ---------- Player name + leaderboard (saved on this device) ----------
   let playerName = localStorage.getItem('royalNemoName') || '';
+  // permanent unique id for this device: renames only ever touch scores
+  // carrying this id, so one player can never hijack another's entries
+  let PID = localStorage.getItem('royalNemoPid');
+  if (!PID) {
+    PID = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    localStorage.setItem('royalNemoPid', PID);
+  }
   function getLB() {
     try { return JSON.parse(localStorage.getItem('royalNemoLB')) || []; }
     catch (e) { return []; }
@@ -295,7 +302,7 @@
   }
   function addToLB(name, sc) {
     const lb = getLB();
-    lb.push({ name, score: sc });
+    lb.push({ name, score: sc, pid: PID });
     lb.sort((a, b) => b.score - a.score);
     saveLB(lb.slice(0, 100));
   }
@@ -304,7 +311,7 @@
     // renaming carries all of your existing leaderboard scores with you
     const oldName = playerName;
     const lb = getLB();
-    for (const e of lb) if (e.name === oldName) e.name = newName;
+    for (const e of lb) e.name = newName; // the local board is this device's own scores
     saveLB(lb);
     playerName = newName;
     localStorage.setItem('royalNemoName', newName);
@@ -335,17 +342,17 @@
     if (!REMOTE_DB) return;
     fetch(REMOTE_DB + '/scores.json', {
       method: 'POST',
-      body: JSON.stringify({ name, score: sc, ts: Date.now() })
+      body: JSON.stringify({ name, score: sc, ts: Date.now(), pid: PID })
     }).then(refreshRemoteLB).catch(() => {});
   }
   async function renameRemote(oldName, newName) {
-    if (!REMOTE_DB || !oldName || oldName === newName) return;
+    if (!REMOTE_DB || oldName === newName) return;
     try {
       const res = await fetch(REMOTE_DB + '/scores.json');
       const data = await res.json() || {};
       const updates = {};
       for (const [k, e] of Object.entries(data)) {
-        if (e && e.name === oldName) updates[k + '/name'] = newName;
+        if (e && e.pid === PID) updates[k + '/name'] = newName;
       }
       if (Object.keys(updates).length) {
         await fetch(REMOTE_DB + '/scores.json', { method: 'PATCH', body: JSON.stringify(updates) });
@@ -690,7 +697,7 @@
     lbList.innerHTML = lb.length
       ? lb.map((e, i) =>
           `<div class="lbRow"><span class="rank">${i + 1}</span>` +
-          `<span class="nm${e.name === playerName ? ' me' : ''}">${escapeHtml(e.name)}</span>` +
+          `<span class="nm${(e.pid ? e.pid === PID : e.name === playerName) ? ' me' : ''}">${escapeHtml(e.name)}</span>` +
           `<span class="sc">${e.score}</span></div>`).join('')
       : '<div class="lbRow">No scores yet — be the first!</div>';
   }
@@ -2328,7 +2335,7 @@
         if (lb.length) {
           text(remoteLB ? 'GLOBAL TOP 10' : 'TOP 10', W / 2, H * 0.32, 19 * s, '#ffd94a');
           lb.forEach((e, i) => {
-            const mine = e.name === playerName;
+            const mine = e.pid ? e.pid === PID : e.name === playerName;
             text(`${i + 1}. ${e.name} — ${e.score}`, W / 2, H * (0.365 + i * 0.031),
                  14 * s, mine ? '#ffd94a' : '#fff');
           });
@@ -2354,7 +2361,7 @@
         if (lb.length) {
           text(remoteLB ? 'GLOBAL TOP 10' : 'TOP 10', W / 2, H * 0.40, 19 * s, '#ffd94a');
           lb.forEach((e, i) => {
-            const mine = e.name === playerName;
+            const mine = e.pid ? e.pid === PID : e.name === playerName;
             text(`${i + 1}. ${e.name} — ${e.score}`, W / 2, H * (0.445 + i * 0.031),
                  14 * s, mine ? '#ffd94a' : '#fff');
           });

@@ -101,6 +101,9 @@
   <h2>Most active players</h2>
   <table><thead><tr><th>player</th><th>plays</th><th>best score</th><th>last played</th></tr></thead>
   <tbody id="byPlayer"></tbody></table>
+  <h2>Leaderboard entries <span class="muted" style="font-weight:normal">(✏️ rename / 🗑 delete)</span></h2>
+  <table><thead><tr><th>player</th><th>score</th><th></th></tr></thead>
+  <tbody id="scoreRows"></tbody></table>
   <h2>Recent plays</h2>
   <table><thead><tr><th>player</th><th>when</th><th>score</th><th>lvl</th><th class="muted">build</th></tr></thead>
   <tbody id="recent"></tbody></table>
@@ -153,6 +156,37 @@ async function load() {
     .filter(p => p && p.ts && p.name)
     .sort((a, b) => b.ts - a.ts);
   render(plays);
+  loadScores();
+}
+
+async function loadScores() {
+  try {
+    const res = await fetch(DB + '/scores.json'); // scores are public-read
+    const data = await res.json() || {};
+    const rows = Object.entries(data)
+      .filter(([k, e]) => e && e.name)
+      .sort((a, b) => b[1].score - a[1].score);
+    $('scoreRows').innerHTML = rows.map(([k, e]) =>
+      `<tr><td class="name">${esc(e.name)}</td><td>${e.score}</td>` +
+      `<td style="white-space:nowrap"><button class="ghost" onclick="renameScore('${k}', '${esc(e.name)}')">✏️</button> ` +
+      `<button class="ghost" onclick="delScore('${k}')">🗑</button></td></tr>`).join('')
+      || '<tr><td colspan="3" class="muted">no scores yet</td></tr>';
+  } catch (e) { /* leave section empty */ }
+}
+async function renameScore(key, cur) {
+  const nn = prompt('New name for this entry:', cur);
+  if (!nn || !nn.trim()) return;
+  const r = await fetch(DB + '/scores/' + key + '.json?auth=' + encodeURIComponent(getKey()),
+    { method: 'PATCH', body: JSON.stringify({ name: nn.trim().slice(0, 12) }) });
+  if (!r.ok) alert('Rename failed (' + r.status + ') — is your admin key set?');
+  loadScores();
+}
+async function delScore(key) {
+  if (!confirm('Delete this score entry?')) return;
+  const r = await fetch(DB + '/scores/' + key + '.json?auth=' + encodeURIComponent(getKey()),
+    { method: 'DELETE' });
+  if (!r.ok) alert('Delete failed (' + r.status + ') — is your admin key set?');
+  loadScores();
 }
 
 function showErr(msg) {
