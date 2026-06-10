@@ -120,25 +120,36 @@
 
   // ---------- Game constants (scaled to screen height) ----------
   const S = () => H / 700; // scale factor relative to a 700px-tall design
-  const GRAVITY = 1300;      // a touch lighter than air — we're underwater
+  const GRAVITY = 1300;
   const SWIM_VY = -440;
   const CORAL_SPEED = 160;
   const CORAL_GAP = 185;
   const CORAL_W = 70;
   const CORAL_SPACING = 240;
-  const SEABED_H = 90;
+  const GROUND_H = 90;
   const NEMO_R = 19; // collision radius
+  const LVL2_AT = 40;  // space rocket level
+  const LVL3_AT = 80;  // samurai level
 
-  // ---------- Difficulty (steps up slightly every 60 points) ----------
-  const level = () => Math.min(Math.floor(score / 60), 6);
-  const coralSpeed = () => CORAL_SPEED * (1 + 0.1 * level());
-  const coralGap = () => Math.max(CORAL_GAP - 10 * level(), 130);
+  // dev/test shortcut: ?start=39 begins one point before level 2, etc.
+  // (debug runs don't touch the leaderboard or best score)
+  let START = 0;
+  try { START = Math.min(500, Math.max(0, +new URLSearchParams(location.search).get('start') || 0)); } catch (e) {}
+
+  // ---------- Difficulty (steps up slightly every 20 points) ----------
+  const level = () => Math.min(Math.floor(score / 20), 8);
+  const coralSpeed = () => CORAL_SPEED * (1 + 0.08 * level());
+  const coralGap = () => Math.max(CORAL_GAP - 8 * level(), 130);
 
   // ---------- State ----------
-  const ST = { READY: 0, PLAYING: 1, DEAD: 2 };
+  const ST = { READY: 0, PLAYING: 1, DEAD: 2, SPLASH: 3 };
   let state = ST.READY;
-  let nemo, corals, score, best, t, deathT, flashT, drift, sparkles, fireworks, fwTexts;
+  let nemo, corals, steels, debris, score, best, t, deathT, flashT;
+  let drift, sparkles, fireworks, fwTexts, farts, molten;
+  let splashLevel = 2, splashT = 0;
   best = +(localStorage.getItem('royalNemoBest') || 0);
+
+  const phase = () => score < LVL2_AT ? 1 : score < LVL3_AT ? 2 : 3;
 
   // ---------- Player name + leaderboard (saved on this device) ----------
   let playerName = localStorage.getItem('royalNemoName') || '';
@@ -166,25 +177,41 @@
     nameBtn.textContent = '👤 ' + newName;
   }
 
+  // ---------- Ambient particles (bubbles / stars / petals per level) ----------
+  function initAmbient() {
+    drift = [];
+    const ph = phase();
+    if (ph === 1) {
+      for (let i = 0; i < 10; i++) {
+        drift.push({ x: Math.random() * W, y: Math.random() * H, s: (0.4 + Math.random()) * S(), v: 18 + Math.random() * 26 });
+      }
+    } else if (ph === 2) {
+      for (let i = 0; i < 30; i++) {
+        drift.push({ x: Math.random() * W, y: Math.random() * H, s: (0.3 + Math.random()) * S(), v: 8 + Math.random() * 20, tw: Math.random() * 7 });
+      }
+    } else {
+      for (let i = 0; i < 14; i++) {
+        drift.push({ x: Math.random() * W, y: Math.random() * H, s: (0.4 + Math.random()) * S(), v: 22 + Math.random() * 24, sw: Math.random() * 7 });
+      }
+    }
+  }
+
   function reset() {
-    nemo = { x: W * 0.3, y: H * 0.45, vy: 0, rot: 0, fin: 0, tail: 0 };
+    nemo = { x: W * 0.3, y: H * 0.45, vy: 0, rot: 0, fin: 0, tail: 0, flame: 0, slice: 0 };
     corals = [];
-    score = 0;
+    steels = [];
+    debris = [];
+    score = START;
     t = 0;
     deathT = 0;
     flashT = 0;
+    splashT = 0;
     fireworks = [];
     fwTexts = [];
-    drift = []; // ambient bubbles drifting up through the water
-    for (let i = 0; i < 10; i++) {
-      drift.push({
-        x: Math.random() * W,
-        y: Math.random() * H,
-        s: (0.4 + Math.random()) * S(),
-        v: 18 + Math.random() * 26
-      });
-    }
-    sparkles = []; // celebration bubbles on point scored
+    sparkles = [];
+    farts = [];
+    molten = [];
+    initAmbient();
     state = ST.READY;
   }
 
@@ -205,6 +232,10 @@
     } catch (e) { /* audio is optional */ }
   }
   const sndSwim = () => beep(350, 0.1, 'sine', 0.1, 900);
+  const sndRocket = () => beep(160, 0.18, 'sawtooth', 0.1, 60);
+  const sndFart = () => beep(110, 0.3, 'sawtooth', 0.12, 45);
+  const sndSlice = () => beep(900, 0.1, 'sine', 0.09, 180);
+  const sndSizzle = () => beep(1500, 0.2, 'sawtooth', 0.04, 200);
   const sndScore = () => { beep(880, 0.08, 'triangle', 0.07); setTimeout(() => beep(1320, 0.12, 'triangle', 0.07), 80); };
   const sndHit = () => beep(180, 0.3, 'sawtooth', 0.12, 50);
   const sndBlub = () => beep(300, 0.25, 'sine', 0.09, 90);
@@ -214,28 +245,50 @@
     setTimeout(() => beep(784, 0.12, 'triangle', 0.08), 200);
     setTimeout(() => beep(1046, 0.25, 'triangle', 0.09), 300);
   };
+  const sndLevelUp = () => {
+    beep(392, 0.15, 'triangle', 0.09);
+    setTimeout(() => beep(523, 0.15, 'triangle', 0.09), 140);
+    setTimeout(() => beep(659, 0.15, 'triangle', 0.09), 280);
+    setTimeout(() => beep(784, 0.35, 'triangle', 0.1), 420);
+  };
 
   // ---------- Input ----------
-  function swim() {
+  function tapAction() {
     if (nameOverlay.classList.contains('open')) return;
     if (state === ST.READY) {
       state = ST.PLAYING;
       nemo.vy = SWIM_VY * S();
-      sndSwim();
+      doTapFx();
     } else if (state === ST.PLAYING) {
       nemo.vy = SWIM_VY * S();
       nemo.fin = 1;
-      sndSwim();
+      doTapFx();
+    } else if (state === ST.SPLASH) {
+      if (splashT > 0.8) resumeFromSplash(); // must read the screen first
     } else if (state === ST.DEAD && deathT > 0.6) {
       reset();
     }
   }
-  const onUI = e => e.target !== canvas; // taps on the name button/overlay don't swim
-  window.addEventListener('touchstart', e => { if (onUI(e)) return; e.preventDefault(); swim(); }, { passive: false });
-  window.addEventListener('mousedown', e => { if (onUI(e)) return; swim(); });
+  function doTapFx() {
+    const ph = phase();
+    if (ph === 2) {
+      nemo.flame = 1;
+      sndRocket();
+    } else if (ph === 3) {
+      nemo.slice = 0.25;
+      spawnFart();
+      sndFart();
+      sndSlice();
+    } else {
+      sndSwim();
+    }
+  }
+  const onUI = e => e.target !== canvas; // taps on the name button/overlay don't count
+  window.addEventListener('touchstart', e => { if (onUI(e)) return; e.preventDefault(); tapAction(); }, { passive: false });
+  window.addEventListener('mousedown', e => { if (onUI(e)) return; tapAction(); });
   window.addEventListener('keydown', e => {
     if (document.activeElement === nameInput) return;
-    if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); swim(); }
+    if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); tapAction(); }
   });
 
   // ---------- Name button + overlay ----------
@@ -259,34 +312,58 @@
     openNameOverlay(); // first visit: ask for a name
   }
 
-  // ---------- Fireworks (every 20 points: "ROYL #1") ----------
+  // ---------- Level transitions ----------
+  function startSplash(lvl) {
+    state = ST.SPLASH;
+    splashLevel = lvl;
+    splashT = 0;
+    initAmbient(); // switch backdrop particles to the new level's theme
+    sndLevelUp();
+  }
+  function resumeFromSplash() {
+    corals = [];
+    steels = [];
+    debris = [];
+    molten = [];
+    farts = [];
+    nemo.y = H * 0.45;
+    nemo.vy = 0;
+    nemo.rot = 0;
+    state = ST.PLAYING;
+  }
+
+  function onScore() {
+    score++;
+    sndScore();
+    burstSparkles();
+    if (score === LVL2_AT) { startSplash(2); return; }
+    if (score === LVL3_AT) { startSplash(3); return; }
+    if (score % 5 === 0) launchFireworks();
+  }
+
+  // ---------- Fireworks (every 5 points: "ROYL #1") ----------
   function launchFireworks() {
     sndFireworks();
     const s = S();
     const colors = ['#ffd94a', '#ff8c2e', '#ffffff', '#ff5c8a'];
-    for (let burst = 0; burst < 3; burst++) {
-      const bx = nemo.x + (Math.random() - 0.5) * 140 * s;
-      const by = nemo.y - (10 + Math.random() * 90) * s;
-      for (let i = 0; i < 22; i++) {
-        const a = (i / 22) * Math.PI * 2 + Math.random() * 0.3;
-        const sp = (80 + Math.random() * 170) * s;
-        fireworks.push({
-          x: nemo.x, y: nemo.y,
-          tx: bx, ty: by,
-          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-          life: 0.9 + Math.random() * 0.5,
-          color: colors[(i + burst) % colors.length]
-        });
-      }
+    for (let i = 0; i < 26; i++) {
+      const a = (i / 26) * Math.PI * 2 + Math.random() * 0.3;
+      const sp = (90 + Math.random() * 180) * s;
+      fireworks.push({
+        x: nemo.x, y: nemo.y,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 0.9 + Math.random() * 0.5,
+        color: colors[i % colors.length]
+      });
     }
-    fwTexts.push({ x: nemo.x, y: nemo.y - 50 * s, life: 1.8 });
+    fwTexts.push({ x: nemo.x, y: nemo.y - 50 * s, life: 1.6 });
   }
   function updateFireworks(dt) {
     for (const f of fireworks) {
       f.x += f.vx * dt;
       f.y += f.vy * dt;
-      f.vx *= 1 - dt * 1.2; // water drag
-      f.vy = f.vy * (1 - dt * 1.2) - 60 * dt; // sparks drift upward
+      f.vx *= 1 - dt * 1.2;
+      f.vy = f.vy * (1 - dt * 1.2) - 60 * dt;
       f.life -= dt;
     }
     fireworks = fireworks.filter(f => f.life > 0);
@@ -312,14 +389,72 @@
     }
   }
 
-  // ---------- Coral columns ----------
+  // ---------- Coral / tower columns (levels 1 & 2) ----------
   function spawnCoral(x) {
     const s = S();
     const gap = coralGap() * s;
     const margin = 70 * s;
-    const seabedY = H - SEABED_H * s;
-    const gapY = margin + Math.random() * (seabedY - margin * 2 - gap);
+    const groundY = H - GROUND_H * s;
+    const gapY = margin + Math.random() * (groundY - margin * 2 - gap);
     corals.push({ x, gapY, gap, scored: false });
+  }
+
+  // ---------- Steel blocks (level 3) ----------
+  function spawnSteel() {
+    const s = S();
+    const w = (48 + Math.random() * 28) * s;
+    const h = (60 + Math.random() * 42) * s;
+    const groundY = H - GROUND_H * s;
+    const y = 60 * s + Math.random() * (groundY - 130 * s - h);
+    steels.push({ x: W + 80 * s, y, w, h });
+  }
+
+  function spawnFart() {
+    const s = S();
+    for (let i = 0; i < 6; i++) {
+      farts.push({
+        x: nemo.x - 24 * s + (Math.random() - 0.5) * 10 * s,
+        y: nemo.y + 8 * s + (Math.random() - 0.5) * 12 * s,
+        vx: -(40 + Math.random() * 60) * s,
+        vy: (20 + Math.random() * 40) * s,
+        r: (5 + Math.random() * 6) * s,
+        life: 0.5 + Math.random() * 0.3
+      });
+    }
+  }
+
+  function sliceSteel(st, cutY) {
+    const s = S();
+    cutY = Math.max(st.y + 8 * s, Math.min(cutY, st.y + st.h - 8 * s));
+    // two halves, separated exactly at the cut line, edges glowing molten
+    debris.push({
+      x: st.x, y: st.y, w: st.w, h: cutY - st.y,
+      vx: -coralSpeed() * s * 0.4, vy: -90 * s, rot: 0, vr: -1.2 - Math.random(),
+      glow: 1, cutSide: 'bottom'
+    });
+    debris.push({
+      x: st.x, y: cutY, w: st.w, h: st.y + st.h - cutY,
+      vx: -coralSpeed() * s * 0.2, vy: 60 * s, rot: 0, vr: 1 + Math.random(),
+      glow: 1, cutSide: 'top'
+    });
+    // molten sparks fly from the cut point
+    for (let i = 0; i < 12; i++) {
+      molten.push({
+        x: st.x + Math.random() * st.w, y: cutY,
+        vx: (Math.random() - 0.5) * 260 * s,
+        vy: -(40 + Math.random() * 160) * s,
+        life: 0.4 + Math.random() * 0.4
+      });
+    }
+    sndSizzle();
+    onScore();
+  }
+
+  function circleRect(cx, cy, r, rx, ry, rw, rh) {
+    const nx = Math.max(rx, Math.min(cx, rx + rw));
+    const ny = Math.max(ry, Math.min(cy, ry + rh));
+    const dx = cx - nx, dy = cy - ny;
+    return dx * dx + dy * dy < r * r;
   }
 
   // ---------- Update ----------
@@ -327,13 +462,26 @@
     const s = S();
     t += dt;
 
+    // ambient particles
+    const ph = phase();
     for (const b of drift) {
-      b.y -= b.v * dt * (state === ST.DEAD ? 0.3 : 1);
-      b.x += Math.sin(t * 2 + b.y * 0.02) * 12 * dt;
-      if (b.y < -20 * b.s) { b.y = H + 20 * b.s; b.x = Math.random() * W; }
+      if (ph === 1) {
+        b.y -= b.v * dt;
+        b.x += Math.sin(t * 2 + b.y * 0.02) * 12 * dt;
+        if (b.y < -20 * b.s) { b.y = H + 20 * b.s; b.x = Math.random() * W; }
+      } else if (ph === 2) {
+        b.x -= b.v * dt;
+        if (b.x < -10) { b.x = W + 10; b.y = Math.random() * H; }
+      } else {
+        b.y += b.v * dt;
+        b.x += Math.sin(t * 1.5 + (b.sw || 0)) * 18 * dt;
+        if (b.y > H + 20) { b.y = -20; b.x = Math.random() * W; }
+      }
     }
 
     nemo.tail += dt * 7;
+    nemo.flame = Math.max(0, nemo.flame - dt * 3);
+    nemo.slice = Math.max(0, nemo.slice - dt);
 
     if (state === ST.READY) {
       nemo.y = H * 0.45 + Math.sin(t * 3) * 12 * s;
@@ -341,19 +489,28 @@
       return;
     }
 
+    if (state === ST.SPLASH) {
+      splashT += dt;
+      nemo.y = H * 0.45 + Math.sin(t * 3) * 12 * s;
+      updateSparkles(dt);
+      updateFireworks(dt);
+      updateEffects(dt);
+      return;
+    }
+
     if (state === ST.DEAD) {
       deathT += dt;
       flashT = Math.max(0, flashT - dt * 3);
-      // sink to the seabed
-      const seabedY = H - SEABED_H * s;
-      if (nemo.y < seabedY - NEMO_R * s) {
+      const groundY = H - GROUND_H * s;
+      if (nemo.y < groundY - NEMO_R * s) {
         nemo.vy += GRAVITY * s * dt;
         nemo.y += nemo.vy * dt;
         nemo.rot = Math.min(nemo.rot + dt * 6, Math.PI / 2);
-        if (nemo.y > seabedY - NEMO_R * s) nemo.y = seabedY - NEMO_R * s;
+        if (nemo.y > groundY - NEMO_R * s) nemo.y = groundY - NEMO_R * s;
       }
       updateSparkles(dt);
       updateFireworks(dt);
+      updateEffects(dt);
       return;
     }
 
@@ -363,41 +520,94 @@
     nemo.rot = Math.max(-0.45, Math.min(1.2, nemo.vy / (600 * s)));
     nemo.fin = Math.max(0, nemo.fin - dt * 4);
 
-    // coral columns
-    for (const p of corals) p.x -= coralSpeed() * s * dt;
-    if (corals.length === 0 || corals[corals.length - 1].x < W - CORAL_SPACING * s) {
-      spawnCoral(Math.max(W + 40, corals.length ? corals[corals.length - 1].x + CORAL_SPACING * s : W + 40));
-    }
-    while (corals.length && corals[0].x < -CORAL_W * s - 20) corals.shift();
-
     const r = NEMO_R * s;
-    const seabedY = H - SEABED_H * s;
+    const groundY = H - GROUND_H * s;
 
-    // score + collisions
-    for (const p of corals) {
-      const pw = CORAL_W * s;
-      if (!p.scored && p.x + pw < nemo.x) {
-        p.scored = true;
-        score++;
-        sndScore();
-        burstSparkles();
-        if (score % 20 === 0) launchFireworks();
+    if (ph <= 2) {
+      // column levels: dodge through the gaps
+      for (const p of corals) p.x -= coralSpeed() * s * dt;
+      if (corals.length === 0 || corals[corals.length - 1].x < W - CORAL_SPACING * s) {
+        spawnCoral(Math.max(W + 40, corals.length ? corals[corals.length - 1].x + CORAL_SPACING * s : W + 40));
       }
-      // circle vs coral rects
-      if (nemo.x + r > p.x && nemo.x - r < p.x + pw) {
-        if (nemo.y - r < p.gapY || nemo.y + r > p.gapY + p.gap) {
-          die();
-          break;
+      while (corals.length && corals[0].x < -CORAL_W * s - 20) corals.shift();
+
+      for (const p of corals) {
+        const pw = CORAL_W * s;
+        if (!p.scored && p.x + pw < nemo.x) {
+          p.scored = true;
+          onScore();
+          if (state !== ST.PLAYING) break; // a level splash paused the game
+        }
+        if (nemo.x + r > p.x && nemo.x - r < p.x + pw) {
+          if (nemo.y - r < p.gapY || nemo.y + r > p.gapY + p.gap) {
+            die();
+            break;
+          }
+        }
+      }
+    } else {
+      // samurai level: slice the steel before it hits you
+      for (const st of steels) st.x -= coralSpeed() * s * dt;
+      if (steels.length === 0 || steels[steels.length - 1].x < W - 300 * s) spawnSteel();
+      while (steels.length && steels[0].x + steels[0].w < -40) steels.shift();
+
+      // katana hitbox swings in front of the fish while slicing
+      if (nemo.slice > 0) {
+        const hx = nemo.x + 38 * s, hy = nemo.y - 4 * s, hr = 46 * s;
+        for (let i = steels.length - 1; i >= 0; i--) {
+          const st = steels[i];
+          if (circleRect(hx, hy, hr, st.x, st.y, st.w, st.h)) {
+            steels.splice(i, 1);
+            sliceSteel(st, hy);
+          }
+        }
+      }
+
+      // unsliced steel is deadly
+      if (state === ST.PLAYING) {
+        for (const st of steels) {
+          if (circleRect(nemo.x, nemo.y, r, st.x, st.y, st.w, st.h)) { die(); break; }
         }
       }
     }
 
-    // seabed & surface
-    if (nemo.y + r > seabedY) { nemo.y = seabedY - r; die(); }
-    if (nemo.y - r < 0) { nemo.y = r; nemo.vy = 50; }
+    // ground & ceiling
+    if (state === ST.PLAYING) {
+      if (nemo.y + r > groundY) { nemo.y = groundY - r; die(); }
+      if (nemo.y - r < 0) { nemo.y = r; nemo.vy = 50; }
+    }
 
     updateSparkles(dt);
     updateFireworks(dt);
+    updateEffects(dt);
+  }
+
+  function updateEffects(dt) {
+    const s = S();
+    for (const f of farts) {
+      f.x += f.vx * dt;
+      f.y += f.vy * dt;
+      f.r += 14 * s * dt;
+      f.life -= dt;
+    }
+    farts = farts.filter(f => f.life > 0);
+
+    for (const d of debris) {
+      d.x += d.vx * dt;
+      d.y += d.vy * dt;
+      d.vy += GRAVITY * 0.5 * s * dt;
+      d.rot += d.vr * dt;
+      d.glow = Math.max(0, d.glow - dt * 0.9);
+    }
+    debris = debris.filter(d => d.y < H + 200 && d.x > -300);
+
+    for (const m of molten) {
+      m.x += m.vx * dt;
+      m.y += m.vy * dt;
+      m.vy += GRAVITY * 0.6 * s * dt;
+      m.life -= dt;
+    }
+    molten = molten.filter(m => m.life > 0);
   }
 
   function die() {
@@ -407,11 +617,13 @@
     nemo.vy = Math.min(nemo.vy, 0);
     sndHit();
     setTimeout(sndBlub, 250);
-    if (score > best) {
-      best = score;
-      localStorage.setItem('royalNemoBest', best);
+    if (!START) {
+      if (score > best) {
+        best = score;
+        localStorage.setItem('royalNemoBest', best);
+      }
+      if (score > 0) addToLB(playerName, score);
     }
-    if (score > 0) addToLB(playerName, score);
   }
 
   function burstSparkles() {
@@ -429,46 +641,95 @@
     for (const sp of sparkles) {
       sp.x += sp.vx * dt;
       sp.y += sp.vy * dt;
-      sp.vy -= 250 * dt; // bubbles float upward
+      sp.vy -= 250 * dt;
       sp.life -= dt;
     }
     sparkles = sparkles.filter(sp => sp.life > 0);
   }
 
-  // ---------- Drawing ----------
+  // ---------- Drawing: backgrounds ----------
   function drawBackground() {
     const s = S();
-    const water = ctx.createLinearGradient(0, 0, 0, H);
-    water.addColorStop(0, '#39a9d8');
-    water.addColorStop(0.6, '#1a6ea8');
-    water.addColorStop(1, '#0d4a7a');
-    ctx.fillStyle = water;
+    const ph = phase();
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    if (ph === 1) {
+      g.addColorStop(0, '#39a9d8');
+      g.addColorStop(0.6, '#1a6ea8');
+      g.addColorStop(1, '#0d4a7a');
+    } else if (ph === 2) {
+      g.addColorStop(0, '#04040f');
+      g.addColorStop(0.6, '#0b0b28');
+      g.addColorStop(1, '#181339');
+    } else {
+      g.addColorStop(0, '#f5b16b');
+      g.addColorStop(0.55, '#e0455c');
+      g.addColorStop(1, '#5d2a4a');
+    }
+    ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
 
-    // shafts of sunlight filtering down
-    ctx.fillStyle = 'rgba(255, 250, 200, 0.08)';
-    for (let i = 0; i < 3; i++) {
-      const bx = W * (0.18 + i * 0.3) + Math.sin(t * 0.4 + i * 2) * 30 * s;
+    if (ph === 1) {
+      // shafts of sunlight filtering down
+      ctx.fillStyle = 'rgba(255, 250, 200, 0.08)';
+      for (let i = 0; i < 3; i++) {
+        const bx = W * (0.18 + i * 0.3) + Math.sin(t * 0.4 + i * 2) * 30 * s;
+        ctx.beginPath();
+        ctx.moveTo(bx - 18 * s, 0);
+        ctx.lineTo(bx + 18 * s, 0);
+        ctx.lineTo(bx + 90 * s, H);
+        ctx.lineTo(bx - 90 * s, H);
+        ctx.closePath();
+        ctx.fill();
+      }
+      for (const b of drift) drawBubble(b.x, b.y, b.s);
+    } else if (ph === 2) {
+      // stars
+      for (const b of drift) {
+        ctx.globalAlpha = 0.45 + 0.55 * (Math.sin(t * 3 + (b.tw || 0)) + 1) / 2;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 1.6 * b.s, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      // ringed planet
+      const px = W * 0.8, py = H * 0.16;
+      ctx.fillStyle = '#b06ad6';
+      ctx.beginPath(); ctx.arc(px, py, 30 * s, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#8a4cb0';
+      ctx.beginPath(); ctx.arc(px - 8 * s, py - 6 * s, 8 * s, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#ffd94a';
+      ctx.lineWidth = 3 * s;
+      ctx.beginPath(); ctx.ellipse(px, py, 48 * s, 12 * s, -0.3, 0, Math.PI * 2); ctx.stroke();
+    } else {
+      // big red sun
+      ctx.fillStyle = 'rgba(255, 70, 70, 0.85)';
       ctx.beginPath();
-      ctx.moveTo(bx - 18 * s, 0);
-      ctx.lineTo(bx + 18 * s, 0);
-      ctx.lineTo(bx + 90 * s, H);
-      ctx.lineTo(bx - 90 * s, H);
-      ctx.closePath();
+      ctx.arc(W * 0.78, H * 0.2, 52 * s, 0, Math.PI * 2);
       ctx.fill();
+      // drifting cherry-blossom petals
+      for (const b of drift) {
+        ctx.save();
+        ctx.translate(b.x, b.y);
+        ctx.rotate(t * 2 + (b.sw || 0));
+        ctx.fillStyle = 'rgba(255, 183, 211, 0.85)';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 5 * b.s, 3 * b.s, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
     }
 
-    // ambient bubbles
-    for (const b of drift) drawBubble(b.x, b.y, b.s);
-
-    // distant reef silhouette
-    ctx.fillStyle = 'rgba(10, 50, 90, 0.55)';
+    // distant ridge silhouette (reef / moon hills / mountains)
+    ctx.fillStyle = ph === 1 ? 'rgba(10, 50, 90, 0.55)'
+                  : ph === 2 ? 'rgba(40, 40, 70, 0.8)'
+                  : 'rgba(50, 20, 55, 0.75)';
     ctx.beginPath();
-    ctx.moveTo(0, H - SEABED_H * s);
+    ctx.moveTo(0, H - GROUND_H * s);
     for (let x = 0; x <= W; x += 8) {
-      ctx.lineTo(x, H - SEABED_H * s - 30 * s - Math.sin(x * 0.01 + 2) * 22 * s);
+      ctx.lineTo(x, H - GROUND_H * s - 30 * s - Math.sin(x * 0.01 + 2) * 22 * s);
     }
-    ctx.lineTo(W, H - SEABED_H * s);
+    ctx.lineTo(W, H - GROUND_H * s);
     ctx.closePath();
     ctx.fill();
   }
@@ -481,82 +742,142 @@
     ctx.arc(x, y, 9 * sc, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-    // highlight
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.beginPath();
     ctx.arc(x - 3 * sc, y - 3 * sc, 2.2 * sc, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  function drawSeabed() {
+  function drawGround() {
     const s = S();
-    const gy = H - SEABED_H * s;
-    ctx.fillStyle = '#e8d59a';
-    ctx.fillRect(0, gy, W, SEABED_H * s);
-    ctx.fillStyle = '#d9c280';
+    const gy = H - GROUND_H * s;
+    const ph = phase();
+    const base = ph === 1 ? '#e8d59a' : ph === 2 ? '#8d8d99' : '#8a5a33';
+    const edge = ph === 1 ? '#d9c280' : ph === 2 ? '#a3a3af' : '#a06a3e';
+    ctx.fillStyle = base;
+    ctx.fillRect(0, gy, W, GROUND_H * s);
+    ctx.fillStyle = edge;
     ctx.fillRect(0, gy, W, 12 * s);
-    // scrolling sand ripples
-    const off = (state !== ST.DEAD ? (t * CORAL_SPEED * s) % (40 * s) : 0);
-    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    // scrolling texture stripes
+    const off = (state === ST.PLAYING ? (t * CORAL_SPEED * s) % (40 * s) : 0);
+    ctx.fillStyle = ph === 2 ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.18)';
     for (let x = -off; x < W; x += 40 * s) {
       ctx.beginPath();
       ctx.moveTo(x, gy + 12 * s);
       ctx.lineTo(x + 20 * s, gy + 12 * s);
-      ctx.lineTo(x + 8 * s, gy + SEABED_H * s);
-      ctx.lineTo(x - 12 * s, gy + SEABED_H * s);
+      ctx.lineTo(x + 8 * s, gy + GROUND_H * s);
+      ctx.lineTo(x - 12 * s, gy + GROUND_H * s);
       ctx.closePath();
       ctx.fill();
     }
-    // a few seaweed tufts swaying
-    ctx.strokeStyle = '#2e8b57';
-    ctx.lineCap = 'round';
-    for (let i = 0; i < 5; i++) {
-      const sx = ((i * 0.23 + 0.08) * W + (state !== ST.DEAD ? -(t * CORAL_SPEED * s * 0.25) : 0)) % (W + 40 * s);
-      const wx = sx < 0 ? sx + W + 40 * s : sx;
-      const sway = Math.sin(t * 2 + i * 1.7) * 6 * s;
-      ctx.lineWidth = 4 * s;
-      ctx.beginPath();
-      ctx.moveTo(wx, gy + 10 * s);
-      ctx.quadraticCurveTo(wx + sway, gy - 14 * s, wx + sway * 1.6, gy - 26 * s);
-      ctx.stroke();
+    if (ph === 1) {
+      // seaweed tufts swaying
+      ctx.strokeStyle = '#2e8b57';
+      ctx.lineCap = 'round';
+      for (let i = 0; i < 5; i++) {
+        const sx = ((i * 0.23 + 0.08) * W + (state === ST.PLAYING ? -(t * CORAL_SPEED * s * 0.25) : 0)) % (W + 40 * s);
+        const wx = sx < 0 ? sx + W + 40 * s : sx;
+        const sway = Math.sin(t * 2 + i * 1.7) * 6 * s;
+        ctx.lineWidth = 4 * s;
+        ctx.beginPath();
+        ctx.moveTo(wx, gy + 10 * s);
+        ctx.quadraticCurveTo(wx + sway, gy - 14 * s, wx + sway * 1.6, gy - 26 * s);
+        ctx.stroke();
+      }
     }
   }
 
+  // ---------- Drawing: obstacles ----------
   function drawCoral(p) {
     const s = S();
     const pw = CORAL_W * s;
-    const gy = H - SEABED_H * s;
+    const gy = H - GROUND_H * s;
     const lip = 14 * s;
+    const space = phase() === 2;
 
-    // styled as pink coral towers
     const body = ctx.createLinearGradient(p.x, 0, p.x + pw, 0);
-    body.addColorStop(0, '#d8527c');
-    body.addColorStop(0.5, '#ff7fa5');
-    body.addColorStop(1, '#c2406a');
+    if (space) {
+      body.addColorStop(0, '#6a7686');
+      body.addColorStop(0.5, '#b9c4d2');
+      body.addColorStop(1, '#5d6878');
+    } else {
+      body.addColorStop(0, '#d8527c');
+      body.addColorStop(0.5, '#ff7fa5');
+      body.addColorStop(1, '#c2406a');
+    }
 
-    // top tower
     ctx.fillStyle = body;
     ctx.fillRect(p.x, 0, pw, p.gapY - lip);
     roundRect(p.x - 5 * s, p.gapY - lip, pw + 10 * s, lip, 5 * s);
-    // bottom tower
     ctx.fillRect(p.x, p.gapY + p.gap + lip, pw, gy - (p.gapY + p.gap + lip));
     roundRect(p.x - 5 * s, p.gapY + p.gap, pw + 10 * s, lip, 5 * s);
 
-    // coral ridge lines
-    ctx.strokeStyle = 'rgba(110, 20, 50, 0.25)';
+    // ridges (coral) or seams + rivets (metal)
+    ctx.strokeStyle = space ? 'rgba(20, 25, 40, 0.3)' : 'rgba(110, 20, 50, 0.25)';
     ctx.lineWidth = 2 * s;
-    for (let y = 10 * s; y < p.gapY - lip; y += 14 * s) {
+    const ridge = y => {
       ctx.beginPath();
       ctx.moveTo(p.x + 3 * s, y);
-      ctx.quadraticCurveTo(p.x + pw / 2, y + 6 * s, p.x + pw - 3 * s, y);
+      if (space) ctx.lineTo(p.x + pw - 3 * s, y);
+      else ctx.quadraticCurveTo(p.x + pw / 2, y + 6 * s, p.x + pw - 3 * s, y);
       ctx.stroke();
+      if (space) {
+        ctx.fillStyle = 'rgba(20, 25, 40, 0.4)';
+        ctx.beginPath(); ctx.arc(p.x + 8 * s, y, 2 * s, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(p.x + pw - 8 * s, y, 2 * s, 0, Math.PI * 2); ctx.fill();
+      }
+    };
+    for (let y = 10 * s; y < p.gapY - lip; y += 16 * s) ridge(y);
+    for (let y = p.gapY + p.gap + lip + 10 * s; y < gy; y += 16 * s) ridge(y);
+  }
+
+  function drawSteelBlock(x, y, w, h, glow, cutSide) {
+    const s = S();
+    const g = ctx.createLinearGradient(x, y, x + w, y + h);
+    g.addColorStop(0, '#aeb9c6');
+    g.addColorStop(0.45, '#7e8a99');
+    g.addColorStop(0.55, '#cfd8e2');
+    g.addColorStop(1, '#5d6878');
+    ctx.fillStyle = g;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = 'rgba(25, 32, 45, 0.6)';
+    ctx.lineWidth = 2 * s;
+    ctx.strokeRect(x, y, w, h);
+    // rivets
+    ctx.fillStyle = 'rgba(25, 32, 45, 0.5)';
+    for (const [rx, ry] of [[6, 6], [w - 6, 6], [6, h - 6], [w - 6, h - 6]]) {
+      ctx.beginPath(); ctx.arc(x + rx * s / S(), y + ry * s / S(), 2.2 * s, 0, Math.PI * 2); ctx.fill();
     }
-    for (let y = p.gapY + p.gap + lip + 10 * s; y < gy; y += 14 * s) {
+    // molten edge where the katana cut it
+    if (glow > 0 && cutSide) {
+      const ey = cutSide === 'top' ? y : y + h;
+      ctx.strokeStyle = `rgba(255, 120, 30, ${glow})`;
+      ctx.lineWidth = 4 * s;
+      ctx.beginPath(); ctx.moveTo(x, ey); ctx.lineTo(x + w, ey); ctx.stroke();
+      ctx.strokeStyle = `rgba(255, 230, 120, ${glow * 0.9})`;
+      ctx.lineWidth = 1.8 * s;
+      ctx.beginPath(); ctx.moveTo(x, ey); ctx.lineTo(x + w, ey); ctx.stroke();
+    }
+  }
+
+  function drawSteels() {
+    for (const st of steels) drawSteelBlock(st.x, st.y, st.w, st.h, 0, null);
+    for (const d of debris) {
+      ctx.save();
+      ctx.translate(d.x + d.w / 2, d.y + d.h / 2);
+      ctx.rotate(d.rot);
+      drawSteelBlock(-d.w / 2, -d.h / 2, d.w, d.h, d.glow, d.cutSide);
+      ctx.restore();
+    }
+    // molten sparks
+    for (const m of molten) {
+      ctx.globalAlpha = Math.min(1, m.life * 2.5);
+      ctx.fillStyle = Math.random() < 0.5 ? '#ff8c2e' : '#ffe26b';
       ctx.beginPath();
-      ctx.moveTo(p.x + 3 * s, y);
-      ctx.quadraticCurveTo(p.x + pw / 2, y + 6 * s, p.x + pw - 3 * s, y);
-      ctx.stroke();
+      ctx.arc(m.x, m.y, 2.5 * S(), 0, Math.PI * 2);
+      ctx.fill();
     }
+    ctx.globalAlpha = 1;
   }
 
   function roundRect(x, y, w, h, r) {
@@ -570,15 +891,85 @@
     ctx.fill();
   }
 
+  // ---------- Drawing: the fish (and his vehicles/weapons) ----------
   function drawNemo() {
     const k = nemo;
     const s = S();
+    const ph = phase();
+
+    // fart clouds render behind everything else
+    for (const f of farts) {
+      ctx.globalAlpha = Math.min(1, f.life * 2) * 0.6;
+      ctx.fillStyle = '#b9d96a';
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
     ctx.save();
     ctx.translate(k.x, k.y);
     ctx.rotate(k.rot);
     ctx.scale(s, s);
 
-    // Royal Nemo: orange clownfish, white bands, golden crown
+    if (ph === 2) drawRocket(k);
+    const rideOffset = ph === 2 ? -10 : 0;
+    ctx.translate(0, rideOffset);
+
+    drawFishBody(k);
+    if (ph === 3) drawHeadband(); else drawCrown();
+    drawShades();
+    if (ph === 3) drawKatana(k);
+
+    ctx.restore();
+  }
+
+  function drawRocket(k) {
+    // flames blast out the back on every tap
+    if (k.flame > 0) {
+      const len = (16 + k.flame * 26) * (0.85 + Math.random() * 0.3);
+      ctx.fillStyle = '#ff8c2e';
+      ctx.beginPath();
+      ctx.moveTo(-26, 12);
+      ctx.lineTo(-26 - len, 19 + Math.random() * 4 - 2);
+      ctx.lineTo(-26, 26);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#ffe26b';
+      ctx.beginPath();
+      ctx.moveTo(-26, 15);
+      ctx.lineTo(-26 - len * 0.55, 19 + Math.random() * 3 - 1.5);
+      ctx.lineTo(-26, 23);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // body
+    ctx.fillStyle = '#e8e8ee';
+    ctx.strokeStyle = '#9aa0ad';
+    ctx.lineWidth = 1.5;
+    roundRect(-26, 10, 46, 16, 7);
+    ctx.stroke();
+    // nose cone
+    ctx.fillStyle = '#e0455c';
+    ctx.beginPath();
+    ctx.moveTo(20, 10); ctx.lineTo(34, 18); ctx.lineTo(20, 26);
+    ctx.closePath(); ctx.fill();
+    // tail fins
+    ctx.beginPath();
+    ctx.moveTo(-26, 12); ctx.lineTo(-34, 4); ctx.lineTo(-22, 10);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-26, 24); ctx.lineTo(-34, 32); ctx.lineTo(-22, 26);
+    ctx.closePath(); ctx.fill();
+    // porthole
+    ctx.fillStyle = '#39a9d8';
+    ctx.strokeStyle = '#9aa0ad';
+    ctx.beginPath();
+    ctx.arc(-2, 18, 4.5, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+  }
+
+  function drawFishBody(k) {
     const orange = '#ff8c2e';
     const orangeDark = '#d96a10';
     const band = '#fdf7ec';
@@ -624,17 +1015,14 @@
     ctx.fillStyle = band;
     ctx.strokeStyle = '#3a2a16';
     ctx.lineWidth = 1.2;
-    // head band
     ctx.beginPath();
     ctx.moveTo(8, -13); ctx.quadraticCurveTo(4, 0, 8, 13);
     ctx.lineTo(13, 13); ctx.quadraticCurveTo(9, 0, 13, -13);
     ctx.closePath(); ctx.fill(); ctx.stroke();
-    // middle band
     ctx.beginPath();
     ctx.moveTo(-3, -13); ctx.quadraticCurveTo(-7, 0, -3, 13);
     ctx.lineTo(3, 13); ctx.quadraticCurveTo(-1, 0, 3, -13);
     ctx.closePath(); ctx.fill(); ctx.stroke();
-    // tail band
     ctx.beginPath();
     ctx.moveTo(-13, -13); ctx.quadraticCurveTo(-16, 0, -13, 13);
     ctx.lineTo(-10, 13); ctx.quadraticCurveTo(-13, 0, -10, -13);
@@ -651,6 +1039,15 @@
     ctx.closePath();
     ctx.fill();
 
+    // mouth
+    ctx.strokeStyle = '#3a2a16';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(17, 3, 2.5, 0.2, Math.PI - 0.4);
+    ctx.stroke();
+  }
+
+  function drawCrown() {
     // black & gold royal crown
     ctx.fillStyle = '#1c1c1e';
     ctx.strokeStyle = '#d4a532';
@@ -666,34 +1063,57 @@
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
-    // gold band at the base
     ctx.fillStyle = '#d4a532';
     ctx.fillRect(5, -14, 15, 1.8);
-    // gold tips on the points
     ctx.beginPath(); ctx.arc(6, -21, 1.2, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(12.5, -23, 1.4, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(19, -21, 1.2, 0, Math.PI * 2); ctx.fill();
-    // jewel
     ctx.fillStyle = '#e0455c';
     ctx.beginPath();
     ctx.arc(12.5, -17, 1.6, 0, Math.PI * 2);
     ctx.fill();
+  }
 
-    // eyes: cool black sunglasses (knocked off when dead)
+  function drawHeadband() {
+    // red samurai headband, knot trailing behind
+    ctx.fillStyle = '#c1272d';
+    ctx.fillRect(4, -13.5, 17, 4);
+    ctx.strokeStyle = '#8a1418';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(4, -13.5, 17, 4);
+    // rising sun dot
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(12.5, -11.5, 2.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#c1272d';
+    ctx.beginPath(); ctx.arc(12.5, -11.5, 1.1, 0, Math.PI * 2); ctx.fill();
+    // tails flapping
+    ctx.strokeStyle = '#c1272d';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    const fl = Math.sin(nemo.tail * 1.5) * 3;
+    ctx.beginPath();
+    ctx.moveTo(4, -11);
+    ctx.quadraticCurveTo(-4, -13 + fl, -9, -10 + fl);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(4, -11);
+    ctx.quadraticCurveTo(-3, -9 + fl, -8, -5 + fl);
+    ctx.stroke();
+  }
+
+  function drawShades() {
     const dead = state === ST.DEAD;
     if (dead) {
       ctx.strokeStyle = '#3a2a16';
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(9, -6); ctx.lineTo(14, -1); ctx.moveTo(14, -6); ctx.lineTo(9, -1); ctx.stroke();
     } else {
-      // arm hooking back over the head
       ctx.strokeStyle = '#141414';
       ctx.lineWidth = 1.8;
       ctx.beginPath();
       ctx.moveTo(8.5, -5);
       ctx.quadraticCurveTo(3, -7, -1, -5);
       ctx.stroke();
-      // lens
       ctx.fillStyle = '#141414';
       ctx.beginPath();
       ctx.ellipse(12.5, -4, 5, 4, 0, 0, Math.PI * 2);
@@ -701,7 +1121,6 @@
       ctx.strokeStyle = '#d4a532';
       ctx.lineWidth = 1;
       ctx.stroke();
-      // glint on the lens
       ctx.strokeStyle = 'rgba(255,255,255,0.6)';
       ctx.lineWidth = 1.2;
       ctx.beginPath();
@@ -709,15 +1128,39 @@
       ctx.lineTo(13.5, -2);
       ctx.stroke();
     }
+  }
 
-    // mouth
-    ctx.strokeStyle = '#3a2a16';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.arc(17, 3, 2.5, 0.2, Math.PI - 0.4);
-    ctx.stroke();
-
+  function drawKatana(k) {
+    // blade sweeps from raised to follow-through during a slice
+    const prog = k.slice > 0 ? 1 - k.slice / 0.25 : 0;
+    const angle = k.slice > 0 ? (-1.7 + prog * 2.4) : -0.9;
+    ctx.save();
+    ctx.translate(8, -1);
+    ctx.rotate(angle);
+    // handle
+    ctx.strokeStyle = '#5a2330';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 9); ctx.stroke();
+    // guard
+    ctx.fillStyle = '#d4a532';
+    ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill();
+    // blade
+    ctx.strokeStyle = '#dfe7ef';
+    ctx.lineWidth = 3.4;
+    ctx.beginPath(); ctx.moveTo(0, -2); ctx.lineTo(0, -36); ctx.stroke();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(1, -2); ctx.lineTo(1, -35); ctx.stroke();
     ctx.restore();
+    // slash trail
+    if (k.slice > 0) {
+      ctx.strokeStyle = `rgba(255,255,255,${k.slice / 0.25 * 0.8})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(8, -1, 38, -2.6 + prog * 2.4, -1.5 + prog * 2.4);
+      ctx.stroke();
+    }
   }
 
   function drawSparkles() {
@@ -746,14 +1189,40 @@
 
     if (state === ST.PLAYING) {
       text(score, W / 2, safeTop + 30 * s, 52 * s);
+      text(`LVL ${phase()}`, W / 2, safeTop + 62 * s, 16 * s, '#cdeef5');
     } else if (state === ST.READY) {
       text("Nemo's Tappy", W / 2, H * 0.19, 40 * s, '#ffd94a');
       text('Adventure', W / 2, H * 0.26, 40 * s, '#ffd94a');
       text('🐠', W / 2, H * 0.32, 26 * s);
       text('Tap to swim!', W / 2, H * 0.62, 26 * s);
       if (best > 0) text(`Best: ${best}`, W / 2, H * 0.68, 20 * s, '#cdeef5');
+    } else if (state === ST.SPLASH) {
+      ctx.fillStyle = 'rgba(0, 0, 20, 0.78)';
+      ctx.fillRect(0, 0, W, H);
+      if (splashLevel === 2) {
+        text('LEVEL 2', W / 2, H * 0.2, 48 * s, '#ffd94a');
+        text('🚀 SPACE 🚀', W / 2, H * 0.29, 32 * s, '#b06ad6', '#1c1c1e');
+        text('Nemo blasts off on a rocket!', W / 2, H * 0.42, 20 * s);
+        text('Every tap fires the thrusters', W / 2, H * 0.48, 20 * s);
+        text('and shoots out flames.', W / 2, H * 0.54, 20 * s);
+        if (splashT > 0.8 && Math.floor(splashT * 2) % 2 === 0) {
+          text('Tap to blast off!', W / 2, H * 0.7, 24 * s, '#ffd94a');
+        }
+      } else {
+        text('LEVEL 3', W / 2, H * 0.13, 48 * s, '#ffd94a');
+        text('⚔️ SAMURAI NEMO ⚔️', W / 2, H * 0.21, 28 * s, '#c1272d', '#fff');
+        text('NEW RULES — read carefully!', W / 2, H * 0.3, 20 * s, '#ff8b6b');
+        text('Nemo is now a samurai.', W / 2, H * 0.38, 19 * s);
+        text('Tap = fart to fly up 💨', W / 2, H * 0.44, 19 * s);
+        text('and swing the katana. ⚔️', W / 2, H * 0.5, 19 * s);
+        text('SLICE the steel blocks in two', W / 2, H * 0.56, 19 * s);
+        text('before they hit you —', W / 2, H * 0.62, 19 * s);
+        text('touching un-sliced steel = death!', W / 2, H * 0.68, 19 * s);
+        if (splashT > 0.8 && Math.floor(splashT * 2) % 2 === 0) {
+          text('Tap to accept your destiny', W / 2, H * 0.8, 22 * s, '#ffd94a');
+        }
+      }
     } else if (state === ST.DEAD) {
-      // flash on hit
       if (flashT > 0) {
         ctx.fillStyle = `rgba(255,255,255,${flashT * 0.6})`;
         ctx.fillRect(0, 0, W, H);
@@ -764,9 +1233,8 @@
         text('Blub... Game Over', W / 2, H * 0.2, 36 * s, '#ff8b6b');
         text(`Score: ${score}`, W / 2, H * 0.29, 30 * s);
         text(`Best: ${best}`, W / 2, H * 0.35, 22 * s, '#ffd94a');
-        if (score >= best && score > 0) text('New record! 👑', W / 2, H * 0.405, 20 * s, '#aef1b8');
+        if (score >= best && score > 0 && !START) text('New record! 👑', W / 2, H * 0.405, 20 * s, '#aef1b8');
 
-        // leaderboard (top 5 on this device)
         const lb = getLB().slice(0, 5);
         if (lb.length) {
           text('🏆 Leaderboard', W / 2, H * 0.47, 22 * s, '#ffd94a');
@@ -778,7 +1246,7 @@
         }
 
         if (deathT > 0.6 && Math.floor(deathT * 2) % 2 === 0) {
-          text('Tap to swim again', W / 2, H * 0.79, 22 * s);
+          text('Tap to try again', W / 2, H * 0.79, 22 * s);
         }
       }
     }
@@ -793,14 +1261,15 @@
     update(dt);
 
     drawBackground();
-    for (const p of corals) drawCoral(p);
-    drawSeabed();
+    if (phase() <= 2) for (const p of corals) drawCoral(p);
+    else drawSteels();
+    drawGround();
     drawSparkles();
     drawNemo();
     drawFireworks();
     drawUI();
 
-    nameBtn.style.display = state === ST.PLAYING ? 'none' : 'block';
+    nameBtn.style.display = (state === ST.PLAYING || state === ST.SPLASH) ? 'none' : 'block';
 
     requestAnimationFrame(frame);
   }
