@@ -95,7 +95,7 @@
 </div>
 <script>
 (() => {
-  const VERSION = 'v20'; // shown on the title screen so you know which build you're playing
+  const VERSION = 'v21'; // shown on the title screen so you know which build you're playing
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const nameBtn = document.getElementById('nameBtn');
@@ -358,47 +358,54 @@
   }
   const sndSwim = () => beep(350, 0.1, 'sine', 0.1, 900);
   const sndRocket = () => beep(160, 0.18, 'sawtooth', 0.1, 60);
-  function fart(dur = 0.3, freq = 160, vol = 0.3) {
-    // real fart synthesis: sputtery noise bursts (lip flaps) squeezed
-    // through a resonant low-pass filter
+  function fart(dur = 0.45, freq = 140, vol = 0.35) {
+    // whoopee-cushion synthesis: a periodic rubbery lip-flap that slows
+    // as it deflates, with a raspberry buzz underneath, squeezed through
+    // a resonant low-pass filter
     try {
       if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
       if (actx.state === 'suspended') actx.resume();
-      const n = Math.floor(actx.sampleRate * dur);
-      const buf = actx.createBuffer(1, n, actx.sampleRate);
+      const sr = actx.sampleRate;
+      const n = Math.floor(sr * dur);
+      const buf = actx.createBuffer(1, n, sr);
       const d = buf.getChannelData(0);
-      let flap = 0, open = true;
+      let phase = 0;
+      const wob = Math.random() * 6; // every cushion is a little different
       for (let i = 0; i < n; i++) {
-        if (--flap <= 0) {
-          open = Math.random() < 0.72;
-          flap = (0.005 + Math.random() * 0.014) * actx.sampleRate; // 5-19ms flaps
-        }
-        d[i] = (Math.random() * 2 - 1) * (open ? 1 : 0.12);
+        const tt = i / sr;
+        const prog = i / n;
+        // the flap rate starts fast and droops as the cushion empties
+        const flapHz = 46 - prog * 24 + Math.sin(tt * 9 + wob) * 6;
+        phase += (flapHz * 2 * Math.PI) / sr;
+        const flap = Math.sin(phase) > -0.35 ? 1 : 0.07; // asymmetric rubber flap
+        const rasp = Math.sin(phase * 2 + Math.sin(tt * 47) * 1.6) * 0.45; // raspberry buzz
+        d[i] = ((Math.random() * 2 - 1) * 0.65 + rasp) * flap;
       }
       const src = actx.createBufferSource();
       src.buffer = buf;
       const lp = actx.createBiquadFilter();
       lp.type = 'lowpass';
-      lp.Q.value = 9; // resonance gives it the honk
-      lp.frequency.setValueAtTime(freq * 2.4, actx.currentTime);
-      lp.frequency.exponentialRampToValueAtTime(freq * 0.7, actx.currentTime + dur);
+      lp.Q.value = 10; // resonance gives it the honk
+      lp.frequency.setValueAtTime(freq * 2.6, actx.currentTime);
+      lp.frequency.exponentialRampToValueAtTime(freq * 0.55, actx.currentTime + dur);
       const g = actx.createGain();
       g.gain.setValueAtTime(vol, actx.currentTime);
+      g.gain.setValueAtTime(vol, actx.currentTime + dur * 0.6);
       g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + dur);
       src.connect(lp); lp.connect(g); g.connect(actx.destination);
       src.start();
     } catch (e) { /* audio is optional */ }
   }
-  const sndFart = () => fart(0.22 + Math.random() * 0.18, 110 + Math.random() * 110, 0.32);
+  const sndFart = () => fart(0.32 + Math.random() * 0.25, 105 + Math.random() * 85, 0.36);
   const sndFartSong = (fancy) => {
-    // a melody of farts; longer and fancier as the score climbs
+    // a melody of whoopee cushions; longer and fancier as the score climbs
     const tune = [120, 150, 120, 180, 160, 200, 180, 230, 200, 260, 230, 290];
     const n = Math.min(4 + fancy * 2, tune.length);
     for (let i = 0; i < n; i++) {
-      setTimeout(() => fart(0.16, tune[i], 0.24), i * 190);
+      setTimeout(() => fart(0.2, tune[i], 0.26), i * 210);
     }
-    // long ripping finale on the fancier renditions
-    if (fancy >= 2) setTimeout(() => fart(0.9, 85, 0.34), n * 190);
+    // long deflating finale on the fancier renditions
+    if (fancy >= 2) setTimeout(() => fart(1.2, 80, 0.38), n * 210);
   };
   const sndSlice = () => beep(900, 0.1, 'sine', 0.09, 180);
   const sndSizzle = () => beep(1500, 0.2, 'sawtooth', 0.04, 200);
