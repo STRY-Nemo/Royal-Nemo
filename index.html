@@ -6,9 +6,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Royal Nemo">
+<meta name="apple-mobile-web-app-title" content="Nemo's Tappy">
 <meta name="theme-color" content="#1a6ea8">
-<title>Royal Nemo's Reef Adventure 🐠</title>
+<title>Nemo's Tappy Adventure 🐠</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
@@ -26,14 +26,81 @@
     height: 100vh;
     height: 100dvh;
   }
+  #nameBtn {
+    position: fixed;
+    top: max(10px, env(safe-area-inset-top));
+    left: 10px;
+    z-index: 5;
+    font: bold 14px -apple-system, "Segoe UI", Arial, sans-serif;
+    color: #fff;
+    background: rgba(13, 50, 90, 0.7);
+    border: 2px solid #ffd94a;
+    border-radius: 18px;
+    padding: 7px 14px;
+    cursor: pointer;
+  }
+  #nameOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 20, 40, 0.7);
+  }
+  #nameOverlay.open { display: flex; }
+  #nameCard {
+    background: #0d4a7a;
+    border: 3px solid #ffd94a;
+    border-radius: 16px;
+    padding: 22px;
+    width: min(82vw, 320px);
+    text-align: center;
+    font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+    color: #fff;
+  }
+  #nameCard h2 { margin-bottom: 12px; font-size: 20px; color: #ffd94a; }
+  #nameInput {
+    width: 100%;
+    font: bold 18px inherit;
+    text-align: center;
+    padding: 9px;
+    border: 2px solid #39a9d8;
+    border-radius: 10px;
+    background: #fff;
+    color: #123a5c;
+    margin-bottom: 14px;
+  }
+  #nameSave {
+    font: bold 16px inherit;
+    color: #123a5c;
+    background: #ffd94a;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 26px;
+    cursor: pointer;
+  }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
+<button id="nameBtn" type="button">👤</button>
+<div id="nameOverlay">
+  <div id="nameCard">
+    <h2>What's your name?</h2>
+    <input id="nameInput" maxlength="12" autocomplete="off" placeholder="Nemo">
+    <br>
+    <button id="nameSave" type="button">Save</button>
+  </div>
+</div>
 <script>
 (() => {
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
+  const nameBtn = document.getElementById('nameBtn');
+  const nameOverlay = document.getElementById('nameOverlay');
+  const nameInput = document.getElementById('nameInput');
+  const nameSave = document.getElementById('nameSave');
 
   // ---------- Sizing (crisp on Retina) ----------
   let W = 0, H = 0, dpr = 1;
@@ -62,11 +129,42 @@
   const SEABED_H = 90;
   const NEMO_R = 19; // collision radius
 
+  // ---------- Difficulty (steps up slightly every 60 points) ----------
+  const level = () => Math.min(Math.floor(score / 60), 6);
+  const coralSpeed = () => CORAL_SPEED * (1 + 0.1 * level());
+  const coralGap = () => Math.max(CORAL_GAP - 10 * level(), 130);
+
   // ---------- State ----------
   const ST = { READY: 0, PLAYING: 1, DEAD: 2 };
   let state = ST.READY;
-  let nemo, corals, score, best, t, deathT, flashT, drift, sparkles;
+  let nemo, corals, score, best, t, deathT, flashT, drift, sparkles, fireworks, fwTexts;
   best = +(localStorage.getItem('royalNemoBest') || 0);
+
+  // ---------- Player name + leaderboard (saved on this device) ----------
+  let playerName = localStorage.getItem('royalNemoName') || '';
+  function getLB() {
+    try { return JSON.parse(localStorage.getItem('royalNemoLB')) || []; }
+    catch (e) { return []; }
+  }
+  function saveLB(lb) {
+    localStorage.setItem('royalNemoLB', JSON.stringify(lb));
+  }
+  function addToLB(name, sc) {
+    const lb = getLB();
+    lb.push({ name, score: sc });
+    lb.sort((a, b) => b.score - a.score);
+    saveLB(lb.slice(0, 10));
+  }
+  function setName(newName) {
+    newName = (newName || '').trim().slice(0, 12) || 'Nemo';
+    // renaming carries all of your existing leaderboard scores with you
+    const lb = getLB();
+    for (const e of lb) if (e.name === playerName) e.name = newName;
+    saveLB(lb);
+    playerName = newName;
+    localStorage.setItem('royalNemoName', newName);
+    nameBtn.textContent = '👤 ' + newName;
+  }
 
   function reset() {
     nemo = { x: W * 0.3, y: H * 0.45, vy: 0, rot: 0, fin: 0, tail: 0 };
@@ -75,6 +173,8 @@
     t = 0;
     deathT = 0;
     flashT = 0;
+    fireworks = [];
+    fwTexts = [];
     drift = []; // ambient bubbles drifting up through the water
     for (let i = 0; i < 10; i++) {
       drift.push({
@@ -108,9 +208,16 @@
   const sndScore = () => { beep(880, 0.08, 'triangle', 0.07); setTimeout(() => beep(1320, 0.12, 'triangle', 0.07), 80); };
   const sndHit = () => beep(180, 0.3, 'sawtooth', 0.12, 50);
   const sndBlub = () => beep(300, 0.25, 'sine', 0.09, 90);
+  const sndFireworks = () => {
+    beep(523, 0.12, 'triangle', 0.08);
+    setTimeout(() => beep(659, 0.12, 'triangle', 0.08), 100);
+    setTimeout(() => beep(784, 0.12, 'triangle', 0.08), 200);
+    setTimeout(() => beep(1046, 0.25, 'triangle', 0.09), 300);
+  };
 
   // ---------- Input ----------
   function swim() {
+    if (nameOverlay.classList.contains('open')) return;
     if (state === ST.READY) {
       state = ST.PLAYING;
       nemo.vy = SWIM_VY * S();
@@ -123,16 +230,92 @@
       reset();
     }
   }
-  window.addEventListener('touchstart', e => { e.preventDefault(); swim(); }, { passive: false });
-  window.addEventListener('mousedown', swim);
+  const onUI = e => e.target !== canvas; // taps on the name button/overlay don't swim
+  window.addEventListener('touchstart', e => { if (onUI(e)) return; e.preventDefault(); swim(); }, { passive: false });
+  window.addEventListener('mousedown', e => { if (onUI(e)) return; swim(); });
   window.addEventListener('keydown', e => {
+    if (document.activeElement === nameInput) return;
     if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); swim(); }
   });
+
+  // ---------- Name button + overlay ----------
+  function openNameOverlay() {
+    nameInput.value = playerName;
+    nameOverlay.classList.add('open');
+    setTimeout(() => nameInput.focus(), 50);
+  }
+  function closeNameOverlay() {
+    setName(nameInput.value);
+    nameOverlay.classList.remove('open');
+    nameInput.blur();
+  }
+  nameBtn.addEventListener('click', openNameOverlay);
+  nameSave.addEventListener('click', closeNameOverlay);
+  nameInput.addEventListener('keydown', e => { if (e.code === 'Enter') closeNameOverlay(); });
+  if (playerName) {
+    nameBtn.textContent = '👤 ' + playerName;
+  } else {
+    setName('Nemo');
+    openNameOverlay(); // first visit: ask for a name
+  }
+
+  // ---------- Fireworks (every 20 points: "ROYL #1") ----------
+  function launchFireworks() {
+    sndFireworks();
+    const s = S();
+    const colors = ['#ffd94a', '#ff8c2e', '#ffffff', '#ff5c8a'];
+    for (let burst = 0; burst < 3; burst++) {
+      const bx = nemo.x + (Math.random() - 0.5) * 140 * s;
+      const by = nemo.y - (10 + Math.random() * 90) * s;
+      for (let i = 0; i < 22; i++) {
+        const a = (i / 22) * Math.PI * 2 + Math.random() * 0.3;
+        const sp = (80 + Math.random() * 170) * s;
+        fireworks.push({
+          x: nemo.x, y: nemo.y,
+          tx: bx, ty: by,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          life: 0.9 + Math.random() * 0.5,
+          color: colors[(i + burst) % colors.length]
+        });
+      }
+    }
+    fwTexts.push({ x: nemo.x, y: nemo.y - 50 * s, life: 1.8 });
+  }
+  function updateFireworks(dt) {
+    for (const f of fireworks) {
+      f.x += f.vx * dt;
+      f.y += f.vy * dt;
+      f.vx *= 1 - dt * 1.2; // water drag
+      f.vy = f.vy * (1 - dt * 1.2) - 60 * dt; // sparks drift upward
+      f.life -= dt;
+    }
+    fireworks = fireworks.filter(f => f.life > 0);
+    for (const ft of fwTexts) {
+      ft.y -= 30 * S() * dt;
+      ft.life -= dt;
+    }
+    fwTexts = fwTexts.filter(ft => ft.life > 0);
+  }
+  function drawFireworks() {
+    for (const f of fireworks) {
+      ctx.globalAlpha = Math.min(1, f.life * 1.5);
+      ctx.fillStyle = f.color;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, 3 * S() * Math.min(1, f.life + 0.3), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    for (const ft of fwTexts) {
+      ctx.globalAlpha = Math.min(1, ft.life);
+      text('ROYL #1', ft.x, ft.y, 30 * S(), '#ffd94a', '#1c1c1e');
+      ctx.globalAlpha = 1;
+    }
+  }
 
   // ---------- Coral columns ----------
   function spawnCoral(x) {
     const s = S();
-    const gap = CORAL_GAP * s;
+    const gap = coralGap() * s;
     const margin = 70 * s;
     const seabedY = H - SEABED_H * s;
     const gapY = margin + Math.random() * (seabedY - margin * 2 - gap);
@@ -170,6 +353,7 @@
         if (nemo.y > seabedY - NEMO_R * s) nemo.y = seabedY - NEMO_R * s;
       }
       updateSparkles(dt);
+      updateFireworks(dt);
       return;
     }
 
@@ -180,7 +364,7 @@
     nemo.fin = Math.max(0, nemo.fin - dt * 4);
 
     // coral columns
-    for (const p of corals) p.x -= CORAL_SPEED * s * dt;
+    for (const p of corals) p.x -= coralSpeed() * s * dt;
     if (corals.length === 0 || corals[corals.length - 1].x < W - CORAL_SPACING * s) {
       spawnCoral(Math.max(W + 40, corals.length ? corals[corals.length - 1].x + CORAL_SPACING * s : W + 40));
     }
@@ -197,6 +381,7 @@
         score++;
         sndScore();
         burstSparkles();
+        if (score % 20 === 0) launchFireworks();
       }
       // circle vs coral rects
       if (nemo.x + r > p.x && nemo.x - r < p.x + pw) {
@@ -212,6 +397,7 @@
     if (nemo.y - r < 0) { nemo.y = r; nemo.vy = 50; }
 
     updateSparkles(dt);
+    updateFireworks(dt);
   }
 
   function die() {
@@ -225,6 +411,7 @@
       best = score;
       localStorage.setItem('royalNemoBest', best);
     }
+    if (score > 0) addToLB(playerName, score);
   }
 
   function burstSparkles() {
@@ -560,8 +747,8 @@
     if (state === ST.PLAYING) {
       text(score, W / 2, safeTop + 30 * s, 52 * s);
     } else if (state === ST.READY) {
-      text('Royal Nemo', W / 2, H * 0.19, 40 * s, '#ffd94a');
-      text('Reef Adventure', W / 2, H * 0.26, 40 * s, '#ffd94a');
+      text("Nemo's Tappy", W / 2, H * 0.19, 40 * s, '#ffd94a');
+      text('Adventure', W / 2, H * 0.26, 40 * s, '#ffd94a');
       text('🐠', W / 2, H * 0.32, 26 * s);
       text('Tap to swim!', W / 2, H * 0.62, 26 * s);
       if (best > 0) text(`Best: ${best}`, W / 2, H * 0.68, 20 * s, '#cdeef5');
@@ -572,14 +759,26 @@
         ctx.fillRect(0, 0, W, H);
       }
       if (deathT > 0.4) {
-        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
         ctx.fillRect(0, 0, W, H);
-        text('Blub... Game Over', W / 2, H * 0.3, 40 * s, '#ff8b6b');
-        text(`Score: ${score}`, W / 2, H * 0.42, 32 * s);
-        text(`Best: ${best}`, W / 2, H * 0.49, 24 * s, '#ffd94a');
-        if (score >= best && score > 0) text('New record! 👑', W / 2, H * 0.56, 22 * s, '#aef1b8');
+        text('Blub... Game Over', W / 2, H * 0.2, 36 * s, '#ff8b6b');
+        text(`Score: ${score}`, W / 2, H * 0.29, 30 * s);
+        text(`Best: ${best}`, W / 2, H * 0.35, 22 * s, '#ffd94a');
+        if (score >= best && score > 0) text('New record! 👑', W / 2, H * 0.405, 20 * s, '#aef1b8');
+
+        // leaderboard (top 5 on this device)
+        const lb = getLB().slice(0, 5);
+        if (lb.length) {
+          text('🏆 Leaderboard', W / 2, H * 0.47, 22 * s, '#ffd94a');
+          lb.forEach((e, i) => {
+            const mine = e.name === playerName;
+            text(`${i + 1}. ${e.name} — ${e.score}`, W / 2, H * (0.53 + i * 0.045),
+                 17 * s, mine ? '#ffd94a' : '#fff');
+          });
+        }
+
         if (deathT > 0.6 && Math.floor(deathT * 2) % 2 === 0) {
-          text('Tap to swim again', W / 2, H * 0.68, 22 * s);
+          text('Tap to swim again', W / 2, H * 0.79, 22 * s);
         }
       }
     }
@@ -598,7 +797,10 @@
     drawSeabed();
     drawSparkles();
     drawNemo();
+    drawFireworks();
     drawUI();
+
+    nameBtn.style.display = state === ST.PLAYING ? 'none' : 'block';
 
     requestAnimationFrame(frame);
   }
