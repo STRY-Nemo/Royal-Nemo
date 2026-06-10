@@ -130,6 +130,7 @@
   const NEMO_R = 19; // collision radius
   const LVL2_AT = 30;  // space rocket level
   const LVL3_AT = 60;  // samurai level
+  const WIN_AT = LVL3_AT + 75; // level 3 ends after 5 difficulty steps (15 pts each)
 
   // dev/test shortcut: ?start=39 begins one point before level 2, etc.
   // (debug runs don't touch the leaderboard or best score)
@@ -155,22 +156,23 @@
       'Nemo is now a samurai.',
       'Tap = fart to fly up 💨',
       'and swing the katana. ⚔️',
-      'SLICE the steel blocks in two',
-      'before they hit you —',
-      'touching un-sliced steel = death!'
+      'Slice EVERY steel block in two!',
+      'If a block touches you, you die.',
+      'If a block gets past you, you die!',
+      'Survive 5 difficulty levels to WIN 🏆'
     ],
     prompt: 'Tap to accept your destiny'
   };
 
   // ---------- Difficulty (steps up slightly every 15 points) ----------
-  const level = () => Math.min(Math.floor(score / 15), 8);
+  const level = () => Math.min(Math.floor(score / 15), 9);
   const coralSpeed = () => CORAL_SPEED * (1 + 0.08 * level());
   const coralGap = () => Math.max(CORAL_GAP - 8 * level(), 130);
 
   // ---------- State ----------
-  const ST = { READY: 0, PLAYING: 1, DEAD: 2, SPLASH: 3 };
+  const ST = { READY: 0, PLAYING: 1, DEAD: 2, SPLASH: 3, WIN: 4 };
   let state = ST.READY;
-  let nemo, corals, steels, debris, score, best, t, deathT, flashT;
+  let nemo, corals, steels, debris, score, best, t, deathT, flashT, winT;
   let drift, sparkles, fireworks, fwTexts, farts, molten, bgScroll;
   let splashLevel = 2, splashT = 0;
   best = +(localStorage.getItem('royalNemoBest') || 0);
@@ -275,6 +277,7 @@
     t = 0;
     deathT = 0;
     flashT = 0;
+    winT = 0;
     splashT = 0;
     fireworks = [];
     fwTexts = [];
@@ -305,23 +308,47 @@
   }
   const sndSwim = () => beep(350, 0.1, 'sine', 0.1, 900);
   const sndRocket = () => beep(160, 0.18, 'sawtooth', 0.1, 60);
-  const sndFart = () => {
-    // funny little sputtery toot: three quick low wobbles, random pitch
-    const base = 85 + Math.random() * 55;
-    beep(base, 0.12, 'sawtooth', 0.13, base * 0.55);
-    setTimeout(() => beep(base * 1.35, 0.08, 'sawtooth', 0.1, base * 0.6), 70);
-    setTimeout(() => beep(base * 0.8, 0.15, 'sawtooth', 0.11, base * 0.4), 150);
-  };
+  function fart(dur = 0.3, freq = 160, vol = 0.3) {
+    // real fart synthesis: sputtery noise bursts (lip flaps) squeezed
+    // through a resonant low-pass filter
+    try {
+      if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') actx.resume();
+      const n = Math.floor(actx.sampleRate * dur);
+      const buf = actx.createBuffer(1, n, actx.sampleRate);
+      const d = buf.getChannelData(0);
+      let flap = 0, open = true;
+      for (let i = 0; i < n; i++) {
+        if (--flap <= 0) {
+          open = Math.random() < 0.72;
+          flap = (0.005 + Math.random() * 0.014) * actx.sampleRate; // 5-19ms flaps
+        }
+        d[i] = (Math.random() * 2 - 1) * (open ? 1 : 0.12);
+      }
+      const src = actx.createBufferSource();
+      src.buffer = buf;
+      const lp = actx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.Q.value = 9; // resonance gives it the honk
+      lp.frequency.setValueAtTime(freq * 2.4, actx.currentTime);
+      lp.frequency.exponentialRampToValueAtTime(freq * 0.7, actx.currentTime + dur);
+      const g = actx.createGain();
+      g.gain.setValueAtTime(vol, actx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + dur);
+      src.connect(lp); lp.connect(g); g.connect(actx.destination);
+      src.start();
+    } catch (e) { /* audio is optional */ }
+  }
+  const sndFart = () => fart(0.22 + Math.random() * 0.18, 110 + Math.random() * 110, 0.32);
   const sndFartSong = (fancy) => {
-    // jaunty tuba-fart melody; longer and fancier as the score climbs
-    const tune = [98, 110, 98, 131, 117, 147, 131, 165, 147, 196, 175, 220];
+    // a melody of farts; longer and fancier as the score climbs
+    const tune = [120, 150, 120, 180, 160, 200, 180, 230, 200, 260, 230, 290];
     const n = Math.min(4 + fancy * 2, tune.length);
     for (let i = 0; i < n; i++) {
-      const f = tune[i] * (0.97 + Math.random() * 0.06);
-      setTimeout(() => beep(f, 0.14, 'sawtooth', 0.12, f * 0.7), i * 130);
+      setTimeout(() => fart(0.16, tune[i], 0.24), i * 190);
     }
-    // big finishing blat on the fancier renditions
-    if (fancy >= 2) setTimeout(() => beep(65, 0.5, 'sawtooth', 0.14, 40), n * 130);
+    // long ripping finale on the fancier renditions
+    if (fancy >= 2) setTimeout(() => fart(0.9, 85, 0.34), n * 190);
   };
   const sndSlice = () => beep(900, 0.1, 'sine', 0.09, 180);
   const sndSizzle = () => beep(1500, 0.2, 'sawtooth', 0.04, 200);
@@ -365,6 +392,8 @@
     } else if (state === ST.SPLASH) {
       if (splashT > 0.8) resumeFromSplash(); // must read the screen first
     } else if (state === ST.DEAD && deathT > 0.6) {
+      reset();
+    } else if (state === ST.WIN && winT > 1) {
       reset();
     }
   }
@@ -437,6 +466,7 @@
     burstSparkles();
     if (score === LVL2_AT) { startSplash(2); return; }
     if (score === LVL3_AT) { startSplash(3); return; }
+    if (score >= WIN_AT) { winGame(); return; }
     const difficultyStep = score % 15 === 0;
     if (difficultyStep) snd1Up();
     if (score % 5 === 0) {
@@ -603,6 +633,17 @@
       return;
     }
 
+    if (state === ST.WIN) {
+      winT += dt;
+      nemo.y = H * 0.45 + Math.sin(t * 3) * 12 * s;
+      nemo.rot = 0;
+      if (Math.random() < dt * 2) launchFireworks(false); // celebration barrage
+      updateSparkles(dt);
+      updateFireworks(dt);
+      updateEffects(dt);
+      return;
+    }
+
     if (state === ST.DEAD) {
       deathT += dt;
       flashT = Math.max(0, flashT - dt * 3);
@@ -669,10 +710,11 @@
         }
       }
 
-      // unsliced steel is deadly
+      // unsliced steel is deadly — touching it OR letting it slip past you
       if (state === ST.PLAYING) {
         for (const st of steels) {
-          if (circleRect(nemo.x, nemo.y, r, st.x, st.y, st.w, st.h)) { die(); break; }
+          if (circleRect(nemo.x, nemo.y, r, st.x, st.y, st.w, st.h) ||
+              st.x + st.w < nemo.x - r * 2) { die(); break; }
         }
       }
     }
@@ -732,6 +774,21 @@
         addToLB(playerName, score);
         pushRemoteScore(playerName, score);
       }
+    }
+  }
+
+  function winGame() {
+    state = ST.WIN;
+    winT = 0;
+    sndChest();
+    setTimeout(snd1Up, 900);
+    if (!START) {
+      if (score > best) {
+        best = score;
+        localStorage.setItem('royalNemoBest', best);
+      }
+      addToLB(playerName, score);
+      pushRemoteScore(playerName, score);
     }
   }
 
@@ -1322,15 +1379,43 @@
       ctx.fillStyle = 'rgba(0, 0, 20, 0.78)';
       ctx.fillRect(0, 0, W, H);
       const sp = splashLevel === 2 ? SPLASH_2 : SPLASH_3;
-      let y = splashLevel === 2 ? 0.2 : 0.13;
-      text(sp.title, W / 2, H * y, 48 * s, '#ffd94a'); y += 0.09;
-      text(sp.subtitle, W / 2, H * y, 28 * s,
-           splashLevel === 2 ? '#b06ad6' : '#c1272d',
-           splashLevel === 2 ? '#1c1c1e' : '#fff'); y += 0.09;
-      if (sp.warning) { text(sp.warning, W / 2, H * y, 20 * s, '#ff8b6b'); y += 0.08; }
-      for (const ln of sp.lines) { text(ln, W / 2, H * y, 19 * s); y += 0.06; }
-      if (splashT > 0.8 && Math.floor(splashT * 2) % 2 === 0) {
-        text(sp.prompt, W / 2, H * (y + 0.06), 22 * s, '#ffd94a');
+      const u = Math.min(s, W / 430); // shrink text on narrow phones so lines fit
+      const rows = [[sp.title, 48, '#ffd94a', undefined]];
+      rows.push([sp.subtitle, 28,
+                 splashLevel === 2 ? '#b06ad6' : '#c1272d',
+                 splashLevel === 2 ? '#1c1c1e' : '#fff']);
+      if (sp.warning) rows.push([sp.warning, 20, '#ff8b6b', undefined]);
+      for (const ln of sp.lines) rows.push([ln, 19, '#fff', undefined]);
+      rows.push([sp.prompt, 22, '#ffd94a', undefined]);
+      // center the whole block vertically
+      const blockH = rows.reduce((a, r) => a + r[1] * 1.9 * u, 0);
+      let y = (H - blockH) / 2;
+      rows.forEach((r, i) => {
+        const rowH = r[1] * 1.9 * u;
+        const isPrompt = i === rows.length - 1;
+        const blinkOn = splashT > 0.8 && Math.floor(splashT * 2) % 2 === 0;
+        if (!isPrompt || blinkOn) text(r[0], W / 2, y + rowH / 2, r[1] * u, r[2], r[3]);
+        y += rowH;
+      });
+    } else if (state === ST.WIN) {
+      if (winT > 0.3) {
+        ctx.fillStyle = 'rgba(0, 0, 20, 0.45)';
+        ctx.fillRect(0, 0, W, H);
+        text('🏆 YOU WIN! 🏆', W / 2, H * 0.16, 40 * s, '#ffd94a');
+        text('ROYL #1 CHAMPION', W / 2, H * 0.24, 24 * s, '#aef1b8');
+        text(`Score: ${score}`, W / 2, H * 0.32, 30 * s);
+        const lb = lbTop().slice(0, 5);
+        if (lb.length) {
+          text(remoteLB ? '🌍 Global Leaderboard' : '🏆 Leaderboard', W / 2, H * 0.43, 22 * s, '#ffd94a');
+          lb.forEach((e, i) => {
+            const mine = e.name === playerName;
+            text(`${i + 1}. ${e.name} — ${e.score}`, W / 2, H * (0.49 + i * 0.045),
+                 17 * s, mine ? '#ffd94a' : '#fff');
+          });
+        }
+        if (winT > 1 && Math.floor(winT * 2) % 2 === 0) {
+          text('Tap to play again', W / 2, H * 0.79, 22 * s);
+        }
       }
     } else if (state === ST.DEAD) {
       if (flashT > 0) {
