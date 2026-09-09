@@ -134,6 +134,8 @@ export interface StoreValue {
   eventById: (id: string) => CanyonEvent | undefined;
   canUndoAssignments: (eventId: string) => boolean;
   canUndoOrganization: boolean;
+  /** Organize access: leader, R4/R5, or designated editor (verified link in connected mode). */
+  canOrganize: boolean;
   actions: {
     signIn: (username: string, password: string) => Promise<ActionResult>;
     register: (input: { username: string; password: string; invite_code: string; member_id: string | null }) => Promise<ActionResult>;
@@ -169,6 +171,7 @@ export interface StoreValue {
     archiveTask: (id: ResponsibilityId, archived: boolean) => ActionResult;
     reorderTask: (id: ResponsibilityId, direction: -1 | 1) => ActionResult;
     mapName: (sourceName: string, memberId: MemberId | null) => ActionResult;
+    setDesignatedEditor: (memberId: MemberId, on: boolean) => ActionResult;
     setMechanicalNote: (memberId: MemberId, note: string) => ActionResult;
     setMemberActive: (memberId: MemberId, active: boolean) => ActionResult;
     resetDemo: () => void;
@@ -324,6 +327,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [api, refresh, signOutLocally, toast]);
 
   const isLeader = state.session.role === 'leader';
+  const canOrganize = useMemo(() => {
+    const member = state.session.member_id ? state.members.find((m) => m.id === state.session.member_id) ?? null : null;
+    return O.canOrganize(state.session.role, member, state.organization, account ? account.verified : true);
+  }, [state.session, state.members, state.organization, account]);
   const membersById = useMemo(() => new Map(state.members.map((m) => [m.id, m])), [state.members]);
   const me = state.session.member_id ? (membersById.get(state.session.member_id) ?? null) : null;
 
@@ -418,10 +425,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [api, commit, fail, requireLeader, sync],
   );
 
+  const organizerAllowed = useCallback((): boolean => {
+    const s = stateRef.current;
+    const acct = accountRef.current;
+    const member = s.session.member_id ? s.members.find((m) => m.id === s.session.member_id) ?? null : null;
+    return O.canOrganize(s.session.role, member, s.organization, acct ? acct.verified : true);
+  }, []);
+
   const runOrg = useCallback(
     (fn: (org: OrganizationState) => O.OrgResult, label?: string, remote?: RemoteOrg): ActionResult => {
-      const denied = requireLeader();
-      if (denied) return denied;
+      if (!organizerAllowed()) return fail(new L.LifecycleError('forbidden', 'Organize is for R4, R5 and designated leaders.'));
       const before = stateRef.current.organization;
       try {
         const res = fn(before);
@@ -691,6 +704,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       renameTask: (id, title) => runOrg((org) => O.renameTask(org, id, title, ctx(), org.revision), undefined, (a, before) => a.taskOp({ op: 'rename', id, title, expected_revision: before.revision })),
       archiveTask: (id, archived) => runOrg((org) => O.setTaskArchived(org, id, archived, ctx(), org.revision), undefined, (a, before) => a.taskOp({ op: 'archive', id, archived, expected_revision: before.revision })),
       reorderTask: (id, direction) => runOrg((org) => O.reorderTask(org, id, direction, ctx(), org.revision), undefined, (a, before) => a.taskOp({ op: 'reorder', id, direction, expected_revision: before.revision })),
+      setDesignatedEditor: (memberId, on) => runOrg((org) => O.setDesignatedEditor(org, memberId, on, ctx(), org.revision), undefined, (a, before) => a.setDesignatedEditor(memberId, on, before.revision)),
       mapName: (sourceName, memberId) => runOrg((org) => O.setNameMapping(org, sourceName, memberId, ctx(), org.revision), undefined, (a, before) => a.mapping(sourceName, memberId, before.revision)),
       setMechanicalNote: (memberId, note) => {
         const denied = requireLeader();
@@ -757,6 +771,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveState,
       restored,
       isLeader,
+      canOrganize,
       me,
       membersById,
       currentEvent,
@@ -767,7 +782,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       canUndoOrganization: orgUndo.current.length > 0 && undoTick >= 0,
       actions,
     }),
-    [mode, api, authState, account, loadError, lastSyncedAt, state, saveState, restored, isLeader, me, membersById, currentEvent, finalizedEvents, history, actions, undoTick],
+    [mode, api, authState, account, loadError, lastSyncedAt, state, saveState, restored, isLeader, canOrganize, me, membersById, currentEvent, finalizedEvents, history, actions, undoTick],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

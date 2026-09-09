@@ -88,6 +88,18 @@ async function mutateOrganization(ctx: Ctx, fn: (org: OrganizationState) => O.Or
   return { organization: res!.state, inverse: res!.inverse };
 }
 
+/** Organize access: leaders, verified R4/R5 members, and designated editors. */
+async function requireOrganizer(ctx: Ctx): Promise<Account> {
+  const account = requireAccount(ctx.account);
+  if (account.role === 'leader') return account;
+  if (!account.member_id) throw new HttpError(403, 'forbidden', 'Organize is for R4, R5 and designated leaders. Link your roster member first.');
+  const [member, org] = await Promise.all([loadMember(ctx.env, account.member_id), loadOrganization(ctx.env)]);
+  if (!O.canOrganize('member', member, org, account.verified)) {
+    throw new HttpError(403, 'forbidden', account.verified ? 'Organize is for R4, R5 and designated leaders.' : 'A leader must verify your roster link before you can use Organize.');
+  }
+  return account;
+}
+
 function expected(body: Record<string, unknown>): number | undefined {
   return num(body, 'expected_revision', false);
 }
@@ -414,7 +426,7 @@ router.post('/events/upcoming', async (ctx) => {
 
 // ---- Organization ---------------------------------------------------------------
 router.post('/organization/slots', async (ctx) => {
-  const account = requireLeader(ctx.account);
+  const account = await requireOrganizer(ctx);
   const body = await ctx.body();
   const edits = body.edits;
   if (!Array.isArray(edits) || edits.length === 0) throw new HttpError(400, 'bad_request', 'Missing "edits".');
@@ -423,7 +435,7 @@ router.post('/organization/slots', async (ctx) => {
 });
 
 router.post('/organization/tasks', async (ctx) => {
-  const account = requireLeader(ctx.account);
+  const account = await requireOrganizer(ctx);
   const body = await ctx.body();
   const op = str(body, 'op');
   const result = await mutateOrganization(ctx, (org) => {
@@ -445,8 +457,17 @@ router.post('/organization/tasks', async (ctx) => {
   return result;
 });
 
+router.post('/organization/editors', async (ctx) => {
+  const account = await requireOrganizer(ctx);
+  const body = await ctx.body();
+  const memberId = str(body, 'member_id');
+  await loadMember(ctx.env, memberId);
+  const result = await mutateOrganization(ctx, (org) => O.setDesignatedEditor(org, memberId, body.on !== false, ctxFor(account, ctx.now), expected(body) ?? org.revision));
+  return result;
+});
+
 router.post('/organization/mapping', async (ctx) => {
-  const account = requireLeader(ctx.account);
+  const account = await requireOrganizer(ctx);
   const body = await ctx.body();
   const memberId = str(body, 'member_id', false) || null;
   if (memberId) await loadMember(ctx.env, memberId);

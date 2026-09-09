@@ -219,6 +219,8 @@ export function BottomSheet({ open, onClose, title, children, footer, returnFocu
   const titleId = useId();
   const dragStart = useRef<number | null>(null);
   const [dragY, setDragY] = useState(0);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (open) {
@@ -243,10 +245,13 @@ export function BottomSheet({ open, onClose, title, children, footer, returnFocu
     if (!mounted || closing) return;
     const el = sheetRef.current;
     if (!el) return;
-    const first = el.querySelector<HTMLElement>('input, button, [tabindex]:not([tabindex="-1"])');
+    // Focus once per open: a text field in the body first, then the first body control, then the sheet.
+    // (Re-focusing on every render used to steal focus from inputs after one keystroke.)
+    const body = el.querySelector<HTMLElement>('.sheet-body') ?? el;
+    const first = body.querySelector<HTMLElement>('input, textarea, select') ?? body.querySelector<HTMLElement>('button, [tabindex]:not([tabindex="-1"])');
     (first ?? el).focus({ preventScroll: true });
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
       if (e.key === 'Tab') {
         const focusables = Array.from(el.querySelectorAll<HTMLElement>('input, button, select, textarea, [tabindex]:not([tabindex="-1"])')).filter((f) => !f.hasAttribute('disabled'));
         if (!focusables.length) return;
@@ -268,7 +273,7 @@ export function BottomSheet({ open, onClose, title, children, footer, returnFocu
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [mounted, closing, onClose]);
+  }, [mounted, closing]);
 
   if (!mounted) return null;
 

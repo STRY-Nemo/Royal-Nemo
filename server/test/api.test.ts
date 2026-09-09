@@ -73,6 +73,7 @@ describe('STRY API', () => {
   let leaderToken = '';
   let memberToken = '';
   let eventId = '';
+  let lowToken = '';
   const memberId = 'stry-003'; // Appins
 
   it('bootstraps the first leader with the owner code and rejects bad invites', async () => {
@@ -231,6 +232,33 @@ describe('STRY API', () => {
     const open = state.body.events.filter((e) => e.status === 'draft');
     expect(open.map((e) => e.date)).toEqual(expect.arrayContaining(first.body.dates.filter((d) => !state.body.events.some((e) => e.date === d && e.status !== 'draft'))));
     expect(open.length).toBeLessThanOrEqual(4);
+  });
+
+  it('limits Organize to leaders, R4/R5 and designated editors with a verified link', async () => {
+    // Appins is R4 but the link is unverified: refused until a leader verifies it.
+    const unverified = await api('POST', '/organization/tasks', { op: 'add', title: 'Nope' }, memberToken);
+    expect(unverified.status).toBe(403);
+    expect(String(unverified.body.message)).toMatch(/verify/i);
+    // A low-rank member account: refused, then designated, verified, allowed, and refused again once removed.
+    const state = await api<{ members: { id: string; rank: string }[] }>('GET', '/state', undefined, leaderToken);
+    const low = state.body.members.find((m) => m.rank !== 'R4' && m.rank !== 'R5')!;
+    const inv = await api<{ invite: { code: string } }>('POST', '/invites', { role: 'member' }, leaderToken);
+    const reg = await api<{ token: string }>('POST', '/auth/register', { username: 'lowrank', password: '1234', invite_code: inv.body.invite.code, member_id: low.id });
+    expect(reg.status).toBe(200);
+    lowToken = reg.body.token;
+    expect((await api('POST', '/organization/tasks', { op: 'add', title: 'Nope' }, lowToken)).status).toBe(403);
+    const designate = await api<{ organization: { designated_editors: string[] } }>('POST', '/organization/editors', { member_id: low.id, on: true }, leaderToken);
+    expect(designate.status).toBe(200);
+    expect(designate.body.organization.designated_editors).toEqual([low.id]);
+    expect((await api('POST', '/organization/tasks', { op: 'add', title: 'Nope' }, lowToken)).status).toBe(403);
+    const accounts = await api<{ accounts: { id: string; username: string }[] }>('GET', '/accounts', undefined, leaderToken);
+    const acct = accounts.body.accounts.find((a) => a.username === 'lowrank')!;
+    expect((await api('POST', `/accounts/${acct.id}`, { verified: true }, leaderToken)).status).toBe(200);
+    const allowed = await api<{ organization: { responsibilities: { title: string }[] } }>('POST', '/organization/tasks', { op: 'add', title: 'Designated task' }, lowToken);
+    expect(allowed.status).toBe(200);
+    expect(allowed.body.organization.responsibilities.some((r) => r.title === 'Designated task')).toBe(true);
+    expect((await api('POST', '/organization/editors', { member_id: low.id, on: false }, leaderToken)).status).toBe(200);
+    expect((await api('POST', '/organization/tasks', { op: 'rename', id: 'x', title: 'y' }, lowToken)).status).toBe(403);
   });
 
   it('edits organization slots atomically with revision checks and undo inverses', async () => {

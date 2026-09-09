@@ -10,7 +10,7 @@ import { Header, MemberPickerSheet } from '../ui/common';
  * real roster members. Suggestions are shown; nothing is merged silently.
  */
 export function MappingScreen() {
-  const { state, actions, membersById, isLeader } = useStore();
+  const { state, actions, membersById, canOrganize: isLeader } = useStore();
   const { toast } = useFeedback();
   const [pickFor, setPickFor] = useState<string | null>(null);
   const names = useMemo(() => state.organization.dropdown_names.filter((n) => !PLACEHOLDER_NAMES.includes(n)), [state.organization.dropdown_names]);

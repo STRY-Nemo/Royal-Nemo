@@ -24,7 +24,9 @@ function parseKey(key: string): SlotRef {
 }
 
 export function OrganizeScreen() {
-  const { state, isLeader, actions, membersById, me, canUndoOrganization } = useStore();
+  const { state, canOrganize, actions, membersById, me, canUndoOrganization, mode, account } = useStore();
+  const [editorsOpen, setEditorsOpen] = useState(false);
+  const [editorPicker, setEditorPicker] = useState(false);
   const router = useRouter();
   const { toast, announce } = useFeedback();
   const [query, setQuery] = useUiState('organize.query', '');
@@ -158,6 +160,26 @@ export function OrganizeScreen() {
   const editingTask = editing ? findTask(editing.taskId) : undefined;
   const editingValue = editingSlot ? slotValue(editingSlot) : null;
 
+  if (!canOrganize) {
+    const unverified = mode === 'api' && !!account && !!account.member_id && !account.verified;
+    return (
+      <>
+        <Header title="Organize" />
+        <main className="page">
+          <DemoBanner />
+          <EmptyState title="Leadership only" action={!me ? <button type="button" className="btn primary" onClick={() => router.navigate('/settings')}>{mode === 'api' ? 'Link my member' : 'Choose my member'}</button> : undefined}>
+            {unverified
+              ? 'Your roster link is waiting for a leader to verify it. Once verified, R4 and R5 members get access here automatically.'
+              : 'The Organize page is for R4 and R5 members and for leaders they designate. Ask an R4/R5 to add you under "Who can edit" if you should have access.'}
+          </EmptyState>
+        </main>
+      </>
+    );
+  }
+
+  const designated = state.organization.designated_editors ?? [];
+  const rankEditors = state.members.filter((m) => m.active && (m.rank === 'R4' || m.rank === 'R5')).sort((a, b) => (a.rank === b.rank ? a.username.localeCompare(b.username) : a.rank < b.rank ? 1 : -1));
+
   return (
     <>
       <Header title="Organize" />
@@ -165,8 +187,11 @@ export function OrganizeScreen() {
         <DemoBanner />
         <div>
           <h1>Responsibilities</h1>
-          <p className="muted small">{isLeader ? 'Tap a slot to assign. Long-press the grip to drag. Every drag has a tap equivalent.' : 'Read-only for members. Leaders manage assignments.'}</p>
+          <p className="muted small">Tap a slot to assign. Long-press the grip to drag. Every drag has a tap equivalent.</p>
         </div>
+        <button type="button" className="link-btn" onClick={() => setEditorsOpen(true)}>
+          Who can edit · R4/R5 + {designated.length} designated
+        </button>
         <SearchInput value={query} onChange={setQuery} placeholder="Search tasks or names" />
         <div className="filter-row" role="tablist" aria-label="Filter">
           {(['all', 'mine', 'unassigned'] as Filter[]).map((f) => (
@@ -174,11 +199,9 @@ export function OrganizeScreen() {
               {f === 'all' ? 'All tasks' : f === 'mine' ? 'My tasks' : 'Unassigned'}
             </button>
           ))}
-          {isLeader && (
-            <button type="button" className="chip tap" onClick={() => router.navigate('/organize/mapping')}>
-              Map names
-            </button>
-          )}
+          <button type="button" className="chip tap" onClick={() => router.navigate('/organize/mapping')}>
+            Map names
+          </button>
         </div>
 
         {tapMode && (
@@ -203,7 +226,7 @@ export function OrganizeScreen() {
               index={i}
               expanded={!!expanded[task.id] || !!query}
               onToggle={() => setExpanded((e) => ({ ...e, [task.id]: !e[task.id] }))}
-              editable={isLeader}
+              editable={canOrganize}
               onSlotTap={onSlotTap}
               gripProps={gripProps}
               drag={drag}
@@ -215,7 +238,7 @@ export function OrganizeScreen() {
           ))}
         </div>
 
-        {isLeader && (
+        {canOrganize && (
           <div className="card-row">
             <button type="button" className="btn secondary" style={{ flex: 1 }} onClick={() => setAddOpen(true)}>
               + Add task
@@ -305,6 +328,44 @@ export function OrganizeScreen() {
       </ConfirmSheet>
 
       <TaskMenuSheet taskId={taskMenu} onClose={() => setTaskMenu(null)} />
+
+      <BottomSheet open={editorsOpen && !editorPicker} onClose={() => setEditorsOpen(false)} title="Who can edit Organize">
+        <div className="list">
+          <p className="small muted">R4 and R5 members always have access{mode === 'api' ? ' once a leader has verified their roster link' : ''}. Leader accounts too. Anyone listed here can add or remove designated leaders.</p>
+          <h3>R4 / R5</h3>
+          <div className="small wrap">{rankEditors.map((m) => `${m.username} (${m.rank})`).join(', ') || 'None in the roster'}</div>
+          <h3>Designated leaders</h3>
+          {designated.length === 0 && <div className="small muted">Nobody designated yet.</div>}
+          {designated.map((id) => {
+            const m = membersById.get(id);
+            return (
+              <div key={id} className="row" style={{ animation: 'none' }}>
+                <div className="main">
+                  <div className="name">{m?.username ?? id}</div>
+                  <div className="meta">{m ? `${m.rank} · ${m.origin_alliance}` : 'not in roster'}</div>
+                </div>
+                <button type="button" className="btn ghost small" onClick={() => actions.setDesignatedEditor(id, false).ok && toast({ kind: 'ok', text: `${m?.username ?? id} removed` })}>
+                  Remove
+                </button>
+              </div>
+            );
+          })}
+          <button type="button" className="btn secondary block" onClick={() => setEditorPicker(true)}>
+            + Add designated leader
+          </button>
+        </div>
+      </BottomSheet>
+      <MemberPickerSheet
+        open={editorPicker}
+        title="Designate a leader"
+        onClose={() => setEditorPicker(false)}
+        members={state.members.filter((m) => m.active && !designated.includes(m.id) && m.rank !== 'R4' && m.rank !== 'R5')}
+        onPick={(o) => {
+          setEditorPicker(false);
+          if (actions.setDesignatedEditor(o.key, true).ok) toast({ kind: 'ok', text: `${membersById.get(o.key)?.username ?? o.key} can now edit Organize` });
+        }}
+        extraHint={(m) => m.rank}
+      />
 
       <BottomSheet
         open={addOpen}

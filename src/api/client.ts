@@ -198,6 +198,9 @@ export class ApiClient {
   taskOp(body: Record<string, unknown>) {
     return this.request<{ organization: OrganizationState }>('POST', '/organization/tasks', body);
   }
+  setDesignatedEditor(member_id: MemberId, on: boolean, expected_revision: number) {
+    return this.request<{ organization: OrganizationState; inverse: SlotEdit[] }>('POST', '/organization/editors', { member_id, on, expected_revision });
+  }
   mapping(source_name: string, member_id: MemberId | null, expected_revision: number) {
     return this.request<{ organization: OrganizationState }>('POST', '/organization/mapping', { source_name, member_id, expected_revision });
   }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { loadSeedMembers, loadSeedOrganization } from '../data/seed';
 import { LifecycleError } from './lifecycle';
-import { applySlotEdits, moveSlot, setNameMapping, setSlot, slotDisplay, suggestMatches, swapSlots } from './organization';
+import { applySlotEdits, canOrganize, moveSlot, setDesignatedEditor, setNameMapping, setSlot, slotDisplay, suggestMatches, swapSlots } from './organization';
 
 const members = loadSeedMembers();
 const byId = new Map(members.map((m) => [m.id, m]));
@@ -73,5 +73,26 @@ describe('slot editing', () => {
     const svs = org.responsibilities.find((r) => r.title === 'SVS')!;
     expect(svs.slots[0].member_id).toBe(nemoId);
     expect(svs.slots[0].source_name).toBe('Nemo');
+  });
+});
+
+describe('Organize access', () => {
+  it('is open to leaders, R4/R5 and designated members, and to nobody unverified', () => {
+    let org = loadSeedOrganization();
+    const r5 = members.find((m) => m.rank === 'R5')!;
+    const r4 = members.find((m) => m.rank === 'R4')!;
+    const r1 = members.find((m) => m.rank === 'R1' || m.rank === 'R2' || m.rank === 'R3')!;
+    expect(canOrganize('leader', null, org)).toBe(true);
+    expect(canOrganize('member', r5, org)).toBe(true);
+    expect(canOrganize('member', r4, org)).toBe(true);
+    expect(canOrganize('member', r1, org)).toBe(false);
+    expect(canOrganize('member', r5, org, false)).toBe(false);
+    org = setDesignatedEditor(org, r1.id, true, ctx, org.revision).state;
+    expect(org.designated_editors).toEqual([r1.id]);
+    expect(canOrganize('member', r1, org)).toBe(true);
+    expect(setDesignatedEditor(org, r1.id, true, ctx).audit).toEqual([]);
+    org = setDesignatedEditor(org, r1.id, false, ctx).state;
+    expect(canOrganize('member', r1, org)).toBe(false);
+    expect(() => setDesignatedEditor(org, r1.id, true, ctx, org.revision - 1)).toThrow(LifecycleError);
   });
 });

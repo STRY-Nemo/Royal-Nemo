@@ -190,6 +190,28 @@ export function reorderTask(state: OrganizationState, id: ResponsibilityId, dire
   return { state: { ...state, responsibilities, revision: state.revision + 1 }, inverse: [], audit: [audit(ctx, 'organization.task.reorder', idx, target)] };
 }
 
+/** Ranks that can view and edit the Organize page without being designated. */
+export const ORGANIZER_RANKS: ReadonlySet<string> = new Set(['R4', 'R5']);
+
+/**
+ * Organize access: leader accounts, R4/R5 members, and members designated on the page.
+ * `linkVerified` is false for API accounts whose roster link a leader has not verified yet.
+ */
+export function canOrganize(role: 'leader' | 'member', member: Member | null | undefined, org: Pick<OrganizationState, 'designated_editors'>, linkVerified = true): boolean {
+  if (role === 'leader') return true;
+  if (!member || !linkVerified) return false;
+  return ORGANIZER_RANKS.has(member.rank) || (org.designated_editors ?? []).includes(member.id);
+}
+
+export function setDesignatedEditor(state: OrganizationState, memberId: MemberId, on: boolean, ctx: Context, expectedRevision?: number): OrgResult {
+  assertRevision(state, expectedRevision);
+  const before = state.designated_editors ?? [];
+  const has = before.includes(memberId);
+  if (on === has) return { state, inverse: [], audit: [] };
+  const designated_editors = on ? [...before, memberId] : before.filter((id) => id !== memberId);
+  return { state: { ...state, designated_editors, revision: state.revision + 1 }, inverse: [], audit: [audit(ctx, 'organization.editor', before, designated_editors)] };
+}
+
 export function setNameMapping(state: OrganizationState, sourceName: string, memberId: MemberId | null, ctx: Context, expectedRevision?: number): OrgResult {
   assertRevision(state, expectedRevision);
   const mapping = { ...state.name_mapping, [sourceName]: memberId };

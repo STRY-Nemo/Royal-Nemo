@@ -168,6 +168,8 @@ export interface OrganizationState {
   dropdown_names: string[];
   /** Explicit alias -> member mapping decided by a leader. */
   name_mapping: Record<string, MemberId | null>;
+  /** Members granted Organize access on top of R4/R5 and leader accounts. */
+  designated_editors?: MemberId[];
   revision: number;
 }
 

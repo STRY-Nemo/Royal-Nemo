@@ -66,7 +66,7 @@ export function loadSeedOrganization(): OrganizationState {
     ),
   }));
   const names = raw.dropdown_names.includes('TBD') ? raw.dropdown_names : [...raw.dropdown_names, 'TBD'];
-  return { responsibilities, dropdown_names: names, name_mapping: {}, revision: 1 };
+  return { responsibilities, dropdown_names: names, name_mapping: {}, designated_editors: [], revision: 1 };
 }
 
 export const seedEventDraft = eventDraftJson as {
