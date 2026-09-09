@@ -19,7 +19,7 @@ export function Header({ title, back, actions }: { title?: string; back?: string
         </button>
       ) : (
         <div className="brand">
-          <img src="/brand/stry-logo.png" alt="" width={32} height={32} />
+          <img src={`${import.meta.env.BASE_URL}brand/stry-logo.png`} alt="" width={32} height={32} />
           <span>STRY</span>
         </div>
       )}

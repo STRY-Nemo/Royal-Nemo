@@ -1,0 +1,14 @@
+{
+  "name": "STRY Alliance",
+  "short_name": "STRY",
+  "description": "STRY alliance organizer for Last Z: Canyon Clash rotation, responsibilities and members.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#07111F",
+  "theme_color": "#07111F",
+  "icons": [
+    { "src": "brand/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "brand/stry-logo.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
