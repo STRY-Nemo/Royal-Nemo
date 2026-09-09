@@ -56,19 +56,10 @@ jobs:
       - name: Typecheck and test the API
         if: steps.check.outputs.configured == 'true'
         run: npm run typecheck && npm run test:server
-      - name: Check the Cloudflare token
+      - name: Show which Cloudflare account the token belongs to
         if: steps.check.outputs.configured == 'true'
         working-directory: server
-        run: |
-          npx wrangler whoami | tee whoami.log
-          if ! grep -qi 'd1' whoami.log; then
-            echo "::error::The Cloudflare API token has no D1 permission. Edit the token at https://dash.cloudflare.com/profile/api-tokens and add: Account → D1 → Edit."
-            exit 1
-          fi
-          if ! grep -qiE 'workers scripts' whoami.log; then
-            echo "::error::The Cloudflare API token cannot edit Workers. Use the 'Edit Cloudflare Workers' template."
-            exit 1
-          fi
+        run: npx wrangler whoami
       - name: Ensure the D1 database exists
         if: steps.check.outputs.configured == 'true'
         working-directory: server
@@ -76,7 +67,10 @@ jobs:
           id=$(npx wrangler d1 list --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const l=JSON.parse(s);const d=l.find(x=>x.name==='stry-alliance');console.log(d?d.uuid:'')})")
           if [ -z "$id" ]; then
             echo "Creating D1 database stry-alliance"
-            npx wrangler d1 create stry-alliance >/dev/null
+            if ! npx wrangler d1 create stry-alliance; then
+              echo "::error::Cloudflare refused to create the D1 database. The API token needs the permission Account → D1 → Edit. Edit the token at https://dash.cloudflare.com/profile/api-tokens (Edit → add permission → Continue to summary → Save); the token value stays the same so the GitHub secret does not need updating."
+              exit 1
+            fi
             id=$(npx wrangler d1 list --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const l=JSON.parse(s);const d=l.find(x=>x.name==='stry-alliance');console.log(d?d.uuid:'')})")
           fi
           test -n "$id"
