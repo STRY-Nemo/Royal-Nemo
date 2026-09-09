@@ -15,7 +15,9 @@ Short handoff so another coding agent can resume without the original conversati
 
 - **Apocalypse Time** (`APOCALYPSE_TIME_ZONE = 'Etc/GMT+2'`) is the default event and settings timezone, labelled in pickers and shown as "AT" next to team times.
 - **In-game team screen import** (`src/engine/lineupImport.ts`, `src/import/tables.ts`, `src/screens/ImportScreen.tsx`, `POST /events/:id/import-lineup`). The Team 1 and Team 2 files for 2026-09-11 ship in `public/imports/` and is offered with one tap when the event date matches. Starters and substitutes are imported as locked assignments; `applySuggestions` now keeps locked reserves.
-- Tests: 43 unit (+ real-file parsing and import scenarios), 11 API integration.
+- **Weeks ahead**: `ensureUpcomingDrafts` (max 4 Fridays), `POST /events/upcoming`, Canyon "Upcoming weeks" card, Home list with per-week availability status, "Back to this week" when viewing a future draft.
+- **Separate benches**: substitutes belong to one team (`teamReserves`, `waitingList`, move target `reserve:<teamId>`).
+- Tests: 50 unit (+ real-file parsing and import scenarios), 11 API integration.
 
 ## Hosting
 

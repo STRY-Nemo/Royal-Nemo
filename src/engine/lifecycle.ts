@@ -104,6 +104,33 @@ export function ensureNextWeekDraft(
   return { event: createDraftEvent({ ...opts, date }), created: true };
 }
 
+/** How far ahead leaders can open weekly drafts. */
+export const MAX_WEEKS_AHEAD = 4;
+
+/**
+ * Makes sure a draft exists for each of the next `weeks` Fridays counted from
+ * `fromDate` (a Friday counts as its own week). Existing events of any status
+ * are left alone. Returns only the drafts that were created.
+ */
+export function ensureUpcomingDrafts(
+  events: CanyonEvent[],
+  opts: Omit<DraftOptions, 'date'> & { fromDate: string; weeks?: number },
+): { created: CanyonEvent[]; dates: string[] } {
+  const weeks = Math.max(1, Math.min(MAX_WEEKS_AHEAD, Math.floor(opts.weeks ?? MAX_WEEKS_AHEAD)));
+  const created: CanyonEvent[] = [];
+  const dates: string[] = [];
+  let date = nextFriday(opts.fromDate, true);
+  for (let i = 0; i < weeks; i++) {
+    dates.push(date);
+    const id = eventIdFor(opts.series_id, date);
+    if (!events.some((e) => e.id === id) && !created.some((e) => e.id === id)) {
+      created.push(createDraftEvent({ ...opts, date }));
+    }
+    date = nextFriday(date);
+  }
+  return { created, dates };
+}
+
 function assertEditable(event: CanyonEvent, allowPublished = true): void {
   if (event.status === 'finalized') throw new LifecycleError('finalized', 'This event is finalized. Use attendance corrections instead.');
   if (event.status === 'canceled') throw new LifecycleError('canceled', 'This event is canceled.');

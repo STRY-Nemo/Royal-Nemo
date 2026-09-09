@@ -158,6 +158,8 @@ export interface StoreValue {
     cancel: (eventId: string, reason: string) => ActionResult;
     updateSchedule: (eventId: string, patch: Parameters<typeof L.updateSchedule>[1]) => ActionResult;
     createNextWeek: () => ActionResult & { eventId?: string };
+    /** Opens drafts for the next N Fridays (max 4). */
+    openUpcomingWeeks: (weeks?: number) => ActionResult & { created?: number };
     setSlot: (id: ResponsibilityId, position: ResponsibilitySlot['position'], value: O.SlotValue) => ActionResult;
     moveSlot: (from: ResponsibilityId, fromPos: ResponsibilitySlot['position'], to: ResponsibilityId, toPos: ResponsibilitySlot['position']) => ActionResult;
     swapSlots: (a: ResponsibilityId, aPos: ResponsibilitySlot['position'], b: ResponsibilityId, bPos: ResponsibilitySlot['position']) => ActionResult;
@@ -615,6 +617,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
         }
         return { ok: true, eventId: next.event.id };
+      },
+      openUpcomingWeeks: (weeks = L.MAX_WEEKS_AHEAD) => {
+        const denied = requireLeader();
+        if (denied) return denied;
+        const settings = stateRef.current.settings;
+        const fromDate = todayInZone(settings.timezone ?? deviceTimeZone());
+        const res = L.ensureUpcomingDrafts(stateRef.current.events, { series_id: SERIES_ID, fromDate, weeks, timezone: settings.timezone, team_times: settings.default_team_times });
+        if (res.created.length) {
+          const ids = new Set(res.created.map((e) => e.id));
+          commit((s) => ({ ...s, events: [...s.events, ...res.created] }));
+          if (api) {
+            sync(
+              'Upcoming weeks',
+              () => commit((s) => ({ ...s, events: s.events.filter((e) => !ids.has(e.id)) })),
+              async () => {
+                const r = await api.ensureUpcoming(weeks);
+                commit((s) => ({ ...s, events: r.events }));
+              },
+            );
+          }
+        }
+        return { ok: true, created: res.created.length };
       },
       setSlot: (id, position, value) => {
         const edits: O.SlotEdit[] = [{ responsibility_id: id, position, value }];

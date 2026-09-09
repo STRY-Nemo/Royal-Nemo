@@ -101,11 +101,11 @@ export function HistoryScreen({ eventId }: { eventId?: string }) {
             type="button"
             className="btn secondary"
             onClick={() => {
-              const r = actions.createNextWeek();
-              if (r.ok) toast({ kind: 'ok', text: 'Next Friday draft is ready' });
+              const r = actions.openUpcomingWeeks();
+              if (r.ok) toast({ kind: 'ok', text: r.created ? `${r.created} new week${r.created === 1 ? '' : 's'} opened` : 'The next 4 Fridays are already open' });
             }}
           >
-            Create next week's draft
+            Open the next 4 weeks
           </button>
         )}
         <p className="faint">Glory Wars participation from the source spreadsheet is never used as Canyon history. Tracking starts on import (September 9, 2026).</p>

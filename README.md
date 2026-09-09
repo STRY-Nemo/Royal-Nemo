@@ -74,6 +74,7 @@ The repository was empty apart from a README, so a small maintained stack was ch
 - Locks require a reason, are audited, and never bypass capacity, uniqueness or availability. Conflicting locks block generation with actionable errors.
 - Publishing records selection only. Leader-confirmed attendance (played / no-show / withdrew / unused reserve / unknown, incl. substitutes) drives history. Finalization is idempotent; corrections recalculate.
 - Canceled events and Glory Wars data never affect fairness. Tracking starts on import (2026-09-09).
+- **Plan up to 4 weeks ahead**: leaders open drafts for the next four Fridays (Canyon → Upcoming weeks → "Open the next 4 weeks"; server route `POST /events/upcoming`). Each week keeps its own times, availability and lineup; members see the upcoming weeks on Home and can set availability early.
 - **In-game team screen import** (Canyon → "Import the in-game team screen", leaders): reads the recording export (.xlsx/.csv), matches names to the roster (case, accents and leader name mappings), shows a review (starters, substitutes, declined, other team, unmatched names, availability updates), then writes locked starters and locked substitutes for that team and the availability those rows imply. Generate keeps them and fills the other team fairly. It records selection only; attendance is still confirmed after the match. The same rules run on the server.
 
 ## Verification done

@@ -214,6 +214,20 @@ describe('STRY API', () => {
     expect(ok.body.event.availability['stry-024'].choice).toBe('team1');
   });
 
+  it('opens drafts up to four Fridays ahead for leaders only, idempotently', async () => {
+    expect((await api('POST', '/events/upcoming', {}, memberToken)).status).toBe(403);
+    const first = await api<{ events: { date: string; status: string }[]; created: number; dates: string[] }>('POST', '/events/upcoming', { weeks: 4 }, leaderToken);
+    expect(first.status).toBe(200);
+    expect(first.body.dates).toHaveLength(4);
+    expect(first.body.created).toBeGreaterThan(0);
+    const again = await api<{ created: number }>('POST', '/events/upcoming', {}, leaderToken);
+    expect(again.body.created).toBe(0);
+    const state = await api<{ events: { date: string; status: string }[] }>('GET', '/state', undefined, leaderToken);
+    const open = state.body.events.filter((e) => e.status === 'draft');
+    expect(open.map((e) => e.date)).toEqual(expect.arrayContaining(first.body.dates.filter((d) => !state.body.events.some((e) => e.date === d && e.status !== 'draft'))));
+    expect(open.length).toBeLessThanOrEqual(4);
+  });
+
   it('edits organization slots atomically with revision checks and undo inverses', async () => {
     const state = await api<{ organization: { revision: number; responsibilities: { id: string; slots: { position: number; source_name: string | null }[] }[] } }>('GET', '/state', undefined, leaderToken);
     const org = state.body.organization;

@@ -187,6 +187,9 @@ export class ApiClient {
   nextWeek() {
     return this.request<{ event: CanyonEvent; created: boolean }>('POST', '/events/next-week');
   }
+  ensureUpcoming(weeks: number) {
+    return this.request<{ events: CanyonEvent[]; created: number; dates: string[] }>('POST', '/events/upcoming', { weeks });
+  }
 
   // ---- organization ----
   slotEdits(edits: SlotEdit[], expected_revision: number) {

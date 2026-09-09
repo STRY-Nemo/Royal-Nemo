@@ -6,8 +6,14 @@ import { ChevronRight } from '../ui/icons';
 import { starters } from '../engine/lifecycle';
 import { describeChoice } from '../engine/suggest';
 
+function weekLabel(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
 export function HomeScreen() {
   const { state, currentEvent, me, isLeader, finalizedEvents, history, mode } = useStore();
+  const upcoming = state.events.filter((e) => (e.status === 'draft' || e.status === 'published') && e.id !== currentEvent?.id).sort((a, b) => (a.date < b.date ? -1 : 1));
   const router = useRouter();
   const event = currentEvent;
   const myAvailability = event && me ? event.availability[me.id] : undefined;
@@ -79,6 +85,31 @@ export function HomeScreen() {
               <ChevronRight className="chevron" />
             </div>
           </button>
+        )}
+
+        {upcoming.length > 0 && (
+          <div className="card">
+            <h3>Upcoming weeks</h3>
+            <p className="muted small">{me ? 'Set your availability early so leaders can plan ahead.' : 'Weeks already opened by the leaders.'}</p>
+            <div className="list" style={{ gap: 4 }}>
+              {upcoming.map((e) => {
+                const mine = me ? e.availability[me.id] : undefined;
+                return (
+                  <button key={e.id} type="button" className="row" onClick={() => router.navigate(me ? `/canyon/availability/${e.id}` : `/canyon/${e.id}`)} style={{ animation: 'none' }}>
+                    <div className="main">
+                      <div className="name">{weekLabel(e.date)}</div>
+                      <div className="meta">
+                        <span>{e.teams.map((t) => t.local_time).join(' / ')}</span>
+                        {me && <span style={{ color: mine ? 'var(--ok)' : 'var(--warn)' }}>{mine ? describeChoice(mine.choice, e.teams) : 'Availability not set'}</span>}
+                      </div>
+                    </div>
+                    <StatusBadge status={e.status} />
+                    <ChevronRight className="chevron" />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         )}
 
         {event && !me && (

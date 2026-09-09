@@ -394,6 +394,17 @@ router.post('/events/next-week', async (ctx) => {
   return { event: next.event, created: next.created };
 });
 
+router.post('/events/upcoming', async (ctx) => {
+  requireLeader(ctx.account);
+  const body = await ctx.body();
+  const weeks = num(body, 'weeks', false) ?? L.MAX_WEEKS_AHEAD;
+  const [events, settings] = await Promise.all([loadEvents(ctx.env), loadSettings(ctx.env)]);
+  const fromDate = todayInZone(settings.timezone ?? 'UTC', ctx.now);
+  const res = L.ensureUpcomingDrafts(events, { series_id: SERIES_ID, fromDate, weeks, timezone: settings.timezone, team_times: settings.default_team_times });
+  for (const e of res.created) await insertEvent(ctx.env, e, ctx.now);
+  return { events: [...events, ...res.created], created: res.created.length, dates: res.dates };
+});
+
 // ---- Organization ---------------------------------------------------------------
 router.post('/organization/slots', async (ctx) => {
   const account = requireLeader(ctx.account);

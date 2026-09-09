@@ -78,7 +78,9 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
   const reserveCount = waitingList(event).length;
   // Bundled team screen files for this date whose team has no starters yet.
   const pendingImports = BUNDLED_IMPORTS.filter((b) => b.event_date === event.date && event.teams[b.team - 1] && starters(event, event.teams[b.team - 1].id).length === 0);
-  const otherOpen = state.events.filter((e) => e.id !== event.id && (e.status === 'draft' || e.status === 'published'));
+  const otherOpen = state.events.filter((e) => e.id !== event.id && (e.status === 'draft' || e.status === 'published')).sort((a, b) => (a.date < b.date ? -1 : 1));
+  const openCount = state.events.filter((e) => e.status === 'draft' || e.status === 'published').length;
+  const isCurrent = currentEvent?.id === event.id;
 
   return (
     <>
@@ -88,10 +90,15 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
         <div className="card-row" style={{ alignItems: 'flex-start' }}>
           <div className="grow">
             <h1>Canyon Clash</h1>
-            <p className="muted small">Every Friday · two teams of 20</p>
+            <p className="muted small">{isCurrent ? 'This week · every Friday · two teams of 20' : `Week of ${event.date} · planning ahead`}</p>
           </div>
           <StatusBadge status={event.status} />
         </div>
+        {!isCurrent && currentEvent && (
+          <button type="button" className="link-btn" onClick={() => router.navigate(`/canyon/${currentEvent.id}`)}>
+            ← Back to this week ({currentEvent.date})
+          </button>
+        )}
 
         <button type="button" className="card interactive" onClick={() => router.navigate(`/canyon/schedule/${event.id}`)} aria-label="Event time and timezone">
           <div className="card-row">
@@ -235,15 +242,48 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
           </button>
         )}
 
+        <div className="card">
+          <h3>Upcoming weeks</h3>
+          <p className="muted small">Canyon Clash can be planned up to 4 Fridays ahead. Each week has its own times, availability and lineup.</p>
+          {otherOpen.length > 0 && (
+            <div className="list" style={{ gap: 4 }}>
+              {otherOpen.map((e) => (
+                <button key={e.id} type="button" className="row" style={{ animation: 'none' }} onClick={() => router.navigate(`/canyon/${e.id}`)}>
+                  <div className="main">
+                    <div className="name">{e.date}</div>
+                    <div className="meta">
+                      <span>{e.teams.map((t) => t.local_time).join(' / ')}</span>
+                      <span>{Object.keys(e.availability).length} responses</span>
+                      <span>{e.assignments.filter((a) => a.role === 'starter').length} starters</span>
+                    </div>
+                  </div>
+                  <StatusBadge status={e.status} />
+                  <ChevronRight className="chevron" />
+                </button>
+              ))}
+            </div>
+          )}
+          {isLeader && openCount < 4 && (
+            <button
+              type="button"
+              className="btn secondary block"
+              onClick={() => {
+                const r = actions.openUpcomingWeeks();
+                if (r.ok) toast({ kind: 'ok', text: r.created ? `${r.created} new week${r.created === 1 ? '' : 's'} opened` : 'The next 4 Fridays are already open' });
+              }}
+            >
+              Open the next 4 weeks
+            </button>
+          )}
+          {isLeader && openCount >= 4 && <p className="faint">The next 4 Fridays are open. Another week opens automatically when one is finalized.</p>}
+        </div>
+
         <button type="button" className="card interactive" onClick={() => router.navigate('/canyon/history')}>
           <div className="card-row">
             <HistoryIcon className="chevron" />
             <div className="grow">
-              <h3>History &amp; other weeks</h3>
-              <p className="muted small">
-                {otherOpen.length ? `${otherOpen.length} other open draft${otherOpen.length === 1 ? '' : 's'} · ` : ''}
-                {state.events.filter((e) => e.status === 'finalized').length} finalized
-              </p>
+              <h3>History</h3>
+              <p className="muted small">{state.events.filter((e) => e.status === 'finalized').length} finalized</p>
             </div>
             <ChevronRight className="chevron" />
           </div>
