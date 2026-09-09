@@ -468,3 +468,30 @@ export function updateSchedule(
   };
   return { event: next, audit: [audit(ctx, event.id, 'event.schedule', { date: event.date, timezone: event.timezone, teams: event.teams }, { date: next.date, timezone: next.timezone, teams: next.teams })] };
 }
+
+/** Restores a full assignment set (used by Undo). Validates revision and invariants. */
+export function replaceAssignments(event: CanyonEvent, assignments: Assignment[], ctx: Context, expectedRevision?: number): Result {
+  assertEditable(event);
+  assertRevision(event, expectedRevision);
+  const seen = new Set<MemberId>();
+  for (const a of assignments) {
+    if (seen.has(a.member_id)) throw new LifecycleError('duplicate', 'A member appears twice.');
+    seen.add(a.member_id);
+    if (a.role === 'starter' && a.team_id && !memberAllowed(event, a.member_id, a.team_id)) {
+      throw new LifecycleError('unavailable', 'A restored assignment conflicts with current availability.');
+    }
+  }
+  for (const t of event.teams) {
+    if (assignments.filter((a) => a.role === 'starter' && a.team_id === t.id).length > t.capacity) {
+      throw new LifecycleError('capacity', `${t.name} would exceed ${t.capacity} starters.`);
+    }
+  }
+  const rev = event.revision + 1;
+  const next = assignments.map((a) => ({ ...a, revision: rev }));
+  return { event: { ...event, assignments: next, revision: rev }, audit: [audit(ctx, event.id, 'assignment.restore', summarize(event.assignments), summarize(next))] };
+}
+
+/** Records or clears a leader-only mechanical note on a member. */
+export function withMechanicalNote(member: Member, note: string): Member {
+  return { ...member, mechanical_notes: note.trim() ? note.trim() : undefined };
+}

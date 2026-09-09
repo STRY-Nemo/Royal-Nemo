@@ -1,0 +1,86 @@
+/* STRY celestial design tokens (see docs/spec/DESIGN.md). */
+:root {
+  color-scheme: dark;
+  --bg: #07111f;
+  --card: #101f33;
+  --raised: #162b45;
+  --primary: #168cff;
+  --primary-strong: #0f6fd1;
+  --on-primary: #06162b;
+  --text: #f4f7fc;
+  --text-2: #a9bed9;
+  --text-3: #7d93b1;
+  --border: #304c70;
+  --ok: #41d58c;
+  --warn: #ffd166;
+  --danger: #ff6b7a;
+  --silver: #c9d6ea;
+  --cyan: #6fd3ff;
+  --focus: #8fc6ff;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --tap: 44px;
+  --page-pad: 16px;
+  --nav-height: 64px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  /* Motion tokens (see docs/spec/MOTION_AND_QOL.md). */
+  --m-press: 100ms;
+  --m-screen: 200ms;
+  --m-sheet: 260ms;
+  --m-move: 220ms;
+  --m-swap: 260ms;
+  --m-lock: 200ms;
+  --m-save: 180ms;
+  --m-burst: 600ms;
+  --m-finalize: 260ms;
+  --m-stagger: 25ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+
+/* Reduced motion: replace movement with short fades. */
+[data-motion='reduced'] {
+  --m-press: 60ms;
+  --m-screen: 120ms;
+  --m-sheet: 140ms;
+  --m-move: 120ms;
+  --m-swap: 120ms;
+  --m-lock: 100ms;
+  --m-save: 120ms;
+  --m-burst: 200ms;
+  --m-finalize: 120ms;
+  --m-stagger: 0ms;
+  --ease-spring: ease-out;
+}
+
+/* Off: state changes immediately. */
+[data-motion='off'] {
+  --m-press: 0ms;
+  --m-screen: 0ms;
+  --m-sheet: 0ms;
+  --m-move: 0ms;
+  --m-swap: 0ms;
+  --m-lock: 0ms;
+  --m-save: 0ms;
+  --m-burst: 0ms;
+  --m-finalize: 0ms;
+  --m-stagger: 0ms;
+}
+
+[data-motion='off'] *,
+[data-motion='off'] *::before,
+[data-motion='off'] *::after {
+  transition-duration: 0ms !important;
+  animation-duration: 0ms !important;
+}
