@@ -1645,3 +1645,54 @@ body {
 [data-motion='reduced'] .roaming-bear.walking .roaming-bear-inner {
   animation: none;
 }
+
+/* ---- Organize summary table ---- */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -4px;
+}
+.summary-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 320px;
+  font-size: 13px;
+}
+.summary-table th,
+.summary-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 6px 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+}
+.summary-table th {
+  color: var(--text-3);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.summary-table td.task {
+  font-weight: 600;
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.summary-table td.lead {
+  color: var(--cyan);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.summary-table td.others {
+  color: var(--text-2);
+}
+.summary-table .missing {
+  color: var(--warn);
+}
+.summary-table tr.tappable {
+  cursor: pointer;
+}
+.summary-table tr.tappable:active {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}

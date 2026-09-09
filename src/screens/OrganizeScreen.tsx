@@ -1,4 +1,5 @@
 import { Art } from '../ui/Art';
+import { OrgSummary } from '../ui/OrgSummary';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { Responsibility, ResponsibilitySlot } from '../domain/types';
 import { slotDisplay, slotValue, type SlotValue } from '../engine/organization';
@@ -194,6 +195,16 @@ export function OrganizeScreen() {
         <button type="button" className="link-btn" onClick={() => setEditorsOpen(true)}>
           Who can edit · R4/R5 + {designated.length} designated
         </button>
+        <OrgSummary
+          organization={state.organization}
+          membersById={membersById}
+          onTask={(id) => {
+            setExpanded((e) => ({ ...e, [id]: true }));
+            setQuery('');
+            setFilter('all');
+            window.setTimeout(() => document.getElementById(`task-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+          }}
+        />
         <SearchInput value={query} onChange={setQuery} placeholder="Search tasks or names" />
         <div className="filter-row" role="tablist" aria-label="Filter">
           {(['all', 'mine', 'unassigned'] as Filter[]).map((f) => (
@@ -427,7 +438,7 @@ function TaskCard({ task, index, expanded, onToggle, editable, onSlotTap, gripPr
     .join(' · ');
   const lead = task.slots[0];
   return (
-    <div className="card" style={{ animation: `row-in var(--m-move) var(--ease) both`, animationDelay: `calc(var(--m-stagger) * ${index})` }}>
+    <div id={`task-${task.id}`} className="card" style={{ animation: `row-in var(--m-move) var(--ease) both`, animationDelay: `calc(var(--m-stagger) * ${index})` }}>
       <div className="card-row">
         <button type="button" className="grow" style={{ textAlign: 'left', minHeight: 44 }} aria-expanded={expanded} onClick={onToggle}>
           <h3 className="wrap">{task.title}</h3>
