@@ -3,8 +3,7 @@ name: Deploy API to Cloudflare
 # Deploys the shared alliance API (server/) to Cloudflare Workers + D1.
 # Does nothing until the repository secrets CLOUDFLARE_API_TOKEN and
 # CLOUDFLARE_ACCOUNT_ID exist (see docs/DEPLOY.md). After a successful deploy
-# it stores the API URL as the repository variable API_URL and rebuilds the
-# site so the app connects to the server.
+# it checks that .env.production points the site at the deployed Worker URL.
 
 on:
   push:
@@ -19,7 +18,6 @@ on:
 
 permissions:
   contents: read
-  actions: write
 
 concurrency:
   group: worker-deploy
@@ -33,7 +31,6 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       OWNER_SETUP_CODE: ${{ secrets.OWNER_SETUP_CODE }}
       WRANGLER_SEND_METRICS: 'false'
-      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Check Cloudflare secrets
         id: check
@@ -98,9 +95,12 @@ jobs:
         if: steps.check.outputs.configured == 'true' && env.OWNER_SETUP_CODE != ''
         working-directory: server
         run: printf '%s' "$OWNER_SETUP_CODE" | npx wrangler secret put OWNER_SETUP_CODE
-      - name: Store API_URL and rebuild the site
+      - name: Check that the site build points at this API
         if: steps.check.outputs.configured == 'true'
         run: |
-          gh variable set API_URL --body "${{ steps.deploy.outputs.url }}" --repo "${{ github.repository }}"
-          gh workflow run deploy-pages.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}"
-          echo "::notice::API deployed to ${{ steps.deploy.outputs.url }}; site rebuild triggered."
+          url="${{ steps.deploy.outputs.url }}"
+          echo "::notice::API deployed to $url"
+          if ! grep -q "VITE_API_URL=$url" .env.production 2>/dev/null; then
+            echo "::error::.env.production does not contain VITE_API_URL=$url. Commit that line so the GitHub Pages build connects to the API."
+            exit 1
+          fi

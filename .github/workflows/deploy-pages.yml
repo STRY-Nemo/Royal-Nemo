@@ -35,9 +35,7 @@ jobs:
         run: npm run build
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
-          # Repository variable API_URL is set automatically by the "Deploy API to Cloudflare" workflow.
-          # Empty = local-only demo mode.
-          VITE_API_URL: ${{ vars.API_URL }}
+          # VITE_API_URL comes from .env.production (the deployed Worker URL). Remove that file for demo mode.
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
