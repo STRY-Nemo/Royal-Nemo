@@ -1,0 +1,222 @@
+/**
+ * Integration test: boots the Worker locally with wrangler (miniflare + local
+ * D1), applies migrations, and drives the API through the real HTTP surface.
+ */
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+const PORT = 8790 + Math.floor(Math.random() * 100);
+const BASE = `http://127.0.0.1:${PORT}`;
+const SERVER_DIR = join(__dirname, '..');
+const OWNER_CODE = 'owner-setup-test';
+let proc: ChildProcess | null = null;
+let persistDir = '';
+
+async function waitForServer(): Promise<void> {
+  const deadline = Date.now() + 90_000;
+  while (Date.now() < deadline) {
+    try {
+      const r = await fetch(`${BASE}/health`);
+      if (r.ok) return;
+    } catch {
+      /* not up yet */
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error('worker did not start');
+}
+
+interface Res<T = Record<string, unknown>> {
+  status: number;
+  body: T;
+}
+
+async function api<T = Record<string, unknown>>(method: string, path: string, body?: unknown, token?: string): Promise<Res<T>> {
+  const r = await fetch(`${BASE}${path}`, {
+    method,
+    headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return { status: r.status, body: (await r.json()) as T };
+}
+
+beforeAll(async () => {
+  persistDir = mkdtempSync(join(tmpdir(), 'stry-d1-'));
+  const env = { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: 'true', NO_D1_WARNING: 'true' };
+  const migrate = spawnSync('npx', ['wrangler', 'd1', 'migrations', 'apply', 'stry-alliance', '--local', '--persist-to', persistDir], { cwd: SERVER_DIR, env, encoding: 'utf8' });
+  if (migrate.status !== 0) throw new Error(`migrations failed: ${migrate.stdout}\n${migrate.stderr}`);
+  proc = spawn('npx', ['wrangler', 'dev', '--local', '--port', String(PORT), '--persist-to', persistDir, '--var', `OWNER_SETUP_CODE:${OWNER_CODE}`, '--var', 'ALLOWED_ORIGINS:http://localhost:5173'], {
+    cwd: SERVER_DIR,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  proc.stderr?.on('data', (d) => {
+    const s = String(d);
+    if (/error/i.test(s)) process.stderr.write(s);
+  });
+  await waitForServer();
+}, 120_000);
+
+afterAll(async () => {
+  if (proc) {
+    proc.kill('SIGTERM');
+    await new Promise((r) => setTimeout(r, 500));
+    proc.kill('SIGKILL');
+  }
+  if (persistDir) rmSync(persistDir, { recursive: true, force: true });
+});
+
+describe('STRY API', () => {
+  let leaderToken = '';
+  let memberToken = '';
+  let eventId = '';
+  const memberId = 'stry-003'; // Appins
+
+  it('bootstraps the first leader with the owner code and rejects bad invites', async () => {
+    const bad = await api('POST', '/auth/register', { username: 'nobody', password: 'password123', invite_code: 'nope' });
+    expect(bad.status).toBe(403);
+    const owner = await api<{ token: string; account: { role: string; verified: boolean } }>('POST', '/auth/register', { username: 'ryan', password: 'password123', invite_code: OWNER_CODE, member_id: 'stry-010' });
+    expect(owner.status).toBe(200);
+    expect(owner.body.account.role).toBe('leader');
+    expect(owner.body.account.verified).toBe(true);
+    leaderToken = owner.body.token;
+    // Owner code no longer works once a leader exists.
+    const again = await api('POST', '/auth/register', { username: 'ryan2', password: 'password123', invite_code: OWNER_CODE });
+    expect(again.status).toBe(403);
+  });
+
+  it('serves seeded state to signed-in accounts only', async () => {
+    const anon = await api('GET', '/state');
+    expect(anon.status).toBe(401);
+    const state = await api<{ members: unknown[]; events: { id: string; date: string; status: string }[]; organization: { responsibilities: unknown[] } }>('GET', '/state', undefined, leaderToken);
+    expect(state.status).toBe(200);
+    expect(state.body.members).toHaveLength(100);
+    expect(state.body.organization.responsibilities).toHaveLength(16);
+    expect(state.body.events).toHaveLength(1);
+    expect(state.body.events[0].status).toBe('draft');
+    eventId = state.body.events[0].id;
+  });
+
+  it('lets leaders create invites and members register with them', async () => {
+    const inv = await api<{ invite: { code: string } }>('POST', '/invites', { role: 'member', uses: 2, days: 7 }, leaderToken);
+    expect(inv.status).toBe(200);
+    const reg = await api<{ token: string; account: { role: string; member_id: string } }>('POST', '/auth/register', { username: 'appins', password: 'password123', invite_code: inv.body.invite.code, member_id: memberId });
+    expect(reg.status).toBe(200);
+    expect(reg.body.account.role).toBe('member');
+    expect(reg.body.account.member_id).toBe(memberId);
+    memberToken = reg.body.token;
+    const login = await api<{ token: string }>('POST', '/auth/login', { username: 'Appins', password: 'password123' });
+    expect(login.status).toBe(200);
+    const wrong = await api('POST', '/auth/login', { username: 'appins', password: 'wrong-password' });
+    expect(wrong.status).toBe(401);
+  });
+
+  it('hides private notes from members and blocks leader-only actions', async () => {
+    await api('POST', `/members/${memberId}`, { mechanical_notes: 'shot caller' }, leaderToken);
+    const leaderState = await api<{ members: { id: string; mechanical_notes?: string }[] }>('GET', '/state', undefined, leaderToken);
+    expect(leaderState.body.members.find((m) => m.id === memberId)?.mechanical_notes).toBe('shot caller');
+    const memberState = await api<{ members: { id: string; mechanical_notes?: string }[]; audit: unknown[] }>('GET', '/state', undefined, memberToken);
+    expect(memberState.body.members.find((m) => m.id === memberId)?.mechanical_notes).toBeUndefined();
+    expect(memberState.body.audit).toHaveLength(0);
+    expect((await api('POST', `/events/${eventId}/generate`, {}, memberToken)).status).toBe(403);
+    expect((await api('POST', `/events/${eventId}/availability`, { member_id: 'stry-001', choice: 'either' }, memberToken)).status).toBe(403);
+    expect((await api('POST', '/invites', { role: 'leader' }, memberToken)).status).toBe(403);
+    expect((await api('GET', '/export', undefined, memberToken)).status).toBe(403);
+  });
+
+  it('records own availability, fills the rest, and generates a full lineup', async () => {
+    const mine = await api<{ event: { availability: Record<string, { choice: string; recorded_by: string }> } }>('POST', `/events/${eventId}/availability`, { choice: 'team1' }, memberToken);
+    expect(mine.status).toBe(200);
+    expect(mine.body.event.availability[memberId].choice).toBe('team1');
+    expect(mine.body.event.availability[memberId].recorded_by).toBe('self');
+    const fill = await api<{ count: number }>('POST', `/events/${eventId}/availability/fill`, { choice: 'either' }, leaderToken);
+    expect(fill.body.count).toBe(99);
+    const gen = await api<{ event: { revision: number; assignments: { role: string; team_id: string }[] } }>('POST', `/events/${eventId}/generate`, {}, leaderToken);
+    expect(gen.status).toBe(200);
+    const starters = gen.body.event.assignments.filter((a) => a.role === 'starter');
+    expect(starters).toHaveLength(40);
+    expect(new Set(starters.map((a) => a.team_id)).size).toBe(2);
+  });
+
+  it('rejects stale revisions and enforces capacity and availability on locks', async () => {
+    const state = await api<{ events: { id: string; revision: number; teams: { id: string }[]; assignments: { member_id: string; role: string; team_id: string }[] }[] }>('GET', '/state', undefined, leaderToken);
+    const ev = state.body.events.find((e) => e.id === eventId)!;
+    const stale = await api('POST', `/events/${eventId}/generate`, { expected_revision: ev.revision - 1 }, leaderToken);
+    expect(stale.status).toBe(409);
+    const reserve = ev.assignments.find((a) => a.role === 'reserve')!;
+    const full = await api('POST', `/events/${eventId}/lock`, { member_id: reserve.member_id, team_id: ev.teams[0].id, reason: 'shot caller' }, leaderToken);
+    expect(full.status).toBe(422);
+    expect(String(full.body.message)).toMatch(/full/i);
+    // Appins is team1-only: locking into team 2 must fail on availability.
+    const wrongTime = await api('POST', `/events/${eventId}/lock`, { member_id: memberId, team_id: ev.teams[1].id, reason: 'shot caller' }, leaderToken);
+    expect(wrongTime.status).toBe(422);
+    expect(String(wrongTime.body.message)).toMatch(/not available/i);
+  });
+
+  it('blocks publishing until timezone and date are confirmed, then publishes and finalizes idempotently', async () => {
+    const blocked = await api('POST', `/events/${eventId}/publish`, {}, leaderToken);
+    expect(blocked.status).toBe(422);
+    const sched = await api<{ event: { timezone: string; date_confirmed: boolean } }>('POST', `/events/${eventId}/schedule`, { timezone: 'Europe/Berlin', date_confirmed: true }, leaderToken);
+    expect(sched.body.event.timezone).toBe('Europe/Berlin');
+    const pub = await api<{ event: { status: string; revision: number } }>('POST', `/events/${eventId}/publish`, {}, leaderToken);
+    expect(pub.status).toBe(200);
+    expect(pub.body.event.status).toBe('published');
+    // Member confirms own assignment; cannot confirm someone else's.
+    const confirm = await api<{ event: { confirmations: Record<string, unknown> } }>('POST', `/events/${eventId}/confirm`, {}, memberToken);
+    expect(confirm.status).toBe(200);
+    expect(confirm.body.event.confirmations[memberId]).toBeTruthy();
+    expect((await api('POST', `/events/${eventId}/confirm`, { member_id: 'stry-001' }, memberToken)).status).toBe(403);
+    await api('POST', `/events/${eventId}/attendance`, { member_id: memberId, outcome: 'played' }, leaderToken);
+    const fin = await api<{ event: { status: string }; next_event: { date: string; status: string } }>('POST', `/events/${eventId}/finalize`, {}, leaderToken);
+    expect(fin.status).toBe(200);
+    expect(fin.body.event.status).toBe('finalized');
+    expect(fin.body.next_event.date).toBe('2026-09-18');
+    const fin2 = await api<{ event: { status: string } }>('POST', `/events/${eventId}/finalize`, {}, leaderToken);
+    expect(fin2.status).toBe(200);
+    const state = await api<{ events: { id: string }[] }>('GET', '/state', undefined, leaderToken);
+    expect(state.body.events).toHaveLength(2);
+  });
+
+  it('edits organization slots atomically with revision checks and undo inverses', async () => {
+    const state = await api<{ organization: { revision: number; responsibilities: { id: string; slots: { position: number; source_name: string | null }[] }[] } }>('GET', '/state', undefined, leaderToken);
+    const org = state.body.organization;
+    const gw = org.responsibilities[0];
+    const edit = await api<{ organization: { revision: number; responsibilities: { slots: { member_id: string | null }[] }[] }; inverse: unknown[] }>('POST', '/organization/slots', { expected_revision: org.revision, edits: [{ responsibility_id: gw.id, position: 4, value: { kind: 'member', member_id: 'stry-010' } }] }, leaderToken);
+    expect(edit.status).toBe(200);
+    expect(edit.body.organization.responsibilities[0].slots[3].member_id).toBe('stry-010');
+    expect(edit.body.inverse).toHaveLength(1);
+    const dup = await api('POST', '/organization/slots', { expected_revision: edit.body.organization.revision, edits: [{ responsibility_id: gw.id, position: 3, value: { kind: 'member', member_id: 'stry-010' } }] }, leaderToken);
+    expect(dup.status).toBe(422);
+    const stale = await api('POST', '/organization/slots', { expected_revision: org.revision, edits: edit.body.inverse }, leaderToken);
+    expect(stale.status).toBe(409);
+    const undo = await api<{ organization: { responsibilities: { slots: { member_id: string | null }[] }[] } }>('POST', '/organization/slots', { expected_revision: edit.body.organization.revision, edits: edit.body.inverse }, leaderToken);
+    expect(undo.status).toBe(200);
+    expect(undo.body.organization.responsibilities[0].slots[3].member_id).toBeNull();
+    expect((await api('POST', '/organization/slots', { edits: [] }, memberToken)).status).toBe(403);
+  });
+
+  it('manages accounts: last leader cannot demote themselves; disabled accounts lose sessions', async () => {
+    const list = await api<{ accounts: { id: string; username: string }[] }>('GET', '/accounts', undefined, leaderToken);
+    expect(list.body.accounts.map((a) => a.username).sort()).toEqual(['appins', 'ryan']);
+    const me = list.body.accounts.find((a) => a.username === 'ryan')!;
+    const appins = list.body.accounts.find((a) => a.username === 'appins')!;
+    expect((await api('POST', `/accounts/${me.id}`, { role: 'member' }, leaderToken)).status).toBe(422);
+    expect((await api('POST', `/accounts/${appins.id}`, { verified: true }, leaderToken)).status).toBe(200);
+    expect((await api('POST', `/accounts/${appins.id}`, { disabled: true }, leaderToken)).status).toBe(200);
+    expect((await api('GET', '/me', undefined, memberToken)).status).toBe(401);
+    const exp = await api<{ members: unknown[]; audit: unknown[] }>('GET', '/export', undefined, leaderToken);
+    expect(exp.body.members).toHaveLength(100);
+    expect(exp.body.audit.length).toBeGreaterThan(5);
+  });
+
+  it('answers CORS preflight only for allowed origins', async () => {
+    const ok = await fetch(`${BASE}/state`, { method: 'OPTIONS', headers: { origin: 'http://localhost:5173', 'access-control-request-method': 'GET' } });
+    expect(ok.status).toBe(204);
+    expect(ok.headers.get('access-control-allow-origin')).toBe('http://localhost:5173');
+    const nope = await fetch(`${BASE}/state`, { method: 'OPTIONS', headers: { origin: 'https://evil.example', 'access-control-request-method': 'GET' } });
+    expect(nope.headers.get('access-control-allow-origin')).toBeNull();
+  });
+});

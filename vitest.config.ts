@@ -7,5 +7,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: false,
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    // The server integration test boots wrangler; run it via `npm run test:server`.
+    exclude: ['server/**', 'node_modules/**'],
   },
 });

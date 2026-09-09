@@ -1,0 +1,512 @@
+/**
+ * STRY alliance API (Cloudflare Worker + D1).
+ *
+ * Every mutation runs the same pure engine functions as the client
+ * (src/engine) and is written with a revision compare-and-set, so capacity,
+ * uniqueness, availability, role permissions and stale edits are enforced
+ * server-side regardless of what the UI sends.
+ */
+import type { AttendanceOutcome, AvailabilityChoice, CanyonEvent, Member, OrganizationState, Settings, TeamId } from '../../src/domain/types';
+import { SERIES_ID } from '../../src/data/seed';
+import * as L from '../../src/engine/lifecycle';
+import * as O from '../../src/engine/organization';
+import { isValidTimeZone, todayInZone } from '../../src/engine/recurrence';
+import {
+  accountFromRequest,
+  createSession,
+  deleteSession,
+  findAccountByUsername,
+  hashPassword,
+  leaderCount,
+  newId,
+  randomToken,
+  requireAccount,
+  requireLeader,
+  rowToAccount,
+  validatePassword,
+  validateUsername,
+  verifyPassword,
+} from './auth';
+import { auditStatement, ensureSeeded, insertEvent, loadDocument, loadEvent, loadEvents, loadMember, loadMembers, loadOrganization, loadSettings, recentAudit, saveDocumentCas, saveEventCas, saveMember } from './db';
+import type { Account, Env } from './env';
+import { HttpError } from './env';
+import { corsHeaders, num, readJson, Router, str, type Ctx } from './router';
+
+const router = new Router();
+
+function actorFor(account: Account): string {
+  return account.member_id ?? `account:${account.id}`;
+}
+
+function ctxFor(account: Account, now: Date): L.Context {
+  return { actor: actorFor(account), now: now.toISOString() };
+}
+
+function stripPrivate(members: Member[], account: Account | null): Member[] {
+  if (account?.role === 'leader') return members;
+  return members.map((m) => {
+    const { mechanical_notes: _omit, ...rest } = m;
+    void _omit;
+    return rest;
+  });
+}
+
+/** Translates engine errors into HTTP errors. */
+function mapError(err: unknown): never {
+  if (err instanceof HttpError) throw err;
+  if (err instanceof L.LifecycleError) {
+    const status = err.code === 'stale_revision' ? 409 : err.code === 'forbidden' ? 403 : 422;
+    throw new HttpError(status, err.code, err.message);
+  }
+  throw err;
+}
+
+/** Loads an event, applies a lifecycle function and writes it back with compare-and-set. */
+async function mutateEvent(ctx: Ctx, id: string, fn: (event: CanyonEvent) => L.Result): Promise<CanyonEvent> {
+  const event = await loadEvent(ctx.env, id);
+  let res: L.Result;
+  try {
+    res = fn(event);
+  } catch (err) {
+    mapError(err);
+  }
+  await saveEventCas(ctx.env, event, res!.event, res!.audit, ctx.now);
+  return res!.event;
+}
+
+async function mutateOrganization(ctx: Ctx, fn: (org: OrganizationState) => O.OrgResult): Promise<{ organization: OrganizationState; inverse: O.SlotEdit[] }> {
+  const { doc, revision } = await loadDocument<OrganizationState>(ctx.env, 'organization');
+  let res: O.OrgResult;
+  try {
+    res = fn(doc);
+  } catch (err) {
+    mapError(err);
+  }
+  await saveDocumentCas(ctx.env, 'organization', revision, res!.state, res!.state.revision, res!.audit, ctx.now);
+  return { organization: res!.state, inverse: res!.inverse };
+}
+
+function expected(body: Record<string, unknown>): number | undefined {
+  return num(body, 'expected_revision', false);
+}
+
+// ---- Health -------------------------------------------------------------------
+router.get('/health', async () => ({ ok: true, service: 'stry-alliance-api' }));
+
+// ---- Auth ---------------------------------------------------------------------
+router.post('/auth/register', async (ctx) => {
+  const body = await ctx.body();
+  const username = validateUsername(str(body, 'username'));
+  const password = str(body, 'password');
+  validatePassword(password);
+  const inviteCode = str(body, 'invite_code');
+  const memberId = str(body, 'member_id', false) || null;
+
+  if (await findAccountByUsername(ctx.env, username)) throw new HttpError(409, 'username_taken', 'That username is already taken.');
+  if (memberId) await loadMember(ctx.env, memberId);
+
+  let role: 'leader' | 'member' = 'member';
+  let verified = false;
+  const invite = await ctx.env.DB.prepare('SELECT * FROM invites WHERE code = ?').bind(inviteCode).first<{ code: string; role: 'leader' | 'member'; uses_left: number; expires_at: string }>();
+  if (invite && invite.uses_left > 0 && invite.expires_at > ctx.now.toISOString()) {
+    role = invite.role;
+    await ctx.env.DB.prepare('UPDATE invites SET uses_left = uses_left - 1 WHERE code = ? AND uses_left > 0').bind(invite.code).run();
+  } else if (ctx.env.OWNER_SETUP_CODE && inviteCode === ctx.env.OWNER_SETUP_CODE && (await leaderCount(ctx.env)) === 0) {
+    role = 'leader';
+    verified = true;
+  } else {
+    throw new HttpError(403, 'bad_invite', 'That invite code is not valid. Ask a leader for a new one.');
+  }
+
+  const { hash, salt } = await hashPassword(password);
+  const id = newId('acct');
+  await ctx.env.DB.prepare('INSERT INTO accounts (id, username, password_hash, salt, role, member_id, verified, disabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)')
+    .bind(id, username, hash, salt, role, memberId, verified ? 1 : 0, ctx.now.toISOString())
+    .run();
+  const token = await createSession(ctx.env, id, ctx.now);
+  const account: Account = { id, username, role, member_id: memberId, verified, disabled: false, created_at: ctx.now.toISOString() };
+  return { token, account };
+});
+
+router.post('/auth/login', async (ctx) => {
+  const body = await ctx.body();
+  const username = str(body, 'username').trim();
+  const password = str(body, 'password');
+  const row = await findAccountByUsername(ctx.env, username);
+  if (!row || row.disabled === 1 || !(await verifyPassword(password, row.password_hash, row.salt))) {
+    throw new HttpError(401, 'bad_credentials', 'Wrong username or password.');
+  }
+  const token = await createSession(ctx.env, row.id, ctx.now);
+  return { token, account: rowToAccount(row) };
+});
+
+router.post('/auth/logout', async (ctx) => {
+  const header = ctx.request.headers.get('authorization') ?? '';
+  const token = header.replace(/^Bearer\s+/i, '').trim();
+  if (token) await deleteSession(ctx.env, token);
+  return { ok: true };
+});
+
+router.post('/auth/password', async (ctx) => {
+  const account = requireAccount(ctx.account);
+  const body = await ctx.body();
+  const current = str(body, 'current_password');
+  const next = str(body, 'new_password');
+  validatePassword(next);
+  const row = await findAccountByUsername(ctx.env, account.username);
+  if (!row || !(await verifyPassword(current, row.password_hash, row.salt))) throw new HttpError(401, 'bad_credentials', 'Current password is wrong.');
+  const { hash, salt } = await hashPassword(next);
+  await ctx.env.DB.prepare('UPDATE accounts SET password_hash = ?, salt = ? WHERE id = ?').bind(hash, salt, account.id).run();
+  return { ok: true };
+});
+
+router.get('/me', async (ctx) => ({ account: requireAccount(ctx.account) }));
+
+/** Public minimal roster (id + username) so a new member can pick themselves while registering. */
+router.get('/roster', async (ctx) => {
+  const members = await loadMembers(ctx.env);
+  return { roster: members.filter((m) => m.active).map((m) => ({ id: m.id, username: m.username })) };
+});
+
+// ---- Bootstrap state ---------------------------------------------------------------
+router.get('/state', async (ctx) => {
+  const account = requireAccount(ctx.account);
+  const [members, events, organization, settings, audit] = await Promise.all([
+    loadMembers(ctx.env),
+    loadEvents(ctx.env),
+    loadOrganization(ctx.env),
+    loadSettings(ctx.env),
+    account.role === 'leader' ? recentAudit(ctx.env) : Promise.resolve([]),
+  ]);
+  return { members: stripPrivate(members, account), events, organization, settings, audit, account, server_time: ctx.now.toISOString() };
+});
+
+router.get('/export', async (ctx) => {
+  requireLeader(ctx.account);
+  const [members, events, organization, settings, audit] = await Promise.all([loadMembers(ctx.env), loadEvents(ctx.env), loadOrganization(ctx.env), loadSettings(ctx.env), recentAudit(ctx.env, 5000)]);
+  return { exported_at: ctx.now.toISOString(), members, events, organization, settings, audit };
+});
+
+// ---- Events ------------------------------------------------------------------------
+router.post('/events/:id/availability', async (ctx) => {
+  const account = requireAccount(ctx.account);
+  const body = await ctx.body();
+  const choice = str(body, 'choice') as AvailabilityChoice;
+  if (!['team1', 'team2', 'either', 'unavailable'].includes(choice)) throw new HttpError(400, 'bad_request', 'Invalid availability choice.');
+  const requested = str(body, 'member_id', false) || account.member_id;
+  if (!requested) throw new HttpError(400, 'no_member', 'Link your roster member first.');
+  const self = requested === account.member_id;
+  if (!self && account.role !== 'leader') throw new HttpError(403, 'forbidden', 'You can only change your own availability.');
+  await loadMember(ctx.env, requested);
+  const event = await mutateEvent(ctx, ctx.params.id, (e) => L.setAvailability(e, requested, choice, ctxFor(account, ctx.now), self ? 'self' : actorFor(account)));
+  return { event };
+});
+
+router.post('/events/:id/availability/fill', async (ctx) => {
+  const account = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const choice = str(body, 'choice') as AvailabilityChoice;
+  if (!['team1', 'team2', 'either', 'unavailable'].includes(choice)) throw new HttpError(400, 'bad_request', 'Invalid availability choice.');
+  const members = await loadMembers(ctx.env);
+  let count = 0;
+  const event = await mutateEvent(ctx, ctx.params.id, (e) => {
+    let next = e;
+    const audit: L.Result['audit'] = [];
+    for (const m of members) {
+      if (!m.active || next.availability[m.id]) continue;
+      const r = L.setAvailability(next, m.id, choice, ctxFor(account, ctx.now), actorFor(account));
+      next = r.event;
+      audit.push(...r.audit);
+      count++;
+    }
+    return { event: next, audit };
+  });
+  return { event, count };
+});
+
+router.post('/events/:id/generate', async (ctx) => {
+  const account = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const [members, events] = await Promise.all([loadMembers(ctx.env), loadEvents(ctx.env)]);
+  const event = await mutateEvent(ctx, ctx.params.id, (e) => L.applySuggestions(e, members, events, ctxFor(account, ctx.now), expected(body) ?? e.revision));
+  return { event };
+});
+
+router.post('/events/:id/lock', async (ctx) => {
+  const account = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const event = await mutateEvent(ctx, ctx.params.id, (e) => L.lockMember(e, str(body, 'member_id'), str(body, 'team_id') as TeamId, str(body, 'reason'), ctxFor(account, ctx.now), expected(body)));
+  return { event };
+});
+
+router.post('/events/:id/unlock', async (ctx) => {
+  const account = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const event = await mutateEvent(ctx, ctx.params.id, (e) => L.unlockMember(e, str(body, 'member_id'), ctxFor(account, ctx.now), expected(body)));
+  return { event };
+});
+
+router.post('/events/:id/move', async (ctx) => {
+  const account = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const target = str(body, 'target');
+  const event = await mutateEvent(ctx, ctx.params.id, (e) => L.moveMember(e, str(body, 'member_id'), target === 'reserve' ? 'reserve' : (target as TeamId), ctxFor(account, ctx.now), expected(body)));
+  return { event };
+});
+
+router.post('/events/:id/swap', async (ctx) => {
+  const account = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const event = await mutateEvent(ctx, ctx.params.id, (e) => L.swapMembers(e, str(body, 'a'), str(body, 'b'), ctxFor(account, ctx.now), expected(body)));
+  return { event };
+});
+
+router.post('/events/:id/restore', async (ctx) => {
+  const account = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const assignments = body.assignments;
+  if (!Array.isArray(assignments)) throw new HttpError(400, 'bad_request', 'Missing "assignments".');
+  const event = await mutateEvent(ctx, ctx.params.id, (e) => L.replaceAssignments(e, assignments as CanyonEvent['assignments'], ctxFor(account, ctx.now), expected(body)));
+  return { event };
+});
+
+router.post('/events/:id/publish', async (ctx) => {
+  const account = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const event = await mutateEvent(ctx, ctx.params.id, (e) => L.publishEvent(e, ctxFor(account, ctx.now), expected(body)));
+  return { event };
+});
+
+router.post('/events/:id/confirm', async (ctx) => {
+  const account = requireAccount(ctx.account);
+  const body = await ctx.body();
+  const requested = str(body, 'member_id', false) || account.member_id;
+  if (!requested) throw new HttpError(400, 'no_member', 'Link your roster member first.');
+  if (requested !== account.member_id && account.role !== 'leader') throw new HttpError(403, 'forbidden', 'You can only confirm your own assignment.');
+  const event = await mutateEvent(ctx, ctx.params.id, (e) => L.confirmAssignment(e, requested, ctxFor(account, ctx.now)));
+  return { event };
+});
+
+router.post('/events/:id/attendance', async (ctx) => {
+  const account = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const outcome = str(body, 'outcome') as AttendanceOutcome;
+  if (!['played', 'no_show', 'withdrew', 'unused_reserve', 'unknown'].includes(outcome)) throw new HttpError(400, 'bad_request', 'Invalid outcome.');
+  const memberId = str(body, 'member_id');
+  await loadMember(ctx.env, memberId);
+  const opts: { team_id?: TeamId | null; substitute?: boolean } = {};
+  if ('team_id' in body) opts.team_id = (body.team_id as TeamId | null) ?? null;
+  if (typeof body.substitute === 'boolean') opts.substitute = body.substitute;
+  const event = await mutateEvent(ctx, ctx.params.id, (e) => L.recordAttendance(e, memberId, outcome, ctxFor(account, ctx.now), opts));
+  return { event };
+});
+
+router.post('/events/:id/finalize', async (ctx) => {
+  const account = requireLeader(ctx.account);
+  const settings = await loadSettings(ctx.env);
+  const event = await mutateEvent(ctx, ctx.params.id, (e) => L.finalizeEvent(e, ctxFor(account, ctx.now)));
+  // Idempotently create next week's draft.
+  const events = await loadEvents(ctx.env);
+  const next = L.ensureNextWeekDraft(events, { series_id: SERIES_ID, afterDate: event.date, timezone: event.timezone ?? settings.timezone, team_times: settings.default_team_times });
+  if (next.created) await insertEvent(ctx.env, next.event, ctx.now);
+  return { event, next_event: next.event };
+});
+
+router.post('/events/:id/cancel', async (ctx) => {
+  const account = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const event = await mutateEvent(ctx, ctx.params.id, (e) => L.cancelEvent(e, ctxFor(account, ctx.now), str(body, 'reason', false) || 'Canceled by leader'));
+  return { event };
+});
+
+router.post('/events/:id/schedule', async (ctx) => {
+  const account = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const patch: Parameters<typeof L.updateSchedule>[1] = {};
+  if (typeof body.date === 'string') patch.date = body.date;
+  if ('timezone' in body) patch.timezone = typeof body.timezone === 'string' && body.timezone ? body.timezone : null;
+  if (typeof body.date_confirmed === 'boolean') patch.date_confirmed = body.date_confirmed;
+  if (body.team_times && typeof body.team_times === 'object') patch.team_times = body.team_times as { team1?: string; team2?: string };
+  const event = await mutateEvent(ctx, ctx.params.id, (e) => L.updateSchedule(e, patch, ctxFor(account, ctx.now)));
+  return { event };
+});
+
+router.post('/events/next-week', async (ctx) => {
+  requireLeader(ctx.account);
+  const [events, settings] = await Promise.all([loadEvents(ctx.env), loadSettings(ctx.env)]);
+  const latest = [...events].filter((e) => e.status !== 'canceled').sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+  const afterDate = latest ? latest.date : todayInZone(settings.timezone ?? 'UTC', ctx.now);
+  const next = L.ensureNextWeekDraft(events, { series_id: SERIES_ID, afterDate, timezone: settings.timezone, team_times: settings.default_team_times });
+  if (next.created) await insertEvent(ctx.env, next.event, ctx.now);
+  return { event: next.event, created: next.created };
+});
+
+// ---- Organization ---------------------------------------------------------------
+router.post('/organization/slots', async (ctx) => {
+  const account = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const edits = body.edits;
+  if (!Array.isArray(edits) || edits.length === 0) throw new HttpError(400, 'bad_request', 'Missing "edits".');
+  const result = await mutateOrganization(ctx, (org) => O.applySlotEdits(org, edits as O.SlotEdit[], ctxFor(account, ctx.now), expected(body) ?? org.revision));
+  return result;
+});
+
+router.post('/organization/tasks', async (ctx) => {
+  const account = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const op = str(body, 'op');
+  const result = await mutateOrganization(ctx, (org) => {
+    const rev = expected(body) ?? org.revision;
+    const c = ctxFor(account, ctx.now);
+    switch (op) {
+      case 'add':
+        return O.addTask(org, str(body, 'title'), c, rev);
+      case 'rename':
+        return O.renameTask(org, str(body, 'id'), str(body, 'title'), c, rev);
+      case 'archive':
+        return O.setTaskArchived(org, str(body, 'id'), body.archived !== false, c, rev);
+      case 'reorder':
+        return O.reorderTask(org, str(body, 'id'), (num(body, 'direction') ?? 1) < 0 ? -1 : 1, c, rev);
+      default:
+        throw new HttpError(400, 'bad_request', 'Unknown task op.');
+    }
+  });
+  return result;
+});
+
+router.post('/organization/mapping', async (ctx) => {
+  const account = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const memberId = str(body, 'member_id', false) || null;
+  if (memberId) await loadMember(ctx.env, memberId);
+  const result = await mutateOrganization(ctx, (org) => O.setNameMapping(org, str(body, 'source_name'), memberId, ctxFor(account, ctx.now), expected(body) ?? org.revision));
+  return result;
+});
+
+// ---- Members ------------------------------------------------------------------------
+router.post('/members/:id', async (ctx) => {
+  const account = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const member = await loadMember(ctx.env, ctx.params.id);
+  let next = member;
+  if (typeof body.mechanical_notes === 'string') next = L.withMechanicalNote(next, body.mechanical_notes);
+  if (typeof body.active === 'boolean') next = { ...next, active: body.active };
+  await saveMember(ctx.env, next, ctx.now);
+  await ctx.env.DB.batch([
+    auditStatement(ctx.env, { id: `${ctx.now.toISOString()}-member-${randomToken(4)}`, event_id: null, actor_id: actorFor(account), action: 'member.update', before: { active: member.active, has_notes: !!member.mechanical_notes }, after: { active: next.active, has_notes: !!next.mechanical_notes }, timestamp: ctx.now.toISOString() }),
+  ]);
+  return { member: next };
+});
+
+// ---- Settings -------------------------------------------------------------------------
+router.post('/settings', async (ctx) => {
+  const account = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const { doc, revision } = await loadDocument<Settings>(ctx.env, 'settings');
+  const next: Settings = { ...doc };
+  if ('timezone' in body) {
+    const tz = typeof body.timezone === 'string' && body.timezone ? body.timezone : null;
+    if (tz && !isValidTimeZone(tz)) throw new HttpError(400, 'bad_timezone', 'Unknown timezone name.');
+    next.timezone = tz;
+  }
+  if (body.default_team_times && typeof body.default_team_times === 'object') {
+    const t = body.default_team_times as { team1?: string; team2?: string };
+    next.default_team_times = { team1: t.team1 ?? doc.default_team_times.team1, team2: t.team2 ?? doc.default_team_times.team2 };
+  }
+  await saveDocumentCas(ctx.env, 'settings', revision, next, revision + 1, [{ id: `${ctx.now.toISOString()}-settings-${randomToken(4)}`, event_id: null, actor_id: actorFor(account), action: 'settings.update', before: doc, after: next, timestamp: ctx.now.toISOString() }], ctx.now);
+  return { settings: next };
+});
+
+// ---- Accounts and invites (leaders) ---------------------------------------------------
+router.get('/accounts', async (ctx) => {
+  requireLeader(ctx.account);
+  const rows = await ctx.env.DB.prepare('SELECT id, username, role, member_id, verified, disabled, created_at FROM accounts ORDER BY created_at').all<{ id: string; username: string; role: 'leader' | 'member'; member_id: string | null; verified: number; disabled: number; created_at: string }>();
+  return { accounts: rows.results.map((r) => ({ id: r.id, username: r.username, role: r.role, member_id: r.member_id, verified: r.verified === 1, disabled: r.disabled === 1, created_at: r.created_at })) };
+});
+
+router.post('/accounts/:id', async (ctx) => {
+  const leader = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const row = await ctx.env.DB.prepare('SELECT id, role, disabled FROM accounts WHERE id = ?').bind(ctx.params.id).first<{ id: string; role: 'leader' | 'member'; disabled: number }>();
+  if (!row) throw new HttpError(404, 'not_found', 'Account not found.');
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  if (body.role === 'leader' || body.role === 'member') {
+    if (row.id === leader.id && body.role === 'member' && (await leaderCount(ctx.env)) <= 1) throw new HttpError(422, 'last_leader', 'You are the only leader; promote someone else first.');
+    sets.push('role = ?');
+    values.push(body.role);
+  }
+  if ('member_id' in body) {
+    const memberId = typeof body.member_id === 'string' && body.member_id ? body.member_id : null;
+    if (memberId) await loadMember(ctx.env, memberId);
+    sets.push('member_id = ?');
+    values.push(memberId);
+  }
+  if (typeof body.verified === 'boolean') {
+    sets.push('verified = ?');
+    values.push(body.verified ? 1 : 0);
+  }
+  if (typeof body.disabled === 'boolean') {
+    if (row.id === leader.id && body.disabled) throw new HttpError(422, 'self_disable', 'You cannot disable your own account.');
+    sets.push('disabled = ?');
+    values.push(body.disabled ? 1 : 0);
+  }
+  if (!sets.length) throw new HttpError(400, 'bad_request', 'Nothing to update.');
+  await ctx.env.DB.prepare(`UPDATE accounts SET ${sets.join(', ')} WHERE id = ?`)
+    .bind(...values, row.id)
+    .run();
+  if (body.disabled === true) await ctx.env.DB.prepare('DELETE FROM sessions WHERE account_id = ?').bind(row.id).run();
+  const updated = await ctx.env.DB.prepare('SELECT id, username, role, member_id, verified, disabled, created_at FROM accounts WHERE id = ?').bind(row.id).first<{ id: string; username: string; role: 'leader' | 'member'; member_id: string | null; verified: number; disabled: number; created_at: string }>();
+  await ctx.env.DB.batch([auditStatement(ctx.env, { id: `${ctx.now.toISOString()}-acct-${randomToken(4)}`, event_id: null, actor_id: actorFor(leader), action: 'account.update', before: { id: row.id }, after: body, timestamp: ctx.now.toISOString() })]);
+  return { account: updated && { ...updated, verified: updated.verified === 1, disabled: updated.disabled === 1 } };
+});
+
+router.get('/invites', async (ctx) => {
+  requireLeader(ctx.account);
+  const rows = await ctx.env.DB.prepare('SELECT code, role, created_by, uses_left, expires_at, created_at FROM invites WHERE uses_left > 0 AND expires_at > ? ORDER BY created_at DESC').bind(ctx.now.toISOString()).all();
+  return { invites: rows.results };
+});
+
+router.post('/invites', async (ctx) => {
+  const leader = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const role = body.role === 'leader' ? 'leader' : 'member';
+  const uses = Math.min(500, Math.max(1, Math.floor(num(body, 'uses', false) ?? 25)));
+  const days = Math.min(365, Math.max(1, Math.floor(num(body, 'days', false) ?? 14)));
+  const code = randomToken(6).replace(/[-_]/g, 'x').slice(0, 8).toUpperCase();
+  const expires = new Date(ctx.now.getTime() + days * 86_400_000).toISOString();
+  await ctx.env.DB.prepare('INSERT INTO invites (code, role, created_by, uses_left, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(code, role, leader.id, uses, expires, ctx.now.toISOString()).run();
+  return { invite: { code, role, uses_left: uses, expires_at: expires } };
+});
+
+router.delete('/invites/:code', async (ctx) => {
+  requireLeader(ctx.account);
+  await ctx.env.DB.prepare('DELETE FROM invites WHERE code = ?').bind(ctx.params.code).run();
+  return { ok: true };
+});
+
+// ---- Worker entry ---------------------------------------------------------------------
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const cors = corsHeaders(env, request);
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+    const url = new URL(request.url);
+    const now = new Date();
+    const json = (status: number, data: unknown) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...cors } });
+    try {
+      const match = router.match(request.method, url.pathname);
+      if (!match) return json(404, { error: 'not_found', message: `No route for ${request.method} ${url.pathname}` });
+      await ensureSeeded(env, now);
+      const account = await accountFromRequest(env, request, now);
+      let cached: Promise<Record<string, unknown>> | null = null;
+      const ctx: Ctx = { env, request, account, params: match.params, now, body: () => (cached ??= readJson(request)) };
+      const data = await match.handler(ctx);
+      return json(200, data);
+    } catch (err) {
+      if (err instanceof HttpError) return json(err.status, { error: err.code, message: err.message });
+      if (err instanceof L.LifecycleError) return json(err.code === 'stale_revision' ? 409 : 422, { error: err.code, message: err.message });
+      console.error(err);
+      return json(500, { error: 'internal', message: 'Something went wrong on the server.' });
+    }
+  },
+} satisfies ExportedHandler<Env>;
