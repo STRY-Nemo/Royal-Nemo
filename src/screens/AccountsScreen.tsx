@@ -1,3 +1,4 @@
+import { joinLink, joinMessage } from '../ui/join';
 import { useCallback, useEffect, useState } from 'react';
 import type { ApiAccount, Invite } from '../api/client';
 import { BottomSheet, ConfirmSheet, useFeedback } from '../motion';
@@ -54,25 +55,31 @@ export function AccountsScreen() {
     }
   };
 
+  const shareCode = async (code: string, role: 'leader' | 'member') => {
+    const text = role === 'leader' ? `Leader invite for the STRY alliance app (single use):\n${joinLink(code)}` : joinMessage(code);
+    try {
+      if (navigator.share) await navigator.share({ title: 'STRY alliance app', text, url: joinLink(code) });
+      else {
+        await navigator.clipboard.writeText(text);
+        toast({ kind: 'ok', text: 'Join link copied — paste it in alliance chat' });
+      }
+    } catch {
+      toast({ kind: 'info', text: joinLink(code) });
+    }
+  };
+
   const createInvite = async () => {
     try {
-      const r = await api.createInvite({ role: inviteRole, uses: inviteRole === 'leader' ? 1 : 50, days: 14 });
+      const r = await api.createInvite({ role: inviteRole, uses: inviteRole === 'leader' ? 1 : 200, days: inviteRole === 'leader' ? 7 : 90 });
       setConfirmInvite(false);
       await load();
-      const text = `Join the STRY alliance app: ${window.location.origin}${window.location.pathname}\nInvite code: ${r.invite.code}`;
-      try {
-        if (navigator.share) await navigator.share({ text });
-        else {
-          await navigator.clipboard.writeText(text);
-          toast({ kind: 'ok', text: `Invite ${r.invite.code} copied` });
-        }
-      } catch {
-        toast({ kind: 'ok', text: `Invite code ${r.invite.code}` });
-      }
+      await shareCode(r.invite.code, r.invite.role);
     } catch (err) {
       toast({ kind: 'error', text: err instanceof Error ? err.message : String(err) });
     }
   };
+
+  const allianceLink = invites.find((i) => i.role === 'member' && i.uses_left > 0 && i.expires_at > new Date().toISOString());
 
   return (
     <>
@@ -80,9 +87,27 @@ export function AccountsScreen() {
       <main className="page">
         {error && <div className="callout danger small">{error}</div>}
 
+        <div className="card raised">
+          <h3>Alliance join link</h3>
+          <p className="muted small">One link for everyone. Members tap it, pick their in-game name, choose a PIN, and they're in. No code to type.</p>
+          {allianceLink ? (
+            <>
+              <div className="mono small wrap" style={{ wordBreak: 'break-all' }}>{joinLink(allianceLink.code)}</div>
+              <div className="small muted">{allianceLink.uses_left} sign-ups left · valid until {new Date(allianceLink.expires_at).toLocaleDateString()}</div>
+              <button type="button" className="btn primary block" onClick={() => void shareCode(allianceLink.code, 'member')}>
+                Share join link
+              </button>
+            </>
+          ) : (
+            <button type="button" className="btn primary block" onClick={() => { setInviteRole('member'); void createInvite(); }}>
+              Create the alliance join link
+            </button>
+          )}
+        </div>
+
         <div className="card">
           <h3>Invite codes</h3>
-          <p className="faint">Share a code with members so they can create an account. Member codes allow 50 sign-ups over 14 days; leader codes are single-use.</p>
+          <p className="faint">Every code doubles as a link. Member links allow 200 sign-ups over 90 days; leader links are single-use and expire in 7 days. Revoke any of them here.</p>
           <div className="segmented" role="tablist" aria-label="Invite role">
             <button type="button" role="tab" aria-selected={inviteRole === 'member'} onClick={() => setInviteRole('member')}>
               Member
@@ -106,19 +131,8 @@ export function AccountsScreen() {
                       <span>expires {new Date(i.expires_at).toLocaleDateString()}</span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className="btn ghost small"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(i.code);
-                        toast({ kind: 'ok', text: 'Code copied' });
-                      } catch {
-                        toast({ kind: 'info', text: i.code });
-                      }
-                    }}
-                  >
-                    Copy
+                  <button type="button" className="btn ghost small" onClick={() => void shareCode(i.code, i.role)}>
+                    Share
                   </button>
                   <button
                     type="button"

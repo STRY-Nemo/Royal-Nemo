@@ -82,7 +82,7 @@ export function SettingsScreen() {
             )}
             {isLeader && (
               <button type="button" className="btn ghost block" onClick={() => router.navigate('/settings/accounts')}>
-                Alliance accounts &amp; invite codes
+                Alliance accounts &amp; join link
               </button>
             )}
             <div className="card-row">

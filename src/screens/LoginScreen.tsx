@@ -4,15 +4,28 @@ import { normalizeName } from '../engine/organization';
 import { OrbitSpinner, useSingleFlight } from '../motion';
 import { useStore } from '../store/store';
 import { SearchInput } from '../ui/common';
+import { joinCodeFromLocation, suggestUsername } from '../ui/join';
 
 type Tab = 'signin' | 'register';
 
 export function LoginScreen() {
   const { actions, api, loadError } = useStore();
-  const [tab, setTab] = useState<Tab>('signin');
+  const [joinCode] = useState<string | null>(() => joinCodeFromLocation());
+  const [tab, setTab] = useState<Tab>(joinCode ? 'register' : 'signin');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [invite, setInvite] = useState('');
+  const [invite, setInvite] = useState(joinCode ?? '');
+  const [joinStatus, setJoinStatus] = useState<'checking' | 'ok' | 'unknown' | 'used_up' | 'expired' | null>(joinCode ? 'checking' : null);
+  const [usernameTouched, setUsernameTouched] = useState(false);
+  const joining = !!joinCode && joinStatus !== 'unknown' && joinStatus !== 'used_up' && joinStatus !== 'expired';
+
+  useEffect(() => {
+    if (!joinCode || !api) return;
+    api
+      .checkInvite(joinCode)
+      .then((r) => setJoinStatus(r.valid ? 'ok' : (r.reason ?? 'unknown')))
+      .catch(() => setJoinStatus('ok'));
+  }, [joinCode, api]);
   const [memberId, setMemberId] = useState<string | null>(null);
   const [memberQuery, setMemberQuery] = useState('');
   const [roster, setRoster] = useState<{ id: string; username: string }[]>([]);
@@ -35,7 +48,13 @@ export function LoginScreen() {
     setError(null);
     const res = tab === 'signin' ? await actions.signIn(username.trim(), password) : await actions.register({ username: username.trim(), password, invite_code: invite.trim(), member_id: memberId });
     if (!res.ok) setError(res.message);
+    else if (joinCode) window.location.hash = '#/home';
   });
+
+  const pickMember = (m: { id: string; username: string }) => {
+    setMemberId(m.id);
+    if (!usernameTouched || !username.trim()) setUsername(suggestUsername(m.username));
+  };
 
   return (
     <main className="page" style={{ paddingTop: 'calc(var(--space-6) + var(--safe-top))' }}>
@@ -48,7 +67,21 @@ export function LoginScreen() {
 
       {loadError && <div className="callout warn small">Server unreachable: {loadError}</div>}
 
-      <div className="segmented" role="tablist" aria-label="Sign in or create account">
+      {joinCode && joinStatus !== 'ok' && joinStatus !== 'checking' && (
+        <div className="callout danger small" role="alert">
+          {joinStatus === 'expired' ? 'This join link has expired.' : joinStatus === 'used_up' ? 'This join link has been used up.' : 'This join link is not valid.'} Ask a leader for a new one, or sign in if you already have an account.
+        </div>
+      )}
+      {joining && (
+        <div className="callout ok small">
+          <span aria-hidden="true">✓</span>
+          <span>
+            You're invited to the STRY alliance app. Pick your in-game name, choose a PIN, and you're in.
+          </span>
+        </div>
+      )}
+
+      <div className="segmented" role="tablist" aria-label="Sign in or create account" hidden={joining}>
         <button type="button" role="tab" aria-selected={tab === 'signin'} onClick={() => setTab('signin')}>
           Sign in
         </button>
@@ -57,7 +90,7 @@ export function LoginScreen() {
         </button>
       </div>
 
-      {tab === 'signin' && (
+      {tab === 'signin' && !joinCode && (
         <div className="callout small">
           <span aria-hidden="true">ⓘ</span>
           <span>No account yet? Tap <strong>Create account</strong>. The first person to register with the owner setup code becomes the leader; members register with an invite code from a leader.</span>
@@ -71,16 +104,43 @@ export function LoginScreen() {
           void submit();
         }}
       >
+        {joining && tab === 'register' && (
+          <div className="field">
+            <label>1. Who are you in the game?</label>
+            {memberId ? (
+              <button type="button" className="btn ghost block" onClick={() => setMemberId(null)}>
+                {roster.find((m) => m.id === memberId)?.username ?? memberId} · change
+              </button>
+            ) : (
+              <>
+                <SearchInput value={memberQuery} onChange={setMemberQuery} placeholder="Search your in-game name" autoFocus />
+                {memberQuery && (
+                  <div className="list" role="listbox" aria-label="Members">
+                    {filtered.map((m) => (
+                      <button key={m.id} type="button" role="option" aria-selected={false} className="sheet-item" onClick={() => pickMember(m)}>
+                        <div className="grow">
+                          <div className="label">{m.username}</div>
+                        </div>
+                      </button>
+                    ))}
+                    {filtered.length === 0 && <div className="faint">No match. You can skip this and a leader can link you later.</div>}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
         <div className="field">
-          <label htmlFor="login-username">Username</label>
-          <input id="login-username" className="input" autoComplete="username" autoCapitalize="none" value={username} onChange={(e) => setUsername(e.target.value)} required />
+          <label htmlFor="login-username">{joining && tab === 'register' ? '2. Username' : 'Username'}</label>
+          <input id="login-username" className="input" autoComplete="username" autoCapitalize="none" value={username} onChange={(e) => { setUsername(e.target.value); setUsernameTouched(true); }} required />
+          {joining && tab === 'register' && <p className="faint">Suggested from your in-game name; change it if you like. You'll use it to sign in.</p>}
         </div>
         <div className="field">
-          <label htmlFor="login-password">Password</label>
+          <label htmlFor="login-password">{joining && tab === 'register' ? '3. PIN or password' : 'Password'}</label>
           <input id="login-password" className="input" type="password" autoComplete={tab === 'signin' ? 'current-password' : 'new-password'} value={password} onChange={(e) => setPassword(e.target.value)} required minLength={tab === 'register' ? 4 : undefined} />
           {tab === 'register' && <p className="faint">At least 4 characters; a 4-digit PIN is fine.</p>}
         </div>
-        {tab === 'register' && (
+        {tab === 'register' && !joining && (
           <>
             <div className="field">
               <label htmlFor="login-invite">Invite code</label>
@@ -120,8 +180,18 @@ export function LoginScreen() {
           </div>
         )}
         <button type="submit" className="btn primary block" disabled={busy}>
-          {busy ? <OrbitSpinner label="Signing in" /> : tab === 'signin' ? 'Sign in' : 'Create account'}
+          {busy ? <OrbitSpinner label="Signing in" /> : tab === 'signin' ? 'Sign in' : joining ? 'Join the alliance' : 'Create account'}
         </button>
+        {joining && tab === 'register' && (
+          <button type="button" className="link-btn" onClick={() => setTab('signin')}>
+            Already have an account? Sign in
+          </button>
+        )}
+        {joining && tab === 'signin' && (
+          <button type="button" className="link-btn" onClick={() => setTab('register')}>
+            New here? Join with your invite
+          </button>
+        )}
       </form>
       <p className="faint" style={{ textAlign: 'center' }}>
         Shared alliance data. Sessions stay signed in on this device for 90 days.

@@ -134,7 +134,7 @@ router.post('/auth/register', async (ctx) => {
 
   let role: 'leader' | 'member' = 'member';
   let verified = false;
-  const invite = await ctx.env.DB.prepare('SELECT * FROM invites WHERE code = ?').bind(inviteCode).first<{ code: string; role: 'leader' | 'member'; uses_left: number; expires_at: string }>();
+  const invite = await ctx.env.DB.prepare('SELECT * FROM invites WHERE code = ?').bind(inviteCode.toUpperCase()).first<{ code: string; role: 'leader' | 'member'; uses_left: number; expires_at: string }>();
   if (invite && invite.uses_left > 0 && invite.expires_at > ctx.now.toISOString()) {
     role = invite.role;
     await ctx.env.DB.prepare('UPDATE invites SET uses_left = uses_left - 1 WHERE code = ? AND uses_left > 0').bind(invite.code).run();
@@ -596,6 +596,16 @@ router.post('/invites', async (ctx) => {
   const expires = new Date(ctx.now.getTime() + days * 86_400_000).toISOString();
   await ctx.env.DB.prepare('INSERT INTO invites (code, role, created_by, uses_left, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(code, role, leader.id, uses, expires, ctx.now.toISOString()).run();
   return { invite: { code, role, uses_left: uses, expires_at: expires } };
+});
+
+/** Public: tells a join link whether its code still works, without revealing anything else. */
+router.get('/invites/:code/check', async (ctx) => {
+  const code = ctx.params.code.trim().toUpperCase();
+  const invite = await ctx.env.DB.prepare('SELECT role, uses_left, expires_at FROM invites WHERE code = ?').bind(code).first<{ role: 'leader' | 'member'; uses_left: number; expires_at: string }>();
+  if (!invite) return { valid: false, reason: 'unknown' };
+  if (invite.uses_left <= 0) return { valid: false, reason: 'used_up' };
+  if (invite.expires_at <= ctx.now.toISOString()) return { valid: false, reason: 'expired' };
+  return { valid: true, role: invite.role, uses_left: invite.uses_left, expires_at: invite.expires_at };
 });
 
 router.delete('/invites/:code', async (ctx) => {

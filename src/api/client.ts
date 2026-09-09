@@ -227,6 +227,9 @@ export class ApiClient {
   invites() {
     return this.request<{ invites: Invite[] }>('GET', '/invites');
   }
+  checkInvite(code: string) {
+    return this.request<{ valid: boolean; reason?: 'unknown' | 'used_up' | 'expired'; role?: 'leader' | 'member'; uses_left?: number; expires_at?: string }>('GET', `/invites/${encodeURIComponent(code)}/check`);
+  }
   createInvite(input: { role: 'leader' | 'member'; uses?: number; days?: number }) {
     return this.request<{ invite: Invite }>('POST', '/invites', input);
   }

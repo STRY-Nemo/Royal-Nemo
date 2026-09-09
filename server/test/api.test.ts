@@ -261,6 +261,20 @@ describe('STRY API', () => {
     expect((await api('POST', '/organization/tasks', { op: 'rename', id: 'x', title: 'y' }, lowToken)).status).toBe(403);
   });
 
+  it('checks join links publicly and accepts codes in any case', async () => {
+    const inv = await api<{ invite: { code: string } }>('POST', '/invites', { role: 'member', uses: 2, days: 3 }, leaderToken);
+    const ok = await api<{ valid: boolean; role: string; uses_left: number }>('GET', `/invites/${inv.body.invite.code.toLowerCase()}/check`);
+    expect(ok.status).toBe(200);
+    expect(ok.body).toMatchObject({ valid: true, role: 'member', uses_left: 2 });
+    expect((await api<{ valid: boolean; reason: string }>('GET', '/invites/NOPE1234/check')).body).toEqual({ valid: false, reason: 'unknown' });
+    const reg = await api<{ account: { role: string } }>('POST', '/auth/register', { username: 'joiner', password: '2468', invite_code: inv.body.invite.code.toLowerCase() });
+    expect(reg.status).toBe(200);
+    expect(reg.body.account.role).toBe('member');
+    expect((await api<{ uses_left: number }>('GET', `/invites/${inv.body.invite.code}/check`)).body.uses_left).toBe(1);
+    await api('DELETE', `/invites/${inv.body.invite.code}`, undefined, leaderToken);
+    expect((await api<{ valid: boolean }>('GET', `/invites/${inv.body.invite.code}/check`)).body.valid).toBe(false);
+  });
+
   it('feeds the shared bear with a per-person cooldown', async () => {
     const st = await api<{ mascot: { feeds: number; revision: number } }>('GET', '/state', undefined, memberToken);
     expect(st.body.mascot.feeds).toBe(0);
@@ -299,7 +313,7 @@ describe('STRY API', () => {
 
   it('manages accounts: last leader cannot demote themselves; disabled accounts lose sessions', async () => {
     const list = await api<{ accounts: { id: string; username: string }[] }>('GET', '/accounts', undefined, leaderToken);
-    expect(list.body.accounts.map((a) => a.username).sort()).toEqual(['appins', 'lowrank', 'ryan']);
+    expect(list.body.accounts.map((a) => a.username).sort()).toEqual(['appins', 'joiner', 'lowrank', 'ryan']);
     const me = list.body.accounts.find((a) => a.username === 'ryan')!;
     const appins = list.body.accounts.find((a) => a.username === 'appins')!;
     expect((await api('POST', `/accounts/${me.id}`, { role: 'member' }, leaderToken)).status).toBe(422);

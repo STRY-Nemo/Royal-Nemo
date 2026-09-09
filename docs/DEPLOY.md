@@ -43,7 +43,7 @@ Open the app (https://ryanrhernandez-design.github.io/Royal-Nemo/), tap **Create
 If the code is refused: the Worker only receives the secret when the **Deploy API to Cloudflare** workflow runs, so after changing `OWNER_SETUP_CODE` in GitHub re-run that workflow (Actions → Deploy API to Cloudflare → Run workflow). The comparison ignores capitalisation and surrounding spaces.
 
 ### 7. Invite the alliance
-**Settings → Alliance accounts & invite codes → Create member invite**, then share the code and the app link (the app offers the share sheet). Members create their own accounts, pick their in-game name, and set their availability. Leaders can verify the link, change roles, or disable accounts from the same screen.
+**Settings → Alliance accounts & join link → Create the alliance join link**, then **Share join link** (the phone's share sheet opens with a ready-made message). One link serves everyone: it opens the app on a join form where a member picks their in-game name, gets a suggested username, chooses a PIN and taps **Join the alliance**. The link allows 200 sign-ups over 90 days; every invite code doubles as a link (`…/#/join/CODE`) and can be revoked from the same screen. Leaders can verify member links, change roles, or disable accounts there too.
 
 ## Everyday operation
 
