@@ -4,6 +4,14 @@ Mobile-only organizer for the STRY alliance in Last Z. The first working feature
 
 The build follows the handoff package in `docs/spec/` (PRODUCT_SPEC, DESIGN, ORGANIZATION, MOTION_AND_QOL). See `PROGRESS.md` for milestone status and what another agent should pick up next.
 
+## Hosted demo
+
+The app is published to GitHub Pages by `.github/workflows/deploy-pages.yml` on every push to `main` or the app branch:
+
+**https://ryanrhernandez-design.github.io/Royal-Nemo/**
+
+Open it on a phone and use "Add to Home Screen" for an app-like icon. Because this build stores data only in each phone's browser, every person sees their own private copy; shared alliance data arrives with milestone 4.
+
 ## Quick start
 
 ```bash

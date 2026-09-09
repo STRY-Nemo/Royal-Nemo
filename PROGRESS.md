@@ -11,11 +11,16 @@ Short handoff so another coding agent can resume without the original conversati
 | 3. Publish/revisions, attendance, finalization, history, next-week rotation | **Done** | End-to-end verified in tests and a Playwright phone walkthrough |
 | 4. Authenticated shared DB, server authorization, concurrency, deployment, backup/export, phone QA | **Not started** | See "Next steps" |
 
+## Hosting
+
+GitHub Pages, deployed by Actions from `main` and `claude/alliance-app-last-z-f572n4`: https://ryanrhernandez-design.github.io/Royal-Nemo/. The workflow also runs typecheck, tests and build on pull requests. `BASE_PATH` sets the Vite base for the repository sub-path. Note: this repository's Pages site previously served a game from the `claude/game-copy-vibe-65sbfz` branch; that deployment is replaced by the alliance app. Re-running that branch's workflow would swap it back.
+
 ## Commits
 
 1. `Scaffold STRY alliance app with domain model, rotation engine and tests`
 2. `Add mobile app shell, Canyon Clash flows, Organize page and motion system`
-3. Docs + progress file (this commit)
+3. Docs + progress file
+4. `Deploy to GitHub Pages and add a web-app manifest`
 
 ## How to resume
 
