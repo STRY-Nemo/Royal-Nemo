@@ -281,7 +281,7 @@ describe('STRY API', () => {
 
   it('manages accounts: last leader cannot demote themselves; disabled accounts lose sessions', async () => {
     const list = await api<{ accounts: { id: string; username: string }[] }>('GET', '/accounts', undefined, leaderToken);
-    expect(list.body.accounts.map((a) => a.username).sort()).toEqual(['appins', 'ryan']);
+    expect(list.body.accounts.map((a) => a.username).sort()).toEqual(['appins', 'lowrank', 'ryan']);
     const me = list.body.accounts.find((a) => a.username === 'ryan')!;
     const appins = list.body.accounts.find((a) => a.username === 'appins')!;
     expect((await api('POST', `/accounts/${me.id}`, { role: 'member' }, leaderToken)).status).toBe(422);
