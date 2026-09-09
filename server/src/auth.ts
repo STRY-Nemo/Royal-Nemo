@@ -2,7 +2,8 @@ import type { Account, Env, Role } from './env';
 import { HttpError } from './env';
 
 const SESSION_DAYS = 90;
-const PBKDF2_ITERATIONS = 120_000;
+// Cloudflare Workers on the Free plan cap PBKDF2 at 100,000 iterations; more makes deriveBits throw.
+const PBKDF2_ITERATIONS = 100_000;
 
 function toBase64Url(bytes: ArrayBuffer | Uint8Array): string {
   const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);

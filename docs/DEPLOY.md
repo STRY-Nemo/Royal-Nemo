@@ -54,7 +54,7 @@ If the code is refused: the Worker only receives the secret when the **Deploy AP
 
 ## Security notes
 
-- Passwords are hashed with PBKDF2 (120k iterations) in the Worker; sessions are random bearer tokens stored hashed, valid 90 days, revoked on sign-out or when an account is disabled.
+- Passwords are hashed with PBKDF2 (100k iterations, the Workers Free plan limit) in the Worker; sessions are random bearer tokens stored hashed, valid 90 days, revoked on sign-out or when an account is disabled.
 - Every write is checked server-side: role, ownership (members only edit their own availability and confirmation), capacity, uniqueness, availability, and the event or board revision. Two leaders editing the same revision get a "reload to compare" error instead of silently overwriting each other.
 - Leader-only mechanical notes and the audit trail are never sent to member accounts.
 - Browser origins allowed to call the API default to the GitHub Pages origin and localhost; add more via the repository variable `EXTRA_ALLOWED_ORIGINS` (comma-separated).

@@ -92,7 +92,16 @@ function expected(body: Record<string, unknown>): number | undefined {
 }
 
 // ---- Health -------------------------------------------------------------------
-router.get('/health', async () => ({ ok: true, service: 'stry-alliance-api' }));
+router.get('/health', async () => {
+  // Exercise password hashing so a runtime limit (e.g. PBKDF2 iterations) shows up here, not at sign-up.
+  let crypto_ok = true;
+  try {
+    await hashPassword('health-probe');
+  } catch {
+    crypto_ok = false;
+  }
+  return { ok: crypto_ok, service: 'stry-alliance-api', crypto_ok };
+});
 
 // ---- Auth ---------------------------------------------------------------------
 router.post('/auth/register', async (ctx) => {

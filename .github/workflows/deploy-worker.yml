@@ -95,6 +95,17 @@ jobs:
         if: steps.check.outputs.configured == 'true' && env.OWNER_SETUP_CODE != ''
         working-directory: server
         run: printf '%s' "$OWNER_SETUP_CODE" | npx wrangler secret put OWNER_SETUP_CODE
+      - name: Verify the deployed API (health, password hashing, sign-up validation)
+        if: steps.check.outputs.configured == 'true'
+        run: |
+          url="${{ steps.deploy.outputs.url }}"
+          sleep 5
+          health=$(curl -sS "$url/health")
+          echo "health: $health"
+          echo "$health" | grep -q '"crypto_ok":true' || { echo "::error::Password hashing fails on the deployed Worker (see /health)."; exit 1; }
+          code=$(curl -sS -o reg.json -w '%{http_code}' -X POST "$url/auth/register" -H 'content-type: application/json' -d '{"username":"probe","password":"1234","invite_code":"not-a-real-code"}')
+          echo "register probe: $code $(cat reg.json)"
+          test "$code" = "403" || { echo "::error::Unexpected response from /auth/register (expected 403 for a bad invite)."; exit 1; }
       - name: Check that the site build points at this API
         if: steps.check.outputs.configured == 'true'
         run: |
