@@ -99,10 +99,14 @@ jobs:
         if: steps.check.outputs.configured == 'true'
         run: |
           url="${{ steps.deploy.outputs.url }}"
-          sleep 5
-          health=$(curl -sS "$url/health")
-          echo "health: $health"
-          echo "$health" | grep -q '"crypto_ok":true' || { echo "::error::Password hashing fails on the deployed Worker (see /health)."; exit 1; }
+          # The new version takes a few seconds to propagate; wait until /health comes from a build that reports crypto_ok.
+          for i in $(seq 1 24); do
+            health=$(curl -sS "$url/health" || true)
+            echo "health ($i): $health"
+            if echo "$health" | grep -q '"crypto_ok"'; then break; fi
+            sleep 5
+          done
+          echo "$health" | grep -q '"crypto_ok":true' || { echo "::error::Password hashing fails (or the new version did not propagate) on the deployed Worker; see /health above."; exit 1; }
           code=$(curl -sS -o reg.json -w '%{http_code}' -X POST "$url/auth/register" -H 'content-type: application/json' -d '{"username":"probe","password":"1234","invite_code":"not-a-real-code"}')
           echo "register probe: $code $(cat reg.json)"
           test "$code" = "403" || { echo "::error::Unexpected response from /auth/register (expected 403 for a bad invite)."; exit 1; }
