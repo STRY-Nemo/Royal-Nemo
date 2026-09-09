@@ -1,3 +1,4 @@
+import { roamingBearEnabled, setRoamingBearEnabled } from '../ui/RoamingBear';
 import { useState } from 'react';
 import type { MotionPreference } from '../domain/types';
 import { COMMON_TIME_ZONES, deviceTimeZone, isValidTimeZone, timeZoneLabel } from '../engine/recurrence';
@@ -11,6 +12,7 @@ export function SettingsScreen() {
   const router = useRouter();
   const { toast } = useFeedback();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [roaming, setRoaming] = useState(roamingBearEnabled);
   const [resetOpen, setResetOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -169,6 +171,13 @@ export function SettingsScreen() {
           <label className="card-row" style={{ minHeight: 44 }}>
             <input type="checkbox" checked={state.settings.haptics} onChange={(e) => actions.updateSettings({ haptics: e.target.checked })} style={{ width: 22, height: 22 }} />
             <span>Haptic feedback where supported</span>
+          </label>
+          <label className="card-row" style={{ minHeight: 44 }}>
+            <input type="checkbox" checked={roaming} onChange={(e) => { setRoamingBearEnabled(e.target.checked); setRoaming(e.target.checked); }} style={{ width: 22, height: 22 }} />
+            <span>
+              Roaming bear
+              <span className="faint" style={{ display: 'block' }}>The STRY Bear wanders along the bottom of every screen. Tap it to feed.</span>
+            </span>
           </label>
         </div>
 

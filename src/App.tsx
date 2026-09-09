@@ -23,6 +23,7 @@ import { ImportScreen } from './screens/ImportScreen';
 import { CollectScreen } from './screens/CollectScreen';
 import { BearScreen } from './screens/BearScreen';
 import { Starfield } from './ui/Starfield';
+import { RoamingBear } from './ui/RoamingBear';
 
 function MotionSync() {
   const { state } = useStore();
@@ -78,6 +79,7 @@ function Gate() {
   return (
     <>
       <Routes />
+      <RoamingBear />
       <TabBar />
     </>
   );
