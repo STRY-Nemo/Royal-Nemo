@@ -1,0 +1,126 @@
+name: Deploy API to Cloudflare
+
+# Deploys the shared alliance API (server/) to Cloudflare Workers + D1.
+# Does nothing until the repository secrets CLOUDFLARE_API_TOKEN and
+# CLOUDFLARE_ACCOUNT_ID exist (see docs/DEPLOY.md). After a successful deploy
+# it checks that .env.production points the site at the deployed Worker URL.
+
+on:
+  push:
+    branches: [main, claude/alliance-app-last-z-f572n4]
+    paths:
+      - 'server/**'
+      - 'src/engine/**'
+      - 'src/domain/**'
+      - 'src/data/**'
+      - '.github/workflows/deploy-worker.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: worker-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      OWNER_SETUP_CODE: ${{ secrets.OWNER_SETUP_CODE }}
+      SUGGESTIONS_SYNC_TOKEN: ${{ secrets.SUGGESTIONS_SYNC_TOKEN }}
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - name: Check Cloudflare secrets
+        id: check
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set; skipping API deploy. See docs/DEPLOY.md."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.configured == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.configured == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        if: steps.check.outputs.configured == 'true'
+      - name: Typecheck and test the API
+        if: steps.check.outputs.configured == 'true'
+        run: npm run typecheck && npm run test:server
+      - name: Show which Cloudflare account the token belongs to
+        if: steps.check.outputs.configured == 'true'
+        working-directory: server
+        run: npx wrangler whoami
+      - name: Ensure the D1 database exists
+        if: steps.check.outputs.configured == 'true'
+        working-directory: server
+        run: |
+          id=$(npx wrangler d1 list --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const l=JSON.parse(s);const d=l.find(x=>x.name==='stry-alliance');console.log(d?d.uuid:'')})")
+          if [ -z "$id" ]; then
+            echo "Creating D1 database stry-alliance"
+            if ! npx wrangler d1 create stry-alliance; then
+              echo "::error::Cloudflare refused to create the D1 database. The API token needs the permission Account → D1 → Edit. Edit the token at https://dash.cloudflare.com/profile/api-tokens (Edit → add permission → Continue to summary → Save); the token value stays the same so the GitHub secret does not need updating."
+              exit 1
+            fi
+            id=$(npx wrangler d1 list --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const l=JSON.parse(s);const d=l.find(x=>x.name==='stry-alliance');console.log(d?d.uuid:'')})")
+          fi
+          test -n "$id"
+          sed -i "s/replace-with-your-d1-database-id/$id/" wrangler.toml
+          echo "D1 database id: $id"
+      - name: Apply migrations
+        if: steps.check.outputs.configured == 'true'
+        working-directory: server
+        run: npx wrangler d1 migrations apply stry-alliance --remote
+      - name: Deploy the Worker
+        if: steps.check.outputs.configured == 'true'
+        id: deploy
+        working-directory: server
+        run: |
+          origins="https://${{ github.repository_owner }}.github.io,https://stry-nemo.github.io,http://localhost:5173"
+          if [ -n "${{ vars.EXTRA_ALLOWED_ORIGINS }}" ]; then origins="$origins,${{ vars.EXTRA_ALLOWED_ORIGINS }}"; fi
+          if ! npx wrangler deploy --var "ALLOWED_ORIGINS:$origins" | tee deploy.log; then
+            echo "::error::Cloudflare refused to upload the Worker. The API token also needs Account → Workers Scripts → Edit (the 'Edit Cloudflare Workers' template includes it). Edit the token under Manage Account → Account API Tokens, add that permission, Continue to summary → Save, then re-run this workflow."
+            exit 1
+          fi
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -1)
+          test -n "$url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Set the owner setup code secret
+        if: steps.check.outputs.configured == 'true' && env.OWNER_SETUP_CODE != ''
+        working-directory: server
+        run: printf '%s' "$OWNER_SETUP_CODE" | npx wrangler secret put OWNER_SETUP_CODE
+      - name: Verify the deployed API (health, password hashing, sign-up validation)
+        if: steps.check.outputs.configured == 'true'
+        run: |
+          url="${{ steps.deploy.outputs.url }}"
+          # The new version takes a few seconds to propagate; wait until /health comes from a build that reports crypto_ok.
+          for i in $(seq 1 24); do
+            health=$(curl -sS "$url/health" || true)
+            echo "health ($i): $health"
+            if echo "$health" | grep -q '"crypto_ok"'; then break; fi
+            sleep 5
+          done
+          echo "$health" | grep -q '"crypto_ok":true' || { echo "::error::Password hashing fails (or the new version did not propagate) on the deployed Worker; see /health above."; exit 1; }
+          code=$(curl -sS -o reg.json -w '%{http_code}' -X POST "$url/auth/register" -H 'content-type: application/json' -d '{"username":"probe","password":"1234","invite_code":"not-a-real-code"}')
+          echo "register probe: $code $(cat reg.json)"
+          test "$code" = "403" || { echo "::error::Unexpected response from /auth/register (expected 403 for a bad invite)."; exit 1; }
+      - name: Store the suggestions sync token (optional)
+        if: steps.check.outputs.configured == 'true' && env.SUGGESTIONS_SYNC_TOKEN != ''
+        working-directory: server
+        run: printf '%s' "$SUGGESTIONS_SYNC_TOKEN" | npx wrangler secret put SUGGESTIONS_SYNC_TOKEN
+      - name: Check that the site build points at this API
+        if: steps.check.outputs.configured == 'true'
+        run: |
+          url="${{ steps.deploy.outputs.url }}"
+          echo "::notice::API deployed to $url"
+          if ! grep -q "VITE_API_URL=$url" .env.production 2>/dev/null; then
+            echo "::error::.env.production does not contain VITE_API_URL=$url. Commit that line so the GitHub Pages build connects to the API."
+            exit 1
+          fi

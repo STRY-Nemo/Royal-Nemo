@@ -1,0 +1,27 @@
+{
+  "event_type": "canyon_clash",
+  "event_date": "2026-09-11",
+  "timezone": "Etc/GMT+2",
+  "status": "draft",
+  "teams": [
+    {
+      "name": "Team 1",
+      "local_time": "18:00",
+      "capacity": 20
+    },
+    {
+      "name": "Team 2",
+      "local_time": "23:00",
+      "capacity": 20
+    }
+  ],
+  "availability": [],
+  "attendance": [],
+  "assignments": [],
+  "recurrence": {
+    "frequency": "weekly",
+    "weekday": "FRIDAY"
+  },
+  "date_status": "derived_next_friday_from_2026-09-09; confirm in event timezone",
+  "team_time_scope": "18:00 and 23:00 confirmed for this week only; future defaults editable"
+}

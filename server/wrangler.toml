@@ -1,0 +1,14 @@
+name = "stry-alliance-api"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "stry-alliance"
+database_id = "replace-with-your-d1-database-id"
+migrations_dir = "migrations"
+
+[vars]
+# Comma-separated list of allowed browser origins for CORS.
+ALLOWED_ORIGINS = "https://stry-nemo.github.io,https://ryanrhernandez-design.github.io,http://localhost:5173"

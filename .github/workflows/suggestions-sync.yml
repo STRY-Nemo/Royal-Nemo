@@ -1,0 +1,86 @@
+name: Sync ideas to issues
+# Pulls member suggestions from the alliance API and mirrors each new one as a
+# GitHub issue labelled "idea", plus a rolling "Ideas digest" issue with the
+# top-voted list. An agent (Claude Code on this repository) can then read,
+# analyse and act on them like any other issue.
+#
+# Needs the repository secret SUGGESTIONS_SYNC_TOKEN (any long random string).
+# The workflow copies it onto the Worker itself the first time it runs (using the
+# same Cloudflare secrets as the API deploy), so adding the secret is the only step.
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check configuration
+        id: check
+        run: |
+          if [ -z "${{ secrets.SUGGESTIONS_SYNC_TOKEN }}" ]; then
+            echo "::notice::SUGGESTIONS_SYNC_TOKEN is not set; add it as a repository secret (any long random string) and run this workflow again."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Make sure the API accepts the token (copies it onto the Worker if needed)
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SYNC_TOKEN: ${{ secrets.SUGGESTIONS_SYNC_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          api=$(grep -oE 'VITE_API_URL=\S+' .env.production | cut -d= -f2)
+          if curl -sf -o /dev/null -H "x-sync-token: $SYNC_TOKEN" "$api/suggestions/export"; then
+            echo "API already accepts the token."; exit 0
+          fi
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::The API rejected the token and the Cloudflare secrets are missing, so it cannot be stored. See docs/DEPLOY.md."; exit 1
+          fi
+          echo "Storing SUGGESTIONS_SYNC_TOKEN on the Worker…"
+          npm ci --ignore-scripts >/dev/null
+          (cd server && printf '%s' "$SYNC_TOKEN" | npx wrangler secret put SUGGESTIONS_SYNC_TOKEN)
+          for i in $(seq 1 12); do
+            sleep 5
+            if curl -sf -o /dev/null -H "x-sync-token: $SYNC_TOKEN" "$api/suggestions/export"; then echo "API accepts the token now."; exit 0; fi
+          done
+          echo "::error::The API still rejects the token after storing it."; exit 1
+      - name: Fetch and mirror ideas
+        if: steps.check.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SYNC_TOKEN: ${{ secrets.SUGGESTIONS_SYNC_TOKEN }}
+        run: |
+          api=$(grep -oE 'VITE_API_URL=\S+' .env.production | cut -d= -f2)
+          curl -sSf -H "x-sync-token: $SYNC_TOKEN" "$api/suggestions/export" > ideas.json
+          gh label create idea --color 168cff --description "Member suggestion from the app" 2>/dev/null || true
+          existing=$(gh issue list --label idea --state all --limit 500 --json body --jq '.[].body' | grep -oE 'suggestion:[A-Za-z0-9_-]+' | sort -u)
+          created=0
+          for row in $(jq -r '.suggestions[] | @base64' ideas.json); do
+            s=$(echo "$row" | base64 -d)
+            id=$(echo "$s" | jq -r .id)
+            if echo "$existing" | grep -q "suggestion:$id"; then continue; fi
+            title=$(echo "$s" | jq -r .title)
+            author=$(echo "$s" | jq -r .author_name)
+            body=$(echo "$s" | jq -r .body)
+            votes=$(echo "$s" | jq -r '.votes | length')
+            created_at=$(echo "$s" | jq -r .created_at)
+            printf '%s\n\n---\nBy **%s** on %s · %s vote(s) at sync time.\n\n<!-- suggestion:%s -->\n' "$body" "$author" "$created_at" "$votes" "$id" > body.md
+            gh issue create --title "Idea: $title" --label idea --body-file body.md >/dev/null
+            created=$((created + 1))
+          done
+          echo "::notice::Created $created new idea issue(s)."
+          # Rolling digest: top-voted open ideas.
+          jq -r '.suggestions | map(select(.status == "new" or .status == "planned")) | sort_by(-(.votes | length)) | .[:15][] | "- (\(.votes | length) votes, \(.status)) **\(.title)** — \(.author_name)"' ideas.json > digest.md
+          total=$(jq '.suggestions | length' ideas.json)
+          printf '\n\n_%s ideas in total. Updated %s._\n<!-- ideas-digest -->\n' "$total" "$(date -u +%Y-%m-%dT%H:%MZ)" >> digest.md
+          digest=$(gh issue list --label idea --state open --search "Ideas digest in:title" --json number --jq '.[0].number')
+          if [ -n "$digest" ]; then gh issue edit "$digest" --body-file digest.md >/dev/null; else gh issue create --title "Ideas digest (top-voted, auto-updated)" --label idea --body-file digest.md >/dev/null; fi
