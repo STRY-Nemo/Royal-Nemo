@@ -16,6 +16,7 @@ export function LoginScreen() {
   const [password, setPassword] = useState('');
   const [invite, setInvite] = useState(joinCode ?? '');
   const [joinStatus, setJoinStatus] = useState<'checking' | 'ok' | 'unknown' | 'used_up' | 'expired' | null>(joinCode ? 'checking' : null);
+  const [joinRole, setJoinRole] = useState<'leader' | 'member'>('member');
   const [usernameTouched, setUsernameTouched] = useState(false);
   const joining = !!joinCode && joinStatus !== 'unknown' && joinStatus !== 'used_up' && joinStatus !== 'expired';
 
@@ -23,7 +24,10 @@ export function LoginScreen() {
     if (!joinCode || !api) return;
     api
       .checkInvite(joinCode)
-      .then((r) => setJoinStatus(r.valid ? 'ok' : (r.reason ?? 'unknown')))
+      .then((r) => {
+        setJoinStatus(r.valid ? 'ok' : (r.reason ?? 'unknown'));
+        if (r.role) setJoinRole(r.role);
+      })
       .catch(() => setJoinStatus('ok'));
   }, [joinCode, api]);
   const [memberId, setMemberId] = useState<string | null>(null);
@@ -76,7 +80,7 @@ export function LoginScreen() {
         <div className="callout ok small">
           <span aria-hidden="true">✓</span>
           <span>
-            You're invited to the STRY alliance app. Pick your in-game name, choose a PIN, and you're in.
+            {joinRole === 'leader' ? "You're invited as a leader of the STRY alliance app. Pick your in-game name, choose a PIN, and your leader account is ready." : "You're invited to the STRY alliance app. Pick your in-game name, choose a PIN, and you're in."}
           </span>
         </div>
       )}
