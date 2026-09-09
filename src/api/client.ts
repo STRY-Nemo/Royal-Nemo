@@ -4,7 +4,7 @@
  */
 import type { MoveTarget } from '../engine/lifecycle';
 import type { LineupRecord } from '../engine/lineupImport';
-import type { AttendanceOutcome, AvailabilityChoice, CanyonEvent, Member, MemberId, OrganizationState, Settings, SlotPriorities, TeamId } from '../domain/types';
+import type { AttendanceOutcome, AvailabilityChoice, CanyonEvent, MascotState, Member, MemberId, OrganizationState, Settings, SlotPriorities, TeamId } from '../domain/types';
 import type { SlotEdit } from '../engine/organization';
 
 export const TOKEN_KEY = 'stry-api-token';
@@ -25,6 +25,7 @@ export interface ApiState {
   organization: OrganizationState;
   settings: Settings;
   audit: import('../domain/types').AuditEntry[];
+  mascot?: MascotState;
   account: ApiAccount;
   server_time: string;
 }
@@ -183,6 +184,9 @@ export class ApiClient {
   }
   schedule(eventId: string, patch: Record<string, unknown>) {
     return this.ev(eventId, 'schedule', patch);
+  }
+  feedBear() {
+    return this.request<{ mascot: MascotState; stage: { n: number; name: string }; evolved: boolean }>('POST', '/mascot/feed');
   }
   nextWeek() {
     return this.request<{ event: CanyonEvent; created: boolean }>('POST', '/events/next-week');

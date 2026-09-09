@@ -1,4 +1,5 @@
-import type { AuditEntry, CanyonEvent, Member, OrganizationState, Settings } from '../../src/domain/types';
+import { initialMascot } from '../../src/engine/mascot';
+import type { AuditEntry, CanyonEvent, MascotState, Member, OrganizationState, Settings } from '../../src/domain/types';
 import { loadSeedMembers, loadSeedOrganization, PACKAGE_DATE, SERIES_ID } from '../../src/data/seed';
 import { createDraftEvent } from '../../src/engine/lifecycle';
 import { APOCALYPSE_TIME_ZONE, nextFriday, todayInZone } from '../../src/engine/recurrence';
@@ -109,6 +110,18 @@ export async function saveDocumentCas<T>(env: Env, key: string, previousRevision
 export async function loadOrganization(env: Env): Promise<OrganizationState> {
   const { doc } = await loadDocument<OrganizationState>(env, 'organization');
   return doc;
+}
+
+/** The shared bear. Created on first read so databases seeded before the mascot existed get one. */
+export async function loadMascot(env: Env, now: Date): Promise<{ doc: MascotState; revision: number }> {
+  try {
+    return await loadDocument<MascotState>(env, 'mascot');
+  } catch (err) {
+    if (!(err instanceof HttpError) || err.status !== 404) throw err;
+    const doc = initialMascot(now.toISOString());
+    await env.DB.prepare('INSERT OR IGNORE INTO documents (key, revision, doc, updated_at) VALUES (?, ?, ?, ?)').bind('mascot', doc.revision, JSON.stringify(doc), now.toISOString()).run();
+    return loadDocument<MascotState>(env, 'mascot');
+  }
 }
 
 export async function loadSettings(env: Env): Promise<Settings> {

@@ -173,6 +173,26 @@ export interface OrganizationState {
   revision: number;
 }
 
+/** Alliance mascot progress, shared by everyone. */
+export interface MascotFeeder {
+  name: string;
+  count: number;
+  last_at: string;
+  /** UTC day (YYYY-MM-DD) of `day_count`. */
+  day: string;
+  day_count: number;
+}
+
+export interface MascotState {
+  feeds: number;
+  /** Keyed by account id (connected) or member id / 'demo' (demo mode). */
+  feeders: Record<string, MascotFeeder>;
+  last_feed_at: string | null;
+  last_feeder_name: string | null;
+  created_at: string;
+  revision: number;
+}
+
 export type MotionPreference = 'system' | 'full' | 'reduced' | 'off';
 
 export interface Settings {

@@ -21,6 +21,8 @@ import { LoginScreen } from './screens/LoginScreen';
 import { AccountsScreen } from './screens/AccountsScreen';
 import { ImportScreen } from './screens/ImportScreen';
 import { CollectScreen } from './screens/CollectScreen';
+import { BearScreen } from './screens/BearScreen';
+import { Starfield } from './ui/Starfield';
 
 function MotionSync() {
   const { state } = useStore();
@@ -48,6 +50,8 @@ function Routes() {
     case 'members':
       if (second) return <MemberDetailScreen memberId={second} />;
       return <MembersScreen />;
+    case 'bear':
+      return <BearScreen />;
     case 'settings':
       if (second === 'accounts') return <AccountsScreen />;
       return <SettingsScreen />;
@@ -86,6 +90,7 @@ export function App() {
         <UiStateProvider>
           <RouterProvider>
             <MotionSync />
+            <Starfield />
             <div className="app">
               <Gate />
             </div>

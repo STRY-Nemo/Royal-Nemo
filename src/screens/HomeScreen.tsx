@@ -5,6 +5,7 @@ import { DemoBanner, EmptyState, EventTimes, Header, StatusBadge } from '../ui/c
 import { ChevronRight } from '../ui/icons';
 import { starters } from '../engine/lifecycle';
 import { describeAvailability } from '../engine/suggest';
+import { BearFeeder } from '../ui/Bear';
 
 function weekLabel(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
@@ -32,6 +33,16 @@ export function HomeScreen() {
           <p className="muted small">
             {isLeader ? 'Leader view' : 'Member view'} · {state.members.filter((m) => m.active).length} active members
           </p>
+        </div>
+
+        <div className="card raised">
+          <div className="card-row">
+            <h2 className="grow">STRY Bear</h2>
+            <button type="button" className="link-btn" onClick={() => router.navigate('/bear')}>
+              Open the den →
+            </button>
+          </div>
+          <BearFeeder mascot={state.mascot} size={150} />
         </div>
 
         {event ? (

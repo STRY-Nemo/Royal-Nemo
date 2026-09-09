@@ -261,6 +261,24 @@ describe('STRY API', () => {
     expect((await api('POST', '/organization/tasks', { op: 'rename', id: 'x', title: 'y' }, lowToken)).status).toBe(403);
   });
 
+  it('feeds the shared bear with a per-person cooldown', async () => {
+    const st = await api<{ mascot: { feeds: number; revision: number } }>('GET', '/state', undefined, memberToken);
+    expect(st.body.mascot.feeds).toBe(0);
+    const first = await api<{ mascot: { feeds: number; last_feeder_name: string }; stage: { n: number }; evolved: boolean }>('POST', '/mascot/feed', undefined, memberToken);
+    expect(first.status).toBe(200);
+    expect(first.body.mascot.feeds).toBe(1);
+    expect(first.body.mascot.last_feeder_name).toBe('Appins');
+    expect(first.body.stage.n).toBe(1);
+    const again = await api('POST', '/mascot/feed', undefined, memberToken);
+    expect(again.status).toBe(429);
+    expect(again.body.error).toBe('cooldown');
+    // Another person is not blocked by my cooldown.
+    const other = await api<{ mascot: { feeds: number } }>('POST', '/mascot/feed', undefined, leaderToken);
+    expect(other.status).toBe(200);
+    expect(other.body.mascot.feeds).toBe(2);
+    expect((await api('POST', '/mascot/feed')).status).toBe(401);
+  });
+
   it('edits organization slots atomically with revision checks and undo inverses', async () => {
     const state = await api<{ organization: { revision: number; responsibilities: { id: string; slots: { position: number; source_name: string | null }[] }[] } }>('GET', '/state', undefined, leaderToken);
     const org = state.body.organization;

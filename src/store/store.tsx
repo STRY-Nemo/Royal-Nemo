@@ -13,11 +13,12 @@
  */
 import { applyLineupImport, type LineupRecord } from '../engine/lineupImport';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { Assignment, AttendanceOutcome, AuditEntry, AvailabilityChoice, CanyonEvent, Member, MemberId, OrganizationState, ResponsibilityId, ResponsibilitySlot, Session, Settings, SlotPriorities, TeamId } from '../domain/types';
+import type { Assignment, AttendanceOutcome, AuditEntry, AvailabilityChoice, CanyonEvent, MascotState, Member, MemberId, OrganizationState, ResponsibilityId, ResponsibilitySlot, Session, Settings, SlotPriorities, TeamId } from '../domain/types';
 import { loadSeedMembers, loadSeedOrganization, PACKAGE_DATE, seedEventDraft, SERIES_ID } from '../data/seed';
 import * as L from '../engine/lifecycle';
 import * as O from '../engine/organization';
 import { computeHistory, type MemberHistory } from '../engine/history';
+import { feedMascot, initialMascot, MascotError } from '../engine/mascot';
 import { APOCALYPSE_TIME_ZONE, deviceTimeZone, nextFriday, todayInZone } from '../engine/recurrence';
 import { useFeedback, type SaveState } from '../motion';
 import { ApiClient, ApiError, apiBaseUrl, type ApiAccount, type ApiState } from '../api/client';
@@ -38,6 +39,7 @@ export interface PersistedState {
   settings: Settings;
   session: Session;
   audit: AuditEntry[];
+  mascot: MascotState;
 }
 
 export type ActionResult = { ok: true } | { ok: false; code: string; message: string };
@@ -57,6 +59,7 @@ function initialDemoState(): PersistedState {
     settings: DEFAULT_SETTINGS,
     session: { role: 'leader', member_id: null },
     audit: [],
+    mascot: initialMascot(new Date().toISOString()),
   };
 }
 
@@ -79,7 +82,7 @@ function writeJson(key: string, value: unknown): void {
 
 function loadDemo(): { state: PersistedState; restored: boolean } {
   const parsed = readJson<PersistedState>(STORAGE_KEY);
-  if (parsed && parsed.version === STATE_VERSION && Array.isArray(parsed.members) && parsed.members.length === 100) return { state: parsed, restored: true };
+  if (parsed && parsed.version === STATE_VERSION && Array.isArray(parsed.members) && parsed.members.length === 100) return { state: { ...parsed, mascot: parsed.mascot ?? initialMascot(new Date().toISOString()) }, restored: true };
   return { state: initialDemoState(), restored: false };
 }
 
@@ -101,6 +104,7 @@ function stateFromApi(api: ApiState, device: DeviceSettings): PersistedState {
     settings: { ...DEFAULT_SETTINGS, ...api.settings, motion: device.motion, haptics: device.haptics },
     session: { role: api.account.role, member_id: api.account.member_id },
     audit: api.audit,
+    mascot: api.mascot ?? initialMascot(api.server_time),
   };
 }
 
@@ -172,6 +176,8 @@ export interface StoreValue {
     reorderTask: (id: ResponsibilityId, direction: -1 | 1) => ActionResult;
     mapName: (sourceName: string, memberId: MemberId | null) => ActionResult;
     setDesignatedEditor: (memberId: MemberId, on: boolean) => ActionResult;
+    /** Feed the alliance bear once. Fails with code 'cooldown' or 'daily_cap'. */
+    feedBear: () => ActionResult & { evolved?: boolean; stage?: { n: number; name: string } };
     setMechanicalNote: (memberId: MemberId, note: string) => ActionResult;
     setMemberActive: (memberId: MemberId, active: boolean) => ActionResult;
     resetDemo: () => void;
@@ -704,6 +710,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       renameTask: (id, title) => runOrg((org) => O.renameTask(org, id, title, ctx(), org.revision), undefined, (a, before) => a.taskOp({ op: 'rename', id, title, expected_revision: before.revision })),
       archiveTask: (id, archived) => runOrg((org) => O.setTaskArchived(org, id, archived, ctx(), org.revision), undefined, (a, before) => a.taskOp({ op: 'archive', id, archived, expected_revision: before.revision })),
       reorderTask: (id, direction) => runOrg((org) => O.reorderTask(org, id, direction, ctx(), org.revision), undefined, (a, before) => a.taskOp({ op: 'reorder', id, direction, expected_revision: before.revision })),
+      feedBear: () => {
+        const s = stateRef.current;
+        const acct = accountRef.current;
+        const key = acct ? acct.id : (s.session.member_id ?? 'demo');
+        const name = (s.session.member_id && s.members.find((m) => m.id === s.session.member_id)?.username) || acct?.username || 'Someone';
+        const before = s.mascot;
+        let res: ReturnType<typeof feedMascot>;
+        try {
+          res = feedMascot(before, key, name, new Date().toISOString());
+        } catch (err) {
+          if (err instanceof MascotError) return { ok: false, code: err.code, message: err.message };
+          return fail(err);
+        }
+        commit((st) => ({ ...st, mascot: res.state }));
+        if (api) {
+          sync(
+            'Feed the bear',
+            () => commit((st) => ({ ...st, mascot: before })),
+            async () => {
+              const r = await api.feedBear();
+              commit((st) => ({ ...st, mascot: r.mascot }));
+            },
+          );
+        }
+        return { ok: true, evolved: res.evolved, stage: res.stage };
+      },
       setDesignatedEditor: (memberId, on) => runOrg((org) => O.setDesignatedEditor(org, memberId, on, ctx(), org.revision), undefined, (a, before) => a.setDesignatedEditor(memberId, on, before.revision)),
       mapName: (sourceName, memberId) => runOrg((org) => O.setNameMapping(org, sourceName, memberId, ctx(), org.revision), undefined, (a, before) => a.mapping(sourceName, memberId, before.revision)),
       setMechanicalNote: (memberId, note) => {

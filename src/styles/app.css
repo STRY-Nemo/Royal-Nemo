@@ -1336,3 +1336,174 @@ p {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---- Celestial flare ---- */
+.starfield {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.app {
+  position: relative;
+  z-index: 1;
+}
+body {
+  background-image: radial-gradient(60% 40% at 50% -10%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 70%);
+  background-repeat: no-repeat;
+}
+.brand img {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--cyan) 60%, transparent));
+  animation: brand-glow 4s ease-in-out infinite;
+}
+@keyframes brand-glow {
+  0%, 100% { filter: drop-shadow(0 0 4px color-mix(in srgb, var(--cyan) 40%, transparent)); }
+  50% { filter: drop-shadow(0 0 10px color-mix(in srgb, var(--cyan) 85%, transparent)); }
+}
+[data-motion='reduced'] .brand img,
+[data-motion='off'] .brand img {
+  animation: none;
+}
+.card.raised {
+  background-image: linear-gradient(180deg, color-mix(in srgb, var(--primary) 10%, transparent), transparent 40%);
+}
+
+/* ---- STRY Bear ---- */
+.bear-feeder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.bear-feeder.compact {
+  flex-direction: row;
+  align-items: center;
+  text-align: left;
+}
+.bear-tap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background:
+    radial-gradient(closest-side, color-mix(in srgb, var(--card) 92%, transparent) 84%, transparent 85%),
+    conic-gradient(var(--primary) var(--ring, 100%), color-mix(in srgb, var(--border) 50%, transparent) 0);
+  transition: transform var(--m-press) var(--ease);
+  overflow: visible;
+}
+.bear-tap:active {
+  transform: scale(0.96);
+}
+.bear-tap.cooling {
+  filter: saturate(0.85);
+}
+.bear-tap.evolving {
+  animation: bear-evolve var(--m-burst) var(--ease-spring);
+  box-shadow: 0 0 40px color-mix(in srgb, var(--cyan) 60%, transparent);
+}
+@keyframes bear-evolve {
+  0% { transform: scale(0.9); filter: brightness(1.6); }
+  60% { transform: scale(1.12); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+.bear-sprite {
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+  transform-origin: 50% 90%;
+}
+.bear-sprite.bounce {
+  animation: bear-bounce 450ms var(--ease-spring);
+}
+.bear-sprite.locked {
+  filter: grayscale(1) brightness(0.5);
+}
+@keyframes bear-bounce {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.12, 0.9) rotate(-3deg); }
+  60% { transform: scale(0.95, 1.08) rotate(2deg); }
+  100% { transform: scale(1); }
+}
+[data-motion='reduced'] .bear-sprite.bounce,
+[data-motion='off'] .bear-sprite.bounce,
+[data-motion='reduced'] .bear-tap.evolving,
+[data-motion='off'] .bear-tap.evolving {
+  animation: none;
+}
+.bear-particle {
+  position: absolute;
+  bottom: 60%;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ok);
+  pointer-events: none;
+  animation: bear-particle 900ms ease-out forwards;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+@keyframes bear-particle {
+  0% { transform: translate(-50%, 0) scale(0.8); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translate(-50%, -70px) scale(1.1); opacity: 0; }
+}
+[data-motion='off'] .bear-particle {
+  animation-duration: 1ms;
+}
+.bear-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  text-align: center;
+  width: 100%;
+}
+.bear-feeder.compact .bear-meta {
+  align-items: flex-start;
+  text-align: left;
+}
+.bear-stage {
+  font-size: 18px;
+}
+.bear-progress {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--border) 50%, transparent);
+  overflow: hidden;
+}
+.bear-progress span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--cyan));
+  transition: width var(--m-move) var(--ease);
+}
+.bear-counters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+.bear-feeder.compact .bear-counters {
+  justify-content: flex-start;
+}
+.bear-den {
+  align-items: center;
+}
+.bear-ladder {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bear-rung {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  opacity: 0.55;
+}
+.bear-rung.reached {
+  opacity: 1;
+}
+.bear-rung.current {
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+}

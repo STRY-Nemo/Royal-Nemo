@@ -29,7 +29,8 @@ import {
   validateUsername,
   verifyPassword,
 } from './auth';
-import { auditStatement, ensureSeeded, insertEvent, loadDocument, loadEvent, loadEvents, loadMember, loadMembers, loadOrganization, loadSettings, recentAudit, saveDocumentCas, saveEventCas, saveMember } from './db';
+import { auditStatement, ensureSeeded, insertEvent, loadDocument, loadEvent, loadEvents, loadMascot, loadMember, loadMembers, loadOrganization, loadSettings, recentAudit, saveDocumentCas, saveEventCas, saveMember } from './db';
+import { feedMascot, MascotError } from '../../src/engine/mascot';
 import type { Account, Env } from './env';
 import { HttpError } from './env';
 import { corsHeaders, num, readJson, Router, str, type Ctx } from './router';
@@ -210,14 +211,15 @@ router.get('/roster', async (ctx) => {
 // ---- Bootstrap state ---------------------------------------------------------------
 router.get('/state', async (ctx) => {
   const account = requireAccount(ctx.account);
-  const [members, events, organization, settings, audit] = await Promise.all([
+  const [members, events, organization, settings, audit, mascot] = await Promise.all([
     loadMembers(ctx.env),
     loadEvents(ctx.env),
     loadOrganization(ctx.env),
     loadSettings(ctx.env),
     account.role === 'leader' ? recentAudit(ctx.env) : Promise.resolve([]),
+    loadMascot(ctx.env, ctx.now),
   ]);
-  return { members: stripPrivate(members, account), events, organization, settings, audit, account, server_time: ctx.now.toISOString() };
+  return { members: stripPrivate(members, account), events, organization, settings, audit, mascot: mascot.doc, account, server_time: ctx.now.toISOString() };
 });
 
 router.get('/export', async (ctx) => {
@@ -422,6 +424,31 @@ router.post('/events/upcoming', async (ctx) => {
   const res = L.ensureUpcomingDrafts(events, { series_id: SERIES_ID, fromDate, weeks, timezone: settings.timezone, team_times: settings.default_team_times });
   for (const e of res.created) await insertEvent(ctx.env, e, ctx.now);
   return { events: [...events, ...res.created], created: res.created.length, dates: res.dates };
+});
+
+// ---- Mascot --------------------------------------------------------------------
+router.post('/mascot/feed', async (ctx) => {
+  const account = requireAccount(ctx.account);
+  const member = account.member_id ? await loadMember(ctx.env, account.member_id).catch(() => null) : null;
+  const name = member?.username ?? account.username;
+  // Feeds race across the alliance; retry the compare-and-set a few times before giving up.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const { doc, revision } = await loadMascot(ctx.env, ctx.now);
+    let res;
+    try {
+      res = feedMascot(doc, account.id, name, ctx.now.toISOString());
+    } catch (err) {
+      if (err instanceof MascotError) throw new HttpError(429, err.code, err.message);
+      throw err;
+    }
+    try {
+      await saveDocumentCas(ctx.env, 'mascot', revision, res.state, res.state.revision, [], ctx.now);
+      return { mascot: res.state, stage: res.stage, evolved: res.evolved };
+    } catch (err) {
+      if (!(err instanceof HttpError) || err.status !== 409 || attempt === 3) throw err;
+    }
+  }
+  throw new HttpError(409, 'busy', 'Everyone is feeding the bear at once. Try again.');
 });
 
 // ---- Organization ---------------------------------------------------------------
