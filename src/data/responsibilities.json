@@ -1,0 +1,500 @@
+{
+  "source": "STRY_Leadership_Responsibilities_Updated_v2.xlsx",
+  "identity_mapping_status": "needs_review",
+  "dropdown_names": [
+    "Rouge",
+    "Nemo",
+    "Appins",
+    "Apparition",
+    "Roso",
+    "Mada",
+    "TBD/Rotation",
+    "TBD/Capo",
+    "Paju",
+    "Mario",
+    "TBD"
+  ],
+  "added_option": "TBD added from prior user requirement; absent in latest source validation",
+  "responsibilities": [
+    {
+      "id": "responsibility-01",
+      "title": "Glory Wars (GW)",
+      "slots": [
+        {
+          "position": 1,
+          "label": "Lead",
+          "source_name": "Appins",
+          "member_id": null
+        },
+        {
+          "position": 2,
+          "label": "Assigned 2",
+          "source_name": "Rouge",
+          "member_id": null
+        },
+        {
+          "position": 3,
+          "label": "Assigned 3",
+          "source_name": "Paju",
+          "member_id": null
+        },
+        {
+          "position": 4,
+          "label": "Assigned 4",
+          "source_name": null,
+          "member_id": null
+        }
+      ]
+    },
+    {
+      "id": "responsibility-02",
+      "title": "SVS",
+      "slots": [
+        {
+          "position": 1,
+          "label": "Lead",
+          "source_name": "Nemo",
+          "member_id": null
+        },
+        {
+          "position": 2,
+          "label": "Assigned 2",
+          "source_name": "Rouge",
+          "member_id": null
+        },
+        {
+          "position": 3,
+          "label": "Assigned 3",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 4,
+          "label": "Assigned 4",
+          "source_name": null,
+          "member_id": null
+        }
+      ]
+    },
+    {
+      "id": "responsibility-03",
+      "title": "Volcano Wars",
+      "slots": [
+        {
+          "position": 1,
+          "label": "Lead",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 2,
+          "label": "Assigned 2",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 3,
+          "label": "Assigned 3",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 4,
+          "label": "Assigned 4",
+          "source_name": null,
+          "member_id": null
+        }
+      ]
+    },
+    {
+      "id": "responsibility-04",
+      "title": "Canyon",
+      "slots": [
+        {
+          "position": 1,
+          "label": "Lead",
+          "source_name": "Apparition",
+          "member_id": null
+        },
+        {
+          "position": 2,
+          "label": "Assigned 2",
+          "source_name": "Roso",
+          "member_id": null
+        },
+        {
+          "position": 3,
+          "label": "Assigned 3",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 4,
+          "label": "Assigned 4",
+          "source_name": null,
+          "member_id": null
+        }
+      ]
+    },
+    {
+      "id": "responsibility-05",
+      "title": "Research Priorities",
+      "slots": [
+        {
+          "position": 1,
+          "label": "Lead",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 2,
+          "label": "Assigned 2",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 3,
+          "label": "Assigned 3",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 4,
+          "label": "Assigned 4",
+          "source_name": null,
+          "member_id": null
+        }
+      ]
+    },
+    {
+      "id": "responsibility-06",
+      "title": "Alliance Shop",
+      "slots": [
+        {
+          "position": 1,
+          "label": "Lead",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 2,
+          "label": "Assigned 2",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 3,
+          "label": "Assigned 3",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 4,
+          "label": "Assigned 4",
+          "source_name": null,
+          "member_id": null
+        }
+      ]
+    },
+    {
+      "id": "responsibility-07",
+      "title": "Reminders",
+      "slots": [
+        {
+          "position": 1,
+          "label": "Lead",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 2,
+          "label": "Assigned 2",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 3,
+          "label": "Assigned 3",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 4,
+          "label": "Assigned 4",
+          "source_name": null,
+          "member_id": null
+        }
+      ]
+    },
+    {
+      "id": "responsibility-08",
+      "title": "Polls / Voting",
+      "slots": [
+        {
+          "position": 1,
+          "label": "Lead",
+          "source_name": "Mada",
+          "member_id": null
+        },
+        {
+          "position": 2,
+          "label": "Assigned 2",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 3,
+          "label": "Assigned 3",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 4,
+          "label": "Assigned 4",
+          "source_name": null,
+          "member_id": null
+        }
+      ]
+    },
+    {
+      "id": "responsibility-09",
+      "title": "Trade Hubs",
+      "slots": [
+        {
+          "position": 1,
+          "label": "Lead",
+          "source_name": "Rouge",
+          "member_id": null
+        },
+        {
+          "position": 2,
+          "label": "Assigned 2",
+          "source_name": "Nemo",
+          "member_id": null
+        },
+        {
+          "position": 3,
+          "label": "Assigned 3",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 4,
+          "label": "Assigned 4",
+          "source_name": null,
+          "member_id": null
+        }
+      ]
+    },
+    {
+      "id": "responsibility-10",
+      "title": "Kongs",
+      "slots": [
+        {
+          "position": 1,
+          "label": "Lead",
+          "source_name": "Nemo",
+          "member_id": null
+        },
+        {
+          "position": 2,
+          "label": "Assigned 2",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 3,
+          "label": "Assigned 3",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 4,
+          "label": "Assigned 4",
+          "source_name": null,
+          "member_id": null
+        }
+      ]
+    },
+    {
+      "id": "responsibility-11",
+      "title": "VS Strategy",
+      "slots": [
+        {
+          "position": 1,
+          "label": "Lead",
+          "source_name": "Appins",
+          "member_id": null
+        },
+        {
+          "position": 2,
+          "label": "Assigned 2",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 3,
+          "label": "Assigned 3",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 4,
+          "label": "Assigned 4",
+          "source_name": null,
+          "member_id": null
+        }
+      ]
+    },
+    {
+      "id": "responsibility-12",
+      "title": "Alliance Mail / Major Announcements",
+      "slots": [
+        {
+          "position": 1,
+          "label": "Lead",
+          "source_name": "Rouge",
+          "member_id": null
+        },
+        {
+          "position": 2,
+          "label": "Assigned 2",
+          "source_name": "Nemo",
+          "member_id": null
+        },
+        {
+          "position": 3,
+          "label": "Assigned 3",
+          "source_name": "Roso",
+          "member_id": null
+        },
+        {
+          "position": 4,
+          "label": "Assigned 4",
+          "source_name": "Appins",
+          "member_id": null
+        }
+      ]
+    },
+    {
+      "id": "responsibility-13",
+      "title": "Event Calendar / Scheduling",
+      "slots": [
+        {
+          "position": 1,
+          "label": "Lead",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 2,
+          "label": "Assigned 2",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 3,
+          "label": "Assigned 3",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 4,
+          "label": "Assigned 4",
+          "source_name": null,
+          "member_id": null
+        }
+      ]
+    },
+    {
+      "id": "responsibility-14",
+      "title": "Member Activity / Participation",
+      "slots": [
+        {
+          "position": 1,
+          "label": "Lead",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 2,
+          "label": "Assigned 2",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 3,
+          "label": "Assigned 3",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 4,
+          "label": "Assigned 4",
+          "source_name": null,
+          "member_id": null
+        }
+      ]
+    },
+    {
+      "id": "responsibility-15",
+      "title": "New Member Onboarding",
+      "slots": [
+        {
+          "position": 1,
+          "label": "Lead",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 2,
+          "label": "Assigned 2",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 3,
+          "label": "Assigned 3",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 4,
+          "label": "Assigned 4",
+          "source_name": null,
+          "member_id": null
+        }
+      ]
+    },
+    {
+      "id": "responsibility-16",
+      "title": "Diplomacy / Server Relations",
+      "slots": [
+        {
+          "position": 1,
+          "label": "Lead",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 2,
+          "label": "Assigned 2",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 3,
+          "label": "Assigned 3",
+          "source_name": null,
+          "member_id": null
+        },
+        {
+          "position": 4,
+          "label": "Assigned 4",
+          "source_name": null,
+          "member_id": null
+        }
+      ]
+    }
+  ]
+}
