@@ -259,7 +259,7 @@ export function SettingsScreen() {
             <button type="button" className="btn ghost" onClick={() => setPwOpen(false)}>
               Cancel
             </button>
-            <button type="button" className="btn primary" disabled={!pwCurrent || pwNext.length < 8} onClick={() => void changePassword()}>
+            <button type="button" className="btn primary" disabled={!pwCurrent || pwNext.length < 4} onClick={() => void changePassword()}>
               Save
             </button>
           </>
@@ -270,7 +270,7 @@ export function SettingsScreen() {
           <input id="pw-current" className="input" type="password" autoComplete="current-password" value={pwCurrent} onChange={(e) => setPwCurrent(e.target.value)} />
         </div>
         <div className="field">
-          <label htmlFor="pw-next">New password (8+ characters)</label>
+          <label htmlFor="pw-next">New password (4+ characters)</label>
           <input id="pw-next" className="input" type="password" autoComplete="new-password" value={pwNext} onChange={(e) => setPwNext(e.target.value)} />
         </div>
       </BottomSheet>

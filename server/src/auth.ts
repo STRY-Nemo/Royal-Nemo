@@ -61,7 +61,7 @@ export function validateUsername(username: string): string {
 }
 
 export function validatePassword(password: string): void {
-  if (typeof password !== 'string' || password.length < 8) throw new HttpError(400, 'bad_password', 'Password must be at least 8 characters.');
+  if (typeof password !== 'string' || password.length < 4) throw new HttpError(400, 'bad_password', 'Password must be at least 4 characters (a 4-digit PIN is fine).');
   if (password.length > 200) throw new HttpError(400, 'bad_password', 'Password is too long.');
 }
 

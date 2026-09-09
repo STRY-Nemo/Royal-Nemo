@@ -75,14 +75,14 @@ export function LoginScreen() {
         </div>
         <div className="field">
           <label htmlFor="login-password">Password</label>
-          <input id="login-password" className="input" type="password" autoComplete={tab === 'signin' ? 'current-password' : 'new-password'} value={password} onChange={(e) => setPassword(e.target.value)} required minLength={tab === 'register' ? 8 : undefined} />
-          {tab === 'register' && <p className="faint">At least 8 characters.</p>}
+          <input id="login-password" className="input" type="password" autoComplete={tab === 'signin' ? 'current-password' : 'new-password'} value={password} onChange={(e) => setPassword(e.target.value)} required minLength={tab === 'register' ? 4 : undefined} />
+          {tab === 'register' && <p className="faint">At least 4 characters; a 4-digit PIN is fine.</p>}
         </div>
         {tab === 'register' && (
           <>
             <div className="field">
               <label htmlFor="login-invite">Invite code</label>
-              <input id="login-invite" className="input" autoCapitalize="characters" value={invite} onChange={(e) => setInvite(e.target.value)} required placeholder="Owner setup code or a leader's invite" />
+              <input id="login-invite" className="input" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={invite} onChange={(e) => setInvite(e.target.value)} required placeholder="Owner setup code or a leader's invite" />
               <p className="faint">Setting up the alliance? Enter the owner setup code you saved when deploying: that first account becomes the leader. Everyone after that uses an invite code a leader shares from Settings.</p>
             </div>
             <div className="field">

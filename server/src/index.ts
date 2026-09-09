@@ -100,7 +100,10 @@ router.post('/auth/register', async (ctx) => {
   const username = validateUsername(str(body, 'username'));
   const password = str(body, 'password');
   validatePassword(password);
-  const inviteCode = str(body, 'invite_code');
+  const inviteCode = str(body, 'invite_code').trim();
+  const ownerCode = (ctx.env.OWNER_SETUP_CODE ?? '').trim();
+  // Phone keyboards often change capitalisation; the owner code is compared case-insensitively.
+  const matchesOwnerCode = ownerCode !== '' && inviteCode.localeCompare(ownerCode, undefined, { sensitivity: 'accent' }) === 0;
   const memberId = str(body, 'member_id', false) || null;
 
   if (await findAccountByUsername(ctx.env, username)) throw new HttpError(409, 'username_taken', 'That username is already taken.');
@@ -112,9 +115,11 @@ router.post('/auth/register', async (ctx) => {
   if (invite && invite.uses_left > 0 && invite.expires_at > ctx.now.toISOString()) {
     role = invite.role;
     await ctx.env.DB.prepare('UPDATE invites SET uses_left = uses_left - 1 WHERE code = ? AND uses_left > 0').bind(invite.code).run();
-  } else if (ctx.env.OWNER_SETUP_CODE && inviteCode === ctx.env.OWNER_SETUP_CODE && (await leaderCount(ctx.env)) === 0) {
+  } else if (matchesOwnerCode && (await leaderCount(ctx.env)) === 0) {
     role = 'leader';
     verified = true;
+  } else if (matchesOwnerCode) {
+    throw new HttpError(403, 'owner_code_used', 'The owner setup code was already used to create the first leader. Sign in with that account, or ask that leader for an invite code.');
   } else {
     throw new HttpError(403, 'bad_invite', 'That invite code is not valid. Ask a leader for a new one.');
   }

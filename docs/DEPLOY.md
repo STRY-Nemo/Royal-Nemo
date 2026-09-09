@@ -38,7 +38,9 @@ Wait for both workflows to finish green (2–3 minutes).
 Token permissions that the deploy needs, all on the account: **Workers Scripts → Edit** and **D1 → Edit** (the "Edit Cloudflare Workers" template supplies the first; add the second). Account API Tokens are listed under Manage Account → Account API Tokens, not under the user profile.
 
 ### 6. Create the first leader account
-Open the app (https://ryanrhernandez-design.github.io/Royal-Nemo/), tap **Create account**, and use your `OWNER_SETUP_CODE` as the invite code. Pick your in-game name from the roster. This first account is a verified leader. The owner code stops working as soon as one leader exists.
+Open the app (https://ryanrhernandez-design.github.io/Royal-Nemo/), tap **Create account**, and use your `OWNER_SETUP_CODE` as the invite code. Pick your in-game name from the roster. This first account is a verified leader. The owner code stops working as soon as one leader exists (the app then says so). Passwords can be as short as 4 characters.
+
+If the code is refused: the Worker only receives the secret when the **Deploy API to Cloudflare** workflow runs, so after changing `OWNER_SETUP_CODE` in GitHub re-run that workflow (Actions → Deploy API to Cloudflare → Run workflow). The comparison ignores capitalisation and surrounding spaces.
 
 ### 7. Invite the alliance
 **Settings → Alliance accounts & invite codes → Create member invite**, then share the code and the app link (the app offers the share sheet). Members create their own accounts, pick their in-game name, and set their availability. Leaders can verify the link, change roles, or disable accounts from the same screen.

@@ -78,7 +78,10 @@ describe('STRY API', () => {
   it('bootstraps the first leader with the owner code and rejects bad invites', async () => {
     const bad = await api('POST', '/auth/register', { username: 'nobody', password: 'password123', invite_code: 'nope' });
     expect(bad.status).toBe(403);
-    const owner = await api<{ token: string; account: { role: string; verified: boolean } }>('POST', '/auth/register', { username: 'ryan', password: 'password123', invite_code: OWNER_CODE, member_id: 'stry-010' });
+    const short = await api('POST', '/auth/register', { username: 'nobody', password: '123', invite_code: OWNER_CODE });
+    expect(short.status).toBe(400);
+    // A 4-digit PIN is allowed; the owner code ignores capitalisation and surrounding spaces (phone keyboards).
+    const owner = await api<{ token: string; account: { role: string; verified: boolean } }>('POST', '/auth/register', { username: 'ryan', password: '1234', invite_code: ` ${OWNER_CODE.toUpperCase()} `, member_id: 'stry-010' });
     expect(owner.status).toBe(200);
     expect(owner.body.account.role).toBe('leader');
     expect(owner.body.account.verified).toBe(true);
@@ -86,6 +89,7 @@ describe('STRY API', () => {
     // Owner code no longer works once a leader exists.
     const again = await api('POST', '/auth/register', { username: 'ryan2', password: 'password123', invite_code: OWNER_CODE });
     expect(again.status).toBe(403);
+    expect(again.body.error).toBe('owner_code_used');
   });
 
   it('serves seeded state to signed-in accounts only', async () => {
