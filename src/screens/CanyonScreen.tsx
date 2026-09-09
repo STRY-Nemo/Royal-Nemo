@@ -6,6 +6,7 @@ import { CalendarIcon, ChevronRight, HistoryIcon, UndoIcon } from '../ui/icons';
 import { publishBlockers, starters, teamPower, teamReserves, waitingList } from '../engine/lifecycle';
 import { ConfirmSheet, OrbitSpinner, useFeedback, useSingleFlight } from '../motion';
 import { BUNDLED_IMPORTS } from '../data/bundledImports';
+import { Art } from '../ui/Art';
 
 export function CanyonScreen({ eventId }: { eventId?: string }) {
   const { state, currentEvent, eventById, isLeader, actions, canUndoAssignments, me } = useStore();
@@ -87,6 +88,7 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
       <Header title="Canyon Clash" />
       <main className="page">
         <DemoBanner />
+        <Art name="canyon-banner" alt="" className="art-banner" />
         <div className="card-row" style={{ alignItems: 'flex-start' }}>
           <div className="grow">
             <h1>Canyon Clash</h1>
@@ -142,8 +144,11 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
             <button key={t.id} type="button" className="card interactive" onClick={() => router.navigate(`/canyon/roster/${event.id}?team=${t.id}`)}>
               <div className="card-row">
                 <div className="grow">
-                  <h2>
-                    {t.name} <span className="muted" style={{ fontWeight: 500, fontSize: 16 }}>{t.local_time}</span>
+                  <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Art name={t.id.endsWith('team1') ? 'team-1-emblem' : 'team-2-emblem'} alt="" className="art-emblem" />
+                    <span>
+                      {t.name} <span className="muted" style={{ fontWeight: 500, fontSize: 16 }}>{t.local_time}</span>
+                    </span>
                   </h2>
                   <div className="stat-row" style={{ marginTop: 8 }}>
                     <div className="stat">

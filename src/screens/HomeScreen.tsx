@@ -6,6 +6,7 @@ import { ChevronRight } from '../ui/icons';
 import { starters } from '../engine/lifecycle';
 import { describeAvailability } from '../engine/suggest';
 import { BearFeeder } from '../ui/Bear';
+import { Art } from '../ui/Art';
 
 function weekLabel(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
@@ -28,6 +29,7 @@ export function HomeScreen() {
       <Header />
       <main className="page">
         <DemoBanner />
+        <Art name="home-hero" alt="" className="art-banner" />
         <div>
           <h1>Welcome{me ? `, ${me.username}` : ''}</h1>
           <p className="muted small">
@@ -35,7 +37,8 @@ export function HomeScreen() {
           </p>
         </div>
 
-        <div className="card raised">
+        <div className="card raised has-backdrop">
+          <Art name="den-backdrop" alt="" className="art-backdrop" />
           <div className="card-row">
             <h2 className="grow">STRY Bear</h2>
             <button type="button" className="link-btn" onClick={() => router.navigate('/bear')}>

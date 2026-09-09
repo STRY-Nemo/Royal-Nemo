@@ -1,3 +1,4 @@
+import { Art } from '../ui/Art';
 import { useEffect, useMemo, useState } from 'react';
 import { normalizeName } from '../engine/organization';
 import { OrbitSpinner, useSingleFlight } from '../motion';
@@ -38,6 +39,7 @@ export function LoginScreen() {
 
   return (
     <main className="page" style={{ paddingTop: 'calc(var(--space-6) + var(--safe-top))' }}>
+      <Art name="login-hero" alt="" className="art-banner" />
       <div style={{ textAlign: 'center' }}>
         <img src={`${import.meta.env.BASE_URL}brand/stry-logo.png`} alt="STRY" width={96} height={96} style={{ display: 'block', margin: '0 auto 8px' }} />
         <h1>STRY Alliance</h1>

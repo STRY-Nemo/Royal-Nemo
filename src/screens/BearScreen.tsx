@@ -2,6 +2,7 @@ import { STAGES, stageFor, topFeeders } from '../engine/mascot';
 import { useStore } from '../store/store';
 import { BearFeeder, BearSprite } from '../ui/Bear';
 import { Header } from '../ui/common';
+import { Art } from '../ui/Art';
 
 /** The den: the alliance bear, its stage ladder and who feeds it most. */
 export function BearScreen() {
@@ -13,7 +14,8 @@ export function BearScreen() {
     <>
       <Header title="STRY Bear" back="/home" />
       <main className="page">
-        <div className="card raised bear-den">
+        <div className="card raised bear-den has-backdrop">
+          <Art name="den-backdrop" alt="" className="art-backdrop" />
           <BearFeeder mascot={mascot} size={200} />
           <p className="faint">Everyone in the alliance feeds the same bear. One feed every 2 seconds per person, 60 a day, so it grows as the whole alliance shows up. {mascot.last_feeder_name ? `Last fed by ${mascot.last_feeder_name}.` : ''}</p>
         </div>

@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { Art } from '../ui/Art';
 import { useRouter } from '../store/router';
 import { fmtPower, useStore } from '../store/store';
 import { useUiState } from '../store/ui';
@@ -33,6 +34,7 @@ export function MembersScreen() {
       <main className="page">
         <DemoBanner />
         <div>
+          <Art name="members-banner" alt="" className="art-banner" />
           <h1>Members</h1>
           <p className="muted small">
             {state.members.length} members · arena power as of {powerDate}

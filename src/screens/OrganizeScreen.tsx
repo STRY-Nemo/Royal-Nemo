@@ -1,3 +1,4 @@
+import { Art } from '../ui/Art';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { Responsibility, ResponsibilitySlot } from '../domain/types';
 import { slotDisplay, slotValue, type SlotValue } from '../engine/organization';
@@ -185,6 +186,7 @@ export function OrganizeScreen() {
       <Header title="Organize" />
       <main className="page">
         <DemoBanner />
+        <Art name="organize-banner" alt="" className="art-banner" />
         <div>
           <h1>Responsibilities</h1>
           <p className="muted small">Tap a slot to assign. Long-press the grip to drag. Every drag has a tap equivalent.</p>
