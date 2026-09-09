@@ -4,7 +4,7 @@ import { useStore } from '../store/store';
 import { DemoBanner, EmptyState, EventTimes, Header, StatusBadge } from '../ui/common';
 import { ChevronRight } from '../ui/icons';
 import { starters } from '../engine/lifecycle';
-import { describeChoice } from '../engine/suggest';
+import { describeAvailability } from '../engine/suggest';
 
 function weekLabel(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
@@ -74,7 +74,7 @@ export function HomeScreen() {
             <div className="card-row">
               <div className="grow">
                 <h3>My availability</h3>
-                <p className="muted small">{myAvailability ? describeChoice(myAvailability.choice, event.teams) : 'Not set — tap to choose a time'}</p>
+                <p className="muted small">{myAvailability ? describeAvailability(myAvailability, event.teams) : 'Not set — tap to choose a time'}</p>
                 {myAssignment && event.status === 'published' && (
                   <p className="small" style={{ color: 'var(--ok)' }}>
                     Published: {myAssignment.role === 'starter' ? event.teams.find((t) => t.id === myAssignment.team_id)?.name : myAssignment.team_id ? `${event.teams.find((t) => t.id === myAssignment.team_id)?.name} substitute` : 'Waiting list'}
@@ -100,7 +100,7 @@ export function HomeScreen() {
                       <div className="name">{weekLabel(e.date)}</div>
                       <div className="meta">
                         <span>{e.teams.map((t) => t.local_time).join(' / ')}</span>
-                        {me && <span style={{ color: mine ? 'var(--ok)' : 'var(--warn)' }}>{mine ? describeChoice(mine.choice, e.teams) : 'Availability not set'}</span>}
+                        {me && <span style={{ color: mine ? 'var(--ok)' : 'var(--warn)' }}>{mine ? describeAvailability(mine, e.teams) : 'Availability not set'}</span>}
                       </div>
                     </div>
                     <StatusBadge status={e.status} />

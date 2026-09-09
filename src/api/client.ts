@@ -4,7 +4,7 @@
  */
 import type { MoveTarget } from '../engine/lifecycle';
 import type { LineupRecord } from '../engine/lineupImport';
-import type { AttendanceOutcome, AvailabilityChoice, CanyonEvent, Member, MemberId, OrganizationState, Settings, TeamId } from '../domain/types';
+import type { AttendanceOutcome, AvailabilityChoice, CanyonEvent, Member, MemberId, OrganizationState, Settings, SlotPriorities, TeamId } from '../domain/types';
 import type { SlotEdit } from '../engine/organization';
 
 export const TOKEN_KEY = 'stry-api-token';
@@ -139,8 +139,8 @@ export class ApiClient {
   private ev(id: string, action: string, body: Record<string, unknown> = {}) {
     return this.request<{ event: CanyonEvent; count?: number; next_event?: CanyonEvent }>('POST', `/events/${encodeURIComponent(id)}/${action}`, body);
   }
-  setAvailability(eventId: string, memberId: MemberId | null, choice: AvailabilityChoice) {
-    return this.ev(eventId, 'availability', memberId ? { member_id: memberId, choice } : { choice });
+  setAvailability(eventId: string, memberId: MemberId | null, choice: AvailabilityChoice, slots?: SlotPriorities) {
+    return this.ev(eventId, 'availability', { ...(memberId ? { member_id: memberId } : {}), choice, ...(slots ? { slots } : {}) });
   }
   fillAvailability(eventId: string, choice: AvailabilityChoice) {
     return this.ev(eventId, 'availability/fill', { choice });

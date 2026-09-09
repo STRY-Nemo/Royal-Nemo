@@ -13,7 +13,7 @@
  */
 import { applyLineupImport, type LineupRecord } from '../engine/lineupImport';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { Assignment, AttendanceOutcome, AuditEntry, AvailabilityChoice, CanyonEvent, Member, MemberId, OrganizationState, ResponsibilityId, ResponsibilitySlot, Session, Settings, TeamId } from '../domain/types';
+import type { Assignment, AttendanceOutcome, AuditEntry, AvailabilityChoice, CanyonEvent, Member, MemberId, OrganizationState, ResponsibilityId, ResponsibilitySlot, Session, Settings, SlotPriorities, TeamId } from '../domain/types';
 import { loadSeedMembers, loadSeedOrganization, PACKAGE_DATE, seedEventDraft, SERIES_ID } from '../data/seed';
 import * as L from '../engine/lifecycle';
 import * as O from '../engine/organization';
@@ -142,7 +142,7 @@ export interface StoreValue {
     linkSelf: (memberId: MemberId) => Promise<ActionResult>;
     updateSettings: (patch: Partial<Settings>) => ActionResult;
     setSession: (session: Session) => void;
-    setAvailability: (eventId: string, memberId: MemberId, choice: AvailabilityChoice) => ActionResult;
+    setAvailability: (eventId: string, memberId: MemberId, choice: AvailabilityChoice, slots?: SlotPriorities) => ActionResult;
     fillMissingAvailability: (eventId: string, choice: AvailabilityChoice) => ActionResult & { count?: number };
     generate: (eventId: string) => ActionResult;
     importLineup: (eventId: string, records: LineupRecord[], source?: string) => ActionResult;
@@ -520,11 +520,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (mode === 'api') return;
         commit((s) => ({ ...s, session }));
       },
-      setAvailability: (eventId, memberId, choice) => {
+      setAvailability: (eventId, memberId, choice, slots) => {
         const self = stateRef.current.session.member_id === memberId;
         if (!self && stateRef.current.session.role !== 'leader') return fail(new L.LifecycleError('forbidden', 'You can only change your own availability.'));
         const recorder = self ? 'self' : (stateRef.current.session.member_id ?? 'leader-demo');
-        return runEvent(eventId, (e) => L.setAvailability(e, memberId, choice, ctx(), recorder), { leader: false }, (a) => a.setAvailability(eventId, self ? null : memberId, choice));
+        return runEvent(eventId, (e) => L.setAvailability(e, memberId, choice, ctx(), recorder, slots), { leader: false }, (a) => a.setAvailability(eventId, self ? null : memberId, choice, slots));
       },
       fillMissingAvailability: (eventId, choice) => {
         const denied = requireLeader();

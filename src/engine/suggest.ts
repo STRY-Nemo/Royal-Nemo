@@ -1,13 +1,4 @@
-import type {
-  Assignment,
-  Availability,
-  AvailabilityChoice,
-  CanyonEvent,
-  Member,
-  MemberId,
-  Team,
-  TeamId,
-} from '../domain/types';
+import type { Assignment, Availability, AvailabilityChoice, CanyonEvent, Member, MemberId, SlotPriorities, Team, TeamId } from '../domain/types';
 import { MinCostFlow } from './flow';
 import type { MemberHistory } from './history';
 import { emptyHistory } from './history';
@@ -84,6 +75,50 @@ export function allowedTeamIds(choice: AvailabilityChoice, teams: Team[]): TeamI
   }
 }
 
+/** Turns per-slot priorities into the engine's availability choice. A single usable slot means that team only. */
+export function choiceFromSlots(slots: SlotPriorities): AvailabilityChoice {
+  const t1 = slots.team1 > 0;
+  const t2 = slots.team2 > 0;
+  if (t1 && t2) return 'either';
+  if (t1) return 'team1';
+  if (t2) return 'team2';
+  return 'unavailable';
+}
+
+/** Default per-slot priorities for a plain choice (used to display older records). */
+export function slotsFromChoice(choice: AvailabilityChoice): SlotPriorities {
+  switch (choice) {
+    case 'team1':
+      return { team1: 1, team2: 0 };
+    case 'team2':
+      return { team1: 0, team2: 1 };
+    case 'either':
+      return { team1: 1, team2: 1 };
+    default:
+      return { team1: 0, team2: 0 };
+  }
+}
+
+/** The team a flexible player would rather play for, or null when both are equal. */
+export function preferredTeamId(av: Pick<Availability, 'choice' | 'slots'> | undefined, teams: Team[]): TeamId | null {
+  if (!av || av.choice !== 'either' || !av.slots) return null;
+  if (av.slots.team1 === 1 && av.slots.team2 === 2) return teams[0]?.id ?? null;
+  if (av.slots.team2 === 1 && av.slots.team1 === 2) return teams[1]?.id ?? null;
+  return null;
+}
+
+/** Human description that includes the first/second choice when known. */
+export function describeAvailability(av: Pick<Availability, 'choice' | 'slots'> | undefined, teams: Team[]): string {
+  if (!av) return 'No response';
+  const pref = preferredTeamId(av, teams);
+  if (av.choice === 'either' && pref) {
+    const first = teams.find((t) => t.id === pref);
+    const second = teams.find((t) => t.id !== pref);
+    return `1st ${first?.local_time ?? ''}, 2nd ${second?.local_time ?? ''}`;
+  }
+  return describeChoice(av.choice, teams);
+}
+
 export function describeChoice(choice: AvailabilityChoice, teams: Team[]): string {
   switch (choice) {
     case 'team1':
@@ -100,6 +135,8 @@ export function describeChoice(choice: AvailabilityChoice, teams: Team[]): strin
 interface Candidate {
   member: Member;
   allowed: TeamId[];
+  /** First-choice slot for flexible players; null when both slots are equal. */
+  preferred: TeamId | null;
   history: MemberHistory;
   lottery: number;
 }
@@ -226,6 +263,7 @@ export function generateSuggestions(input: SuggestInput): SuggestResult {
     candidates.push({
       member,
       allowed,
+      preferred: preferredTeamId(availability, teams),
       history: input.history[member.id] ?? emptyHistory(member),
       lottery: lotteryValue(seed, member.id),
     });
@@ -243,10 +281,12 @@ export function generateSuggestions(input: SuggestInput): SuggestResult {
   candidates.forEach((c, i) => {
     // Cost grows with rank so the min-cost max-flow picks the fairest set.
     candEdgeIndex.push(flow.outEdges(SOURCE).length);
-    flow.addEdge(SOURCE, candNode(i), 1, i + 1);
+    // Rank cost dominates (fairness first); a second-choice slot costs 1 extra so
+    // first choices are honoured whenever capacity allows, never at the expense of fairness.
+    flow.addEdge(SOURCE, candNode(i), 1, (i + 1) * 1000);
     c.allowed.forEach((teamId) => {
       const j = teams.findIndex((t) => t.id === teamId);
-      flow.addEdge(candNode(i), teamNode(j), 1, 0);
+      flow.addEdge(candNode(i), teamNode(j), 1, c.preferred && c.preferred !== teamId ? 1 : 0);
     });
   });
   teams.forEach((t, j) => flow.addEdge(teamNode(j), SINK, Math.max(0, capacityLeft[t.id]), 0));
@@ -256,7 +296,7 @@ export function generateSuggestions(input: SuggestInput): SuggestResult {
   candidates.forEach((c, i) => {
     for (const e of flow.outEdges(candNode(i))) {
       const j = e.to - teamNode(0);
-      if (j >= 0 && j < teams.length && e.cost === 0) {
+      if (j >= 0 && j < teams.length && e.cost >= 0) {
         const rev = flow.outEdges(e.to)[e.rev];
         if (rev.cap > 0) placement.set(c.member.id, teams[j].id);
       }
@@ -422,7 +462,7 @@ function selectionReason(c: Candidate, all: Candidate[], placement: Map<MemberId
   else if (waiting.length === 0) lead = 'Everyone available fits';
   else lead = 'Won seeded tie-break';
   const team = teams.find((t) => t.id === placement.get(c.member.id));
-  const flex = c.allowed.length > 1 && team ? ` · flexible, placed in ${team.name}` : '';
+  const flex = c.allowed.length > 1 && team ? (c.preferred ? (c.preferred === team.id ? ` · first choice ${team.name}` : ` · second choice ${team.name} (first choice was full)`) : ` · flexible, placed in ${team.name}`) : '';
   return `${lead} · ${historyPhrase(h)}${flex}`;
 }
 
@@ -479,7 +519,8 @@ function rebalance(
     total[team] += power(id);
     count[team]++;
   }
-  const flexible = candidates.filter((c) => c.allowed.length === 2 && placement.has(c.member.id));
+  // Only players with no first choice are moved for power balance; a stated preference is kept.
+  const flexible = candidates.filter((c) => c.allowed.length === 2 && !c.preferred && placement.has(c.member.id));
   const gap = () => Math.abs(total[t1.id] - total[t2.id]);
 
   for (let iter = 0; iter < 200; iter++) {

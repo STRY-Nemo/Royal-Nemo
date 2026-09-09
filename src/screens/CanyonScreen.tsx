@@ -209,6 +209,11 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
             </div>
           )}
           {isLeader && (
+            <button type="button" className="btn secondary block" onClick={() => router.navigate(`/canyon/collect/${event.id}`)}>
+              Collect availability (1st / 2nd / can't per time)
+            </button>
+          )}
+          {isLeader && (
             <button type="button" className="link-btn" onClick={() => router.navigate(`/canyon/availability/${event.id}?all=1`)}>
               Record availability for members
             </button>

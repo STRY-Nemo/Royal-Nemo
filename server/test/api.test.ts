@@ -132,9 +132,14 @@ describe('STRY API', () => {
   });
 
   it('records own availability, fills the rest, and generates a full lineup', async () => {
-    const mine = await api<{ event: { availability: Record<string, { choice: string; recorded_by: string }> } }>('POST', `/events/${eventId}/availability`, { choice: 'team1' }, memberToken);
+    const bySlots = await api<{ event: { availability: Record<string, { choice: string; slots?: { team1: number; team2: number } }> } }>('POST', `/events/${eventId}/availability`, { slots: { team1: 2, team2: 1 } }, memberToken);
+    expect(bySlots.status).toBe(200);
+    expect(bySlots.body.event.availability[memberId].choice).toBe('either');
+    expect(bySlots.body.event.availability[memberId].slots).toEqual({ team1: 2, team2: 1 });
+    const mine = await api<{ event: { availability: Record<string, { choice: string; recorded_by: string; slots?: unknown }> } }>('POST', `/events/${eventId}/availability`, { choice: 'team1' }, memberToken);
     expect(mine.status).toBe(200);
     expect(mine.body.event.availability[memberId].choice).toBe('team1');
+    expect(mine.body.event.availability[memberId].slots).toBeUndefined();
     expect(mine.body.event.availability[memberId].recorded_by).toBe('self');
     const fill = await api<{ count: number }>('POST', `/events/${eventId}/availability/fill`, { choice: 'either' }, leaderToken);
     expect(fill.body.count).toBe(99);

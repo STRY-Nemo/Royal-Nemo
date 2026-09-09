@@ -6,7 +6,8 @@
  * uniqueness, availability, role permissions and stale edits are enforced
  * server-side regardless of what the UI sends.
  */
-import type { AttendanceOutcome, AvailabilityChoice, CanyonEvent, Member, OrganizationState, Settings, TeamId } from '../../src/domain/types';
+import type { AttendanceOutcome, AvailabilityChoice, CanyonEvent, Member, OrganizationState, Settings, SlotPriorities, SlotPriority, TeamId } from '../../src/domain/types';
+import { choiceFromSlots } from '../../src/engine/suggest';
 import { SERIES_ID } from '../../src/data/seed';
 import * as L from '../../src/engine/lifecycle';
 import { applyLineupImport, type LineupRecord } from '../../src/engine/lineupImport';
@@ -217,14 +218,20 @@ router.get('/export', async (ctx) => {
 router.post('/events/:id/availability', async (ctx) => {
   const account = requireAccount(ctx.account);
   const body = await ctx.body();
-  const choice = str(body, 'choice') as AvailabilityChoice;
+  let slots: SlotPriorities | undefined;
+  if (body.slots && typeof body.slots === 'object') {
+    const raw = body.slots as Record<string, unknown>;
+    const pick = (v: unknown): SlotPriority => (v === 1 || v === 2 ? v : 0);
+    slots = { team1: pick(raw.team1), team2: pick(raw.team2) };
+  }
+  const choice = (slots ? choiceFromSlots(slots) : str(body, 'choice')) as AvailabilityChoice;
   if (!['team1', 'team2', 'either', 'unavailable'].includes(choice)) throw new HttpError(400, 'bad_request', 'Invalid availability choice.');
   const requested = str(body, 'member_id', false) || account.member_id;
   if (!requested) throw new HttpError(400, 'no_member', 'Link your roster member first.');
   const self = requested === account.member_id;
   if (!self && account.role !== 'leader') throw new HttpError(403, 'forbidden', 'You can only change your own availability.');
   await loadMember(ctx.env, requested);
-  const event = await mutateEvent(ctx, ctx.params.id, (e) => L.setAvailability(e, requested, choice, ctxFor(account, ctx.now), self ? 'self' : actorFor(account)));
+  const event = await mutateEvent(ctx, ctx.params.id, (e) => L.setAvailability(e, requested, choice, ctxFor(account, ctx.now), self ? 'self' : actorFor(account), slots));
   return { event };
 });
 

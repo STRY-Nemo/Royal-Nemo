@@ -1274,3 +1274,65 @@ p {
     animation: fade-out var(--m-burst) ease-out forwards;
   }
 }
+
+/* ---- Slot priority picker (availability) ---- */
+.slot-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.slot-row {
+  display: grid;
+  grid-template-columns: minmax(64px, auto) 1fr;
+  align-items: center;
+  gap: 10px;
+}
+.slot-picker.compact .slot-row {
+  grid-template-columns: 48px 1fr;
+  gap: 6px;
+}
+.slot-picker .segmented.small {
+  padding: 3px;
+}
+.slot-picker .segmented.small button {
+  min-height: 36px;
+  font-size: 14px;
+}
+.slot-picker.compact .segmented.small button {
+  min-height: 34px;
+  font-size: 13px;
+  padding: 2px 4px;
+}
+.slot-picker .segmented button.on.p1 {
+  background: var(--primary);
+  color: #fff;
+}
+.slot-picker .segmented button.on.p2 {
+  background: color-mix(in srgb, var(--primary) 45%, var(--card));
+  color: var(--text);
+}
+.slot-picker .segmented button.on.p0 {
+  background: color-mix(in srgb, var(--danger) 35%, var(--card));
+  color: var(--text);
+}
+.collect-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.collect-row .who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.collect-row .who .name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -38,10 +38,20 @@ export type AppRole = 'leader' | 'member';
 
 export type AvailabilityChoice = 'team1' | 'team2' | 'either' | 'unavailable';
 
+/** Per-slot answer: 1 = first choice, 2 = second choice, 0 = cannot play that slot. */
+export type SlotPriority = 0 | 1 | 2;
+export interface SlotPriorities {
+  team1: SlotPriority;
+  team2: SlotPriority;
+}
+
 export interface Availability {
   event_id: EventId;
   member_id: MemberId;
+  /** Derived from `slots` when present; kept for the engine and older records. */
   choice: AvailabilityChoice;
+  /** Priority per time slot as answered by the player or a leader. */
+  slots?: SlotPriorities;
   /** Who recorded it: the member themselves or a leader on their behalf. */
   recorded_by: MemberId | 'self';
   updated_at: string; // ISO timestamp

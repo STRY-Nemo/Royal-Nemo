@@ -20,6 +20,7 @@ import { SettingsScreen } from './screens/SettingsScreen';
 import { LoginScreen } from './screens/LoginScreen';
 import { AccountsScreen } from './screens/AccountsScreen';
 import { ImportScreen } from './screens/ImportScreen';
+import { CollectScreen } from './screens/CollectScreen';
 
 function MotionSync() {
   const { state } = useStore();
@@ -39,6 +40,7 @@ function Routes() {
       if (second === 'history') return <HistoryScreen eventId={third} />;
       if (second === 'schedule') return <ScheduleScreen eventId={third} />;
       if (second === 'import') return <ImportScreen eventId={third} />;
+      if (second === 'collect') return <CollectScreen eventId={third} />;
       return <CanyonScreen eventId={second} />;
     case 'organize':
       if (second === 'mapping') return <MappingScreen />;

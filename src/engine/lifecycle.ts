@@ -5,23 +5,11 @@
  * both use these; a future server can run the same functions inside a
  * transaction.
  */
-import type {
-  Assignment,
-  Attendance,
-  AttendanceOutcome,
-  AuditEntry,
-  Availability,
-  AvailabilityChoice,
-  CanyonEvent,
-  Member,
-  MemberId,
-  Team,
-  TeamId,
-} from '../domain/types';
+import type { Assignment, Attendance, AttendanceOutcome, AuditEntry, Availability, AvailabilityChoice, CanyonEvent, Member, MemberId, SlotPriorities, Team, TeamId } from '../domain/types';
 import { computeHistory } from './history';
 import { eventIdFor, isValidTimeZone, nextFriday, weekday } from './recurrence';
 import { newSeed } from './seed';
-import { ALGORITHM_VERSION, allowedTeamIds, generateSuggestions, type LockRequest, type SuggestResult } from './suggest';
+import { ALGORITHM_VERSION, allowedTeamIds, generateSuggestions, type LockRequest, type SuggestResult, choiceFromSlots } from './suggest';
 
 export class LifecycleError extends Error {
   code: string;
@@ -149,10 +137,18 @@ export function setAvailability(
   choice: AvailabilityChoice,
   ctx: Context,
   recordedBy: MemberId | 'self' = 'self',
+  slots?: SlotPriorities,
 ): Result {
   assertEditable(event);
   const before = event.availability[memberId] ?? null;
-  const next: Availability = { event_id: event.id, member_id: memberId, choice, recorded_by: recordedBy, updated_at: ctx.now };
+  if (slots) {
+    for (const k of ['team1', 'team2'] as const) {
+      if (![0, 1, 2].includes(slots[k])) throw new LifecycleError('bad_slots', 'Slot priority must be 1, 2 or 0.');
+    }
+    if (slots.team1 > 0 && slots.team2 > 0 && slots.team1 === slots.team2) throw new LifecycleError('bad_slots', 'Pick one slot as first choice and the other as second.');
+    choice = choiceFromSlots(slots);
+  }
+  const next: Availability = { event_id: event.id, member_id: memberId, choice, ...(slots ? { slots } : {}), recorded_by: recordedBy, updated_at: ctx.now };
   const availability = { ...event.availability, [memberId]: next };
   // If a starter's availability no longer allows their team, drop the assignment.
   let assignments = event.assignments;

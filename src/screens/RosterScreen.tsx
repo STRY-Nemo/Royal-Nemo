@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Assignment, CanyonEvent, Member, MemberId, TeamId } from '../domain/types';
 import { reserveTarget, starters, teamPower, teamReserves, waitingList } from '../engine/lifecycle';
-import { allowedTeamIds, describeChoice } from '../engine/suggest';
+import { allowedTeamIds, describeAvailability } from '../engine/suggest';
 import { BottomSheet, ConfirmSheet, useFeedback, useFlash } from '../motion';
 import { useRouter } from '../store/router';
 import { fmtPower, useStore } from '../store/store';
@@ -87,7 +87,7 @@ export function RosterScreen({ eventId }: { eventId?: string }) {
               <strong>Why:</strong> {a.reason}
             </div>
             {h?.history_incomplete && <div className="faint">History incomplete since tracking start {m.tracking_start}.</div>}
-            {event.availability[m.id] && <div className="faint">Available: {describeChoice(event.availability[m.id].choice, event.teams)}</div>}
+            {event.availability[m.id] && <div className="faint">Available: {describeAvailability(event.availability[m.id], event.teams)}</div>}
           </div>
         )}
       </div>
@@ -276,7 +276,7 @@ export function PlayerActionSheet({ event, memberId, onClose, editable, onChange
             <div className="small muted">
               {placeOf(assignment)} · {fmtPower(member.arena_power_m)}
             </div>
-            <div className="faint">{availability ? describeChoice(availability.choice, event.teams) : 'No availability response'}</div>
+            <div className="faint">{availability ? describeAvailability(availability, event.teams) : 'No availability response'}</div>
           </div>
         </div>
         {assignment && <div className="small wrap muted">{assignment.reason}</div>}
