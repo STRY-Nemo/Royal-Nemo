@@ -21,7 +21,8 @@ Short handoff so another coding agent can resume without the original conversati
 - **Slot priorities**: `Availability.slots` (`{team1, team2}` each 1 | 2 | 0) with `choice` derived; `SlotPicker` UI; `CollectScreen` (leader grid, `/canyon/collect/:id`); suggestion flow costs rank×1000 + 1 for a second-choice slot; power balancing skips players with a first choice.
 - **Weeks ahead**: `ensureUpcomingDrafts` (max 4 Fridays), `POST /events/upcoming`, Canyon "Upcoming weeks" card, Home list with per-week availability status, "Back to this week" when viewing a future draft.
 - **Separate benches**: substitutes belong to one team (`teamReserves`, `waitingList`, move target `reserve:<teamId>`).
-- Tests: 50 unit (+ real-file parsing and import scenarios), 11 API integration.
+- **Ideas** (`src/engine/suggestions.ts`, `src/screens/IdeasScreen.tsx`, `server/migrations/0002_suggestions.sql`, routes under `/suggestions`): members post (5 open max, 80/1000 char limits) and vote; leaders set status + reply; `GET /suggestions/export` for the sync workflow (header `x-sync-token`, 404 without the `SUGGESTIONS_SYNC_TOKEN` secret). `.github/workflows/suggestions-sync.yml` runs every 6 h and mirrors ideas into GitHub issues (`idea` label, one per suggestion, plus a rolling digest issue) for agent analysis.
+- Tests: 61 unit (+ real-file parsing and import scenarios, suggestions), 16 API integration.
 
 ## Hosting
 

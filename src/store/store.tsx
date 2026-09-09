@@ -13,12 +13,13 @@
  */
 import { applyLineupImport, type LineupRecord } from '../engine/lineupImport';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { Assignment, AttendanceOutcome, AuditEntry, AvailabilityChoice, CanyonEvent, MascotState, Member, MemberId, OrganizationState, ResponsibilityId, ResponsibilitySlot, Session, Settings, SlotPriorities, TeamId } from '../domain/types';
+import type { Assignment, AttendanceOutcome, AuditEntry, AvailabilityChoice, CanyonEvent, MascotState, Member, MemberId, OrganizationState, ResponsibilityId, ResponsibilitySlot, Session, Settings, SlotPriorities, Suggestion, SuggestionStatus, TeamId } from '../domain/types';
 import { loadSeedMembers, loadSeedOrganization, PACKAGE_DATE, seedEventDraft, SERIES_ID } from '../data/seed';
 import * as L from '../engine/lifecycle';
 import * as O from '../engine/organization';
 import { computeHistory, type MemberHistory } from '../engine/history';
 import { feedMascot, initialMascot, MascotError } from '../engine/mascot';
+import { createSuggestion, setSuggestionStatus, toggleVote } from '../engine/suggestions';
 import { APOCALYPSE_TIME_ZONE, deviceTimeZone, nextFriday, todayInZone } from '../engine/recurrence';
 import { useFeedback, type SaveState } from '../motion';
 import { ApiClient, ApiError, apiBaseUrl, type ApiAccount, type ApiState } from '../api/client';
@@ -40,6 +41,7 @@ export interface PersistedState {
   session: Session;
   audit: AuditEntry[];
   mascot: MascotState;
+  suggestions: Suggestion[];
 }
 
 export type ActionResult = { ok: true } | { ok: false; code: string; message: string };
@@ -60,6 +62,7 @@ function initialDemoState(): PersistedState {
     session: { role: 'leader', member_id: null },
     audit: [],
     mascot: initialMascot(new Date().toISOString()),
+    suggestions: [],
   };
 }
 
@@ -82,7 +85,7 @@ function writeJson(key: string, value: unknown): void {
 
 function loadDemo(): { state: PersistedState; restored: boolean } {
   const parsed = readJson<PersistedState>(STORAGE_KEY);
-  if (parsed && parsed.version === STATE_VERSION && Array.isArray(parsed.members) && parsed.members.length === 100) return { state: { ...parsed, mascot: parsed.mascot ?? initialMascot(new Date().toISOString()) }, restored: true };
+  if (parsed && parsed.version === STATE_VERSION && Array.isArray(parsed.members) && parsed.members.length === 100) return { state: { ...parsed, mascot: parsed.mascot ?? initialMascot(new Date().toISOString()), suggestions: parsed.suggestions ?? [] }, restored: true };
   return { state: initialDemoState(), restored: false };
 }
 
@@ -105,6 +108,7 @@ function stateFromApi(api: ApiState, device: DeviceSettings): PersistedState {
     session: { role: api.account.role, member_id: api.account.member_id },
     audit: api.audit,
     mascot: api.mascot ?? initialMascot(api.server_time),
+    suggestions: api.suggestions ?? [],
   };
 }
 
@@ -178,6 +182,9 @@ export interface StoreValue {
     setDesignatedEditor: (memberId: MemberId, on: boolean) => ActionResult;
     /** Feed the alliance bear once. Fails with code 'cooldown' or 'daily_cap'. */
     feedBear: () => ActionResult & { evolved?: boolean; stage?: { n: number; name: string } };
+    addSuggestion: (title: string, body: string) => ActionResult;
+    voteSuggestion: (id: string) => ActionResult;
+    setSuggestionStatus: (id: string, status: SuggestionStatus, reply: string | null) => ActionResult;
     setMechanicalNote: (memberId: MemberId, note: string) => ActionResult;
     setMemberActive: (memberId: MemberId, active: boolean) => ActionResult;
     resetDemo: () => void;
@@ -710,6 +717,74 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       renameTask: (id, title) => runOrg((org) => O.renameTask(org, id, title, ctx(), org.revision), undefined, (a, before) => a.taskOp({ op: 'rename', id, title, expected_revision: before.revision })),
       archiveTask: (id, archived) => runOrg((org) => O.setTaskArchived(org, id, archived, ctx(), org.revision), undefined, (a, before) => a.taskOp({ op: 'archive', id, archived, expected_revision: before.revision })),
       reorderTask: (id, direction) => runOrg((org) => O.reorderTask(org, id, direction, ctx(), org.revision), undefined, (a, before) => a.taskOp({ op: 'reorder', id, direction, expected_revision: before.revision })),
+      addSuggestion: (title, body) => {
+        const s = stateRef.current;
+        const acct = accountRef.current;
+        const accountId = acct ? acct.id : (s.session.member_id ?? 'demo');
+        const name = (s.session.member_id && s.members.find((m) => m.id === s.session.member_id)?.username) || acct?.username || 'Someone';
+        let created: Suggestion;
+        try {
+          created = createSuggestion(s.suggestions, { id: `local-${Date.now().toString(36)}`, account_id: accountId, member_id: s.session.member_id, author_name: name, title, body, now: new Date().toISOString() });
+        } catch (err) {
+          return fail(err);
+        }
+        commit((st) => ({ ...st, suggestions: [created, ...st.suggestions] }));
+        if (api) {
+          sync(
+            'Idea',
+            () => commit((st) => ({ ...st, suggestions: st.suggestions.filter((x) => x.id !== created.id) })),
+            async () => {
+              const r = await api.createSuggestion(created.title, created.body);
+              commit((st) => ({ ...st, suggestions: st.suggestions.map((x) => (x.id === created.id ? r.suggestion : x)) }));
+            },
+          );
+        }
+        return { ok: true };
+      },
+      voteSuggestion: (id) => {
+        const s = stateRef.current;
+        const acct = accountRef.current;
+        const voter = acct ? acct.id : (s.session.member_id ?? 'demo');
+        const before = s.suggestions.find((x) => x.id === id);
+        if (!before) return fail(new L.LifecycleError('not_found', 'Idea not found.'));
+        const next = toggleVote(before, voter, new Date().toISOString());
+        commit((st) => ({ ...st, suggestions: st.suggestions.map((x) => (x.id === id ? next : x)) }));
+        if (api) {
+          sync(
+            'Vote',
+            () => commit((st) => ({ ...st, suggestions: st.suggestions.map((x) => (x.id === id ? before : x)) })),
+            async () => {
+              const r = await api.voteSuggestion(id);
+              commit((st) => ({ ...st, suggestions: st.suggestions.map((x) => (x.id === id ? r.suggestion : x)) }));
+            },
+          );
+        }
+        return { ok: true };
+      },
+      setSuggestionStatus: (id, status, reply) => {
+        const denied = requireLeader();
+        if (denied) return denied;
+        const before = stateRef.current.suggestions.find((x) => x.id === id);
+        if (!before) return fail(new L.LifecycleError('not_found', 'Idea not found.'));
+        let next: Suggestion;
+        try {
+          next = setSuggestionStatus(before, status, reply, new Date().toISOString());
+        } catch (err) {
+          return fail(err);
+        }
+        commit((st) => ({ ...st, suggestions: st.suggestions.map((x) => (x.id === id ? next : x)) }));
+        if (api) {
+          sync(
+            'Idea status',
+            () => commit((st) => ({ ...st, suggestions: st.suggestions.map((x) => (x.id === id ? before : x)) })),
+            async () => {
+              const r = await api.setSuggestionStatus(id, status, reply);
+              commit((st) => ({ ...st, suggestions: st.suggestions.map((x) => (x.id === id ? r.suggestion : x)) }));
+            },
+          );
+        }
+        return { ok: true };
+      },
       feedBear: () => {
         const s = stateRef.current;
         const acct = accountRef.current;

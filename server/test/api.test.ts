@@ -275,6 +275,25 @@ describe('STRY API', () => {
     expect((await api<{ valid: boolean }>('GET', `/invites/${inv.body.invite.code}/check`)).body.valid).toBe(false);
   });
 
+  it('collects ideas: members post and vote, leaders triage, export needs the sync token', async () => {
+    const post = await api<{ suggestion: { id: string; author_name: string; status: string } }>('POST', '/suggestions', { title: 'Remind me before Canyon', body: 'A push 30 minutes before.' }, memberToken);
+    expect(post.status).toBe(200);
+    expect(post.body.suggestion.author_name).toBe('Appins');
+    expect(post.body.suggestion.status).toBe('new');
+    expect((await api('POST', '/suggestions', { title: 'ab' }, memberToken)).status).toBe(422);
+    const id = post.body.suggestion.id;
+    const vote = await api<{ suggestion: { votes: string[] } }>('POST', `/suggestions/${id}/vote`, undefined, leaderToken);
+    expect(vote.body.suggestion.votes).toHaveLength(1);
+    expect((await api<{ suggestion: { votes: string[] } }>('POST', `/suggestions/${id}/vote`, undefined, leaderToken)).body.suggestion.votes).toHaveLength(0);
+    expect((await api('POST', `/suggestions/${id}/status`, { status: 'planned', reply: 'Next week' }, memberToken)).status).toBe(403);
+    const triaged = await api<{ suggestion: { status: string; leader_reply: string } }>('POST', `/suggestions/${id}/status`, { status: 'planned', reply: 'Next week' }, leaderToken);
+    expect(triaged.body.suggestion).toMatchObject({ status: 'planned', leader_reply: 'Next week' });
+    const state = await api<{ suggestions: { id: string }[] }>('GET', '/state', undefined, memberToken);
+    expect(state.body.suggestions.some((s) => s.id === id)).toBe(true);
+    expect((await api('GET', '/suggestions/export')).status).toBe(404);
+    expect((await api('GET', '/suggestions/export', undefined, undefined)).status).toBe(404);
+  });
+
   it('feeds the shared bear with a per-person cooldown', async () => {
     const st = await api<{ mascot: { feeds: number; revision: number } }>('GET', '/state', undefined, memberToken);
     expect(st.body.mascot.feeds).toBe(0);

@@ -5,7 +5,7 @@ import { normalizeName } from '../engine/organization';
 import { BottomSheet } from '../motion';
 import { useRouter, type Tab } from '../store/router';
 import { fmtPower, initials, useStore } from '../store/store';
-import { BackIcon, CanyonIcon, HomeIcon, MembersIcon, OrganizeIcon, SearchIcon, SettingsIcon, StarIcon } from './icons';
+import { BackIcon, CanyonIcon, HomeIcon, IdeaIcon, MembersIcon, OrganizeIcon, SearchIcon, SettingsIcon, StarIcon } from './icons';
 
 // ---- Header -------------------------------------------------------------
 
@@ -44,6 +44,7 @@ const TABS: { tab: Tab; label: string; Icon: typeof HomeIcon }[] = [
   { tab: 'canyon', label: 'Canyon', Icon: CanyonIcon },
   { tab: 'organize', label: 'Organize', Icon: OrganizeIcon },
   { tab: 'members', label: 'Members', Icon: MembersIcon },
+  { tab: 'ideas', label: 'Ideas', Icon: IdeaIcon },
 ];
 
 export function TabBar() {

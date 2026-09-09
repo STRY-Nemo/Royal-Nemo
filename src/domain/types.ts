@@ -193,6 +193,25 @@ export interface MascotState {
   revision: number;
 }
 
+export type SuggestionStatus = 'new' | 'planned' | 'done' | 'declined';
+
+/** A member's suggestion or feature request (Ideas tab). */
+export interface Suggestion {
+  id: string;
+  /** Account id in connected mode; member id or 'demo' in demo mode. */
+  account_id: string;
+  member_id: MemberId | null;
+  author_name: string;
+  title: string;
+  body: string;
+  status: SuggestionStatus;
+  /** Account ids that upvoted. */
+  votes: string[];
+  leader_reply: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export type MotionPreference = 'system' | 'full' | 'reduced' | 'off';
 
 export interface Settings {

@@ -4,6 +4,8 @@ export interface Env {
   ALLOWED_ORIGINS?: string;
   /** Secret. Registering with this code while no leader exists creates the first leader. */
   OWNER_SETUP_CODE?: string;
+  /** Optional shared token that lets an automation (GitHub Actions) export suggestions. */
+  SUGGESTIONS_SYNC_TOKEN?: string;
 }
 
 export type Role = 'leader' | 'member';

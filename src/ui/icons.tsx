@@ -39,6 +39,14 @@ export const ChevronDown = (p: P) => (
     <path d="M6 9l6 6 6-6" />
   </svg>
 );
+export const IdeaIcon = (p: P) => (
+  <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...p}>
+    <path d="M9 18h6" />
+    <path d="M10 21h4" />
+    <path d="M12 3a6 6 0 0 0-3.5 10.9c.7.6 1 1.3 1.1 2.1h4.8c.1-.8.4-1.5 1.1-2.1A6 6 0 0 0 12 3z" />
+  </svg>
+);
+
 export const BackIcon = (p: P) => (
   <svg {...base} {...p} aria-hidden="true">
     <path d="M15 6l-6 6 6 6" />

@@ -22,6 +22,7 @@ import { AccountsScreen } from './screens/AccountsScreen';
 import { ImportScreen } from './screens/ImportScreen';
 import { CollectScreen } from './screens/CollectScreen';
 import { BearScreen } from './screens/BearScreen';
+import { IdeasScreen } from './screens/IdeasScreen';
 import { Starfield } from './ui/Starfield';
 import { RoamingBear } from './ui/RoamingBear';
 
@@ -53,6 +54,8 @@ function Routes() {
       return <MembersScreen />;
     case 'bear':
       return <BearScreen />;
+    case 'ideas':
+      return <IdeasScreen />;
     case 'settings':
       if (second === 'accounts') return <AccountsScreen />;
       return <SettingsScreen />;

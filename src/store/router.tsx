@@ -4,7 +4,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-export type Tab = 'home' | 'canyon' | 'organize' | 'members';
+export type Tab = 'home' | 'canyon' | 'organize' | 'members' | 'ideas';
 
 export interface Route {
   path: string;
@@ -18,7 +18,7 @@ function parse(hash: string): Route {
   const [pathPart, queryPart = ''] = raw.split('?');
   const segments = pathPart.split('/').filter(Boolean);
   const first = segments[0] ?? 'home';
-  const tab: Tab = first === 'canyon' || first === 'organize' || first === 'members' ? first : 'home';
+  const tab: Tab = first === 'canyon' || first === 'organize' || first === 'members' || first === 'ideas' ? first : 'home';
   return { path: '/' + segments.join('/') + (queryPart ? `?${queryPart}` : ''), segments, query: new URLSearchParams(queryPart), tab };
 }
 
@@ -33,7 +33,7 @@ const RouterContext = createContext<RouterValue | null>(null);
 
 export function RouterProvider({ children }: { children: ReactNode }) {
   const [route, setRoute] = useState<Route>(() => parse(window.location.hash));
-  const lastPerTab = useRef<Record<Tab, string>>({ home: '/home', canyon: '/canyon', organize: '/organize', members: '/members' });
+  const lastPerTab = useRef<Record<Tab, string>>({ home: '/home', canyon: '/canyon', organize: '/organize', members: '/members', ideas: '/ideas' });
   const scrollPositions = useRef<Map<string, number>>(new Map());
   const historyDepth = useRef(0);
 

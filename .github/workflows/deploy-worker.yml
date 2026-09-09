@@ -30,6 +30,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       OWNER_SETUP_CODE: ${{ secrets.OWNER_SETUP_CODE }}
+      SUGGESTIONS_SYNC_TOKEN: ${{ secrets.SUGGESTIONS_SYNC_TOKEN }}
       WRANGLER_SEND_METRICS: 'false'
     steps:
       - name: Check Cloudflare secrets
@@ -110,6 +111,10 @@ jobs:
           code=$(curl -sS -o reg.json -w '%{http_code}' -X POST "$url/auth/register" -H 'content-type: application/json' -d '{"username":"probe","password":"1234","invite_code":"not-a-real-code"}')
           echo "register probe: $code $(cat reg.json)"
           test "$code" = "403" || { echo "::error::Unexpected response from /auth/register (expected 403 for a bad invite)."; exit 1; }
+      - name: Store the suggestions sync token (optional)
+        if: steps.check.outputs.configured == 'true' && env.SUGGESTIONS_SYNC_TOKEN != ''
+        working-directory: server
+        run: printf '%s' "$SUGGESTIONS_SYNC_TOKEN" | npx wrangler secret put SUGGESTIONS_SYNC_TOKEN
       - name: Check that the site build points at this API
         if: steps.check.outputs.configured == 'true'
         run: |

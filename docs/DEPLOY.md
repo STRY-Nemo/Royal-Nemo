@@ -24,6 +24,7 @@ Open the repository on GitHub → **Settings → Secrets and variables → Actio
 | `CLOUDFLARE_API_TOKEN` | the token from step 3 |
 | `CLOUDFLARE_ACCOUNT_ID` | the account id from step 2 |
 | `OWNER_SETUP_CODE` | a passphrase you choose; you will type it once to create the first leader account |
+| `SUGGESTIONS_SYNC_TOKEN` | optional: any long random string. Lets the "Sync ideas to issues" workflow read the Ideas tab and mirror it into GitHub issues for agent review. Re-run the API deploy after adding it. |
 
 ### 5. Run the deploy
 GitHub → **Actions → "Deploy API to Cloudflare" → Run workflow** (pick the branch the app lives on). The run:
@@ -48,6 +49,7 @@ If the code is refused: the Worker only receives the secret when the **Deploy AP
 ## Everyday operation
 
 - Pushing changes to the app branch rebuilds the site automatically. Pushing changes under `server/` or the engine redeploys the API (the deploy workflow runs its own tests first).
+- **Ideas → GitHub issues**: with `SUGGESTIONS_SYNC_TOKEN` set, Actions → "Sync ideas to issues" runs every 6 hours (or on demand) and opens one issue per new idea (label `idea`) plus a digest issue of the top-voted ones. Ask a coding agent to work from those issues; statuses set in the app are shown on each issue.
 - **Backups**: a leader can export everything as JSON from Settings. Cloudflare D1 also keeps point-in-time history for 30 days ("Time Travel").
 - **Logs**: Cloudflare dashboard → Workers & Pages → stry-alliance-api → Logs.
 - **Local development** against the API: `npm run server:migrate:local`, then `npm run server:dev` in one terminal and `VITE_API_URL=http://localhost:8787 npm run dev` in another. The worker takes `OWNER_SETUP_CODE` from `server/.dev.vars` (create that file with `OWNER_SETUP_CODE=something`).

@@ -1,6 +1,6 @@
 # STRY Alliance App
 
-Mobile-only organizer for the STRY alliance in Last Z. The first working feature is the weekly **Canyon Clash** rotation (two teams of 20, every Friday), plus an editable **Organize** page for leadership responsibilities and a **Members** directory.
+Mobile-only organizer for the STRY alliance in Last Z. The first working feature is the weekly **Canyon Clash** rotation (two teams of 20, every Friday), plus an editable **Organize** page for leadership responsibilities, a **Members** directory and an **Ideas** tab for suggestions.
 
 The build follows the handoff package in `docs/spec/` (PRODUCT_SPEC, DESIGN, ORGANIZATION, MOTION_AND_QOL). See `PROGRESS.md` for milestone status and what another agent should pick up next.
 
@@ -58,7 +58,7 @@ The repository was empty apart from a README, so a small maintained stack was ch
 | `server/` | Cloudflare Worker (`src/index.ts` routes, `auth.ts`, `db.ts`), D1 migrations, integration tests |
 | `.github/workflows/` | `deploy-pages.yml` (test, build, publish site) and `deploy-worker.yml` (migrate + deploy API once Cloudflare secrets exist) |
 | `src/motion/` | Motion tokens, Full / Reduced / Off, bottom sheet, toasts with Undo, live announcements, star burst, orbital progress, single-flight guard |
-| `src/screens/` | Home, Canyon overview, Availability, Schedule, Roster + player action sheet, Suggestion review + publish, Attendance, History, Organize, Name mapping, Members, Member detail, Settings |
+| `src/screens/` | Home, Canyon overview, Availability, Schedule, Roster + player action sheet, Suggestion review + publish, Attendance, History, Organize, Name mapping, Members, Member detail, Ideas, Settings |
 | `src/data/` | Verified seed data: 100 members, 16 responsibilities, event draft, list of bundled team screen files |
 | `public/imports/` | Team screen exports shipped with the app (Team 1 and Team 2 for 2026-09-11) |
 | `docs/spec/` | The original specification package, unchanged |
@@ -81,6 +81,7 @@ The repository was empty apart from a README, so a small maintained stack was ch
 - **Organize access**: the Organize page (and name mapping) is for leader accounts, R4/R5 members and members designated under "Who can edit" on the page itself; in connected mode a leader must have verified the member link. Everyone else sees a "Leadership only" notice. Enforced by the server on every organization route.
 - **Availability as slot priorities**: for each time (18:00 and 23:00 AT) a player answers 1st, 2nd or Can't, or "Can't play this week". Members answer for themselves (Home or Canyon); leaders use **Collect availability**, a one-screen grid for all 100 members with Missing / Answered filters and a share button that posts the request link to alliance chat. The rotation honours first choices whenever there is room, never at the expense of fairness (`preferredTeamId`, edge costs in `suggest.ts`).
 - **Plan up to 4 weeks ahead**: leaders open drafts for the next four Fridays (Canyon → Upcoming weeks → "Open the next 4 weeks"; server route `POST /events/upcoming`). Each week keeps its own times, availability and lineup; members see the upcoming weeks on Home and can set availability early.
+- **Ideas tab**: any member posts a suggestion or feature request (title + details, up to 5 open per person), votes on others' ideas, and sees leader replies. Leaders set a status (New → Planned → Done / Declined) with an optional reply. A scheduled workflow (`.github/workflows/suggestions-sync.yml`, every 6 h) mirrors new ideas into GitHub issues labelled `idea` and keeps a top-voted digest issue, so a coding agent can review and analyse them; the export route needs the `SUGGESTIONS_SYNC_TOKEN` secret.
 - **In-game team screen import** (Canyon → "Import the in-game team screen", leaders): reads the recording export (.xlsx/.csv), matches names to the roster (case, accents and leader name mappings), shows a review (starters, substitutes, declined, other team, unmatched names, availability updates), then writes locked starters and locked substitutes for that team and the availability those rows imply. Generate keeps them and fills the other team fairly. It records selection only; attendance is still confirmed after the match. The same rules run on the server.
 
 ## Verification done

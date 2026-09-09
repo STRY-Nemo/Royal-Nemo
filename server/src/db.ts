@@ -1,5 +1,5 @@
 import { initialMascot } from '../../src/engine/mascot';
-import type { AuditEntry, CanyonEvent, MascotState, Member, OrganizationState, Settings } from '../../src/domain/types';
+import type { AuditEntry, CanyonEvent, MascotState, Member, OrganizationState, Settings, Suggestion } from '../../src/domain/types';
 import { loadSeedMembers, loadSeedOrganization, PACKAGE_DATE, SERIES_ID } from '../../src/data/seed';
 import { createDraftEvent } from '../../src/engine/lifecycle';
 import { APOCALYPSE_TIME_ZONE, nextFriday, todayInZone } from '../../src/engine/recurrence';
@@ -122,6 +122,43 @@ export async function loadMascot(env: Env, now: Date): Promise<{ doc: MascotStat
     await env.DB.prepare('INSERT OR IGNORE INTO documents (key, revision, doc, updated_at) VALUES (?, ?, ?, ?)').bind('mascot', doc.revision, JSON.stringify(doc), now.toISOString()).run();
     return loadDocument<MascotState>(env, 'mascot');
   }
+}
+
+interface SuggestionRow {
+  id: string;
+  account_id: string;
+  member_id: string | null;
+  author_name: string;
+  title: string;
+  body: string;
+  status: Suggestion['status'];
+  votes: string;
+  leader_reply: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+function rowToSuggestion(r: SuggestionRow): Suggestion {
+  return { ...r, votes: JSON.parse(r.votes || '[]') as string[] };
+}
+
+export async function loadSuggestions(env: Env): Promise<Suggestion[]> {
+  const rows = await env.DB.prepare('SELECT * FROM suggestions ORDER BY created_at DESC').all<SuggestionRow>();
+  return rows.results.map(rowToSuggestion);
+}
+
+export async function loadSuggestion(env: Env, id: string): Promise<Suggestion> {
+  const row = await env.DB.prepare('SELECT * FROM suggestions WHERE id = ?').bind(id).first<SuggestionRow>();
+  if (!row) throw new HttpError(404, 'not_found', 'Suggestion not found.');
+  return rowToSuggestion(row);
+}
+
+export async function saveSuggestion(env: Env, s: Suggestion): Promise<void> {
+  await env.DB.prepare(
+    'INSERT INTO suggestions (id, account_id, member_id, author_name, title, body, status, votes, leader_reply, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET title = excluded.title, body = excluded.body, status = excluded.status, votes = excluded.votes, leader_reply = excluded.leader_reply, updated_at = excluded.updated_at',
+  )
+    .bind(s.id, s.account_id, s.member_id, s.author_name, s.title, s.body, s.status, JSON.stringify(s.votes), s.leader_reply, s.created_at, s.updated_at)
+    .run();
 }
 
 export async function loadSettings(env: Env): Promise<Settings> {

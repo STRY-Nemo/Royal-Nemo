@@ -4,7 +4,7 @@
  */
 import type { MoveTarget } from '../engine/lifecycle';
 import type { LineupRecord } from '../engine/lineupImport';
-import type { AttendanceOutcome, AvailabilityChoice, CanyonEvent, MascotState, Member, MemberId, OrganizationState, Settings, SlotPriorities, TeamId } from '../domain/types';
+import type { AttendanceOutcome, AvailabilityChoice, CanyonEvent, MascotState, Member, MemberId, OrganizationState, Settings, SlotPriorities, Suggestion, SuggestionStatus, TeamId } from '../domain/types';
 import type { SlotEdit } from '../engine/organization';
 
 export const TOKEN_KEY = 'stry-api-token';
@@ -26,6 +26,7 @@ export interface ApiState {
   settings: Settings;
   audit: import('../domain/types').AuditEntry[];
   mascot?: MascotState;
+  suggestions?: Suggestion[];
   account: ApiAccount;
   server_time: string;
 }
@@ -184,6 +185,18 @@ export class ApiClient {
   }
   schedule(eventId: string, patch: Record<string, unknown>) {
     return this.ev(eventId, 'schedule', patch);
+  }
+  suggestions() {
+    return this.request<{ suggestions: Suggestion[] }>('GET', '/suggestions');
+  }
+  createSuggestion(title: string, body: string) {
+    return this.request<{ suggestion: Suggestion }>('POST', '/suggestions', { title, body });
+  }
+  voteSuggestion(id: string) {
+    return this.request<{ suggestion: Suggestion }>('POST', `/suggestions/${encodeURIComponent(id)}/vote`);
+  }
+  setSuggestionStatus(id: string, status: SuggestionStatus, reply: string | null) {
+    return this.request<{ suggestion: Suggestion }>('POST', `/suggestions/${encodeURIComponent(id)}/status`, { status, reply });
   }
   feedBear() {
     return this.request<{ mascot: MascotState; stage: { n: number; name: string }; evolved: boolean }>('POST', '/mascot/feed');

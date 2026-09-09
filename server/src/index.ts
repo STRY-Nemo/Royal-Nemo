@@ -29,7 +29,8 @@ import {
   validateUsername,
   verifyPassword,
 } from './auth';
-import { auditStatement, ensureSeeded, insertEvent, loadDocument, loadEvent, loadEvents, loadMascot, loadMember, loadMembers, loadOrganization, loadSettings, recentAudit, saveDocumentCas, saveEventCas, saveMember } from './db';
+import { auditStatement, ensureSeeded, insertEvent, loadDocument, loadEvent, loadEvents, loadMascot, loadMember, loadMembers, loadOrganization, loadSettings, loadSuggestion, loadSuggestions, recentAudit, saveDocumentCas, saveEventCas, saveMember, saveSuggestion } from './db';
+import { createSuggestion, setSuggestionStatus, toggleVote } from '../../src/engine/suggestions';
 import { feedMascot, MascotError } from '../../src/engine/mascot';
 import type { Account, Env } from './env';
 import { HttpError } from './env';
@@ -219,7 +220,8 @@ router.get('/state', async (ctx) => {
     account.role === 'leader' ? recentAudit(ctx.env) : Promise.resolve([]),
     loadMascot(ctx.env, ctx.now),
   ]);
-  return { members: stripPrivate(members, account), events, organization, settings, audit, mascot: mascot.doc, account, server_time: ctx.now.toISOString() };
+  const suggestions = await loadSuggestions(ctx.env);
+  return { members: stripPrivate(members, account), events, organization, settings, audit, mascot: mascot.doc, suggestions, account, server_time: ctx.now.toISOString() };
 });
 
 router.get('/export', async (ctx) => {
@@ -424,6 +426,55 @@ router.post('/events/upcoming', async (ctx) => {
   const res = L.ensureUpcomingDrafts(events, { series_id: SERIES_ID, fromDate, weeks, timezone: settings.timezone, team_times: settings.default_team_times });
   for (const e of res.created) await insertEvent(ctx.env, e, ctx.now);
   return { events: [...events, ...res.created], created: res.created.length, dates: res.dates };
+});
+
+// ---- Suggestions (Ideas tab) -----------------------------------------------------
+router.get('/suggestions', async (ctx) => {
+  requireAccount(ctx.account);
+  return { suggestions: await loadSuggestions(ctx.env) };
+});
+
+router.post('/suggestions', async (ctx) => {
+  const account = requireAccount(ctx.account);
+  const body = await ctx.body();
+  const member = account.member_id ? await loadMember(ctx.env, account.member_id).catch(() => null) : null;
+  const existing = await loadSuggestions(ctx.env);
+  let s;
+  try {
+    s = createSuggestion(existing, { id: newId('idea'), account_id: account.id, member_id: account.member_id, author_name: member?.username ?? account.username, title: str(body, 'title'), body: str(body, 'body', false) ?? '', now: ctx.now.toISOString() });
+  } catch (err) {
+    mapError(err);
+  }
+  await saveSuggestion(ctx.env, s!);
+  return { suggestion: s };
+});
+
+router.post('/suggestions/:id/vote', async (ctx) => {
+  const account = requireAccount(ctx.account);
+  const s = toggleVote(await loadSuggestion(ctx.env, ctx.params.id), account.id, ctx.now.toISOString());
+  await saveSuggestion(ctx.env, s);
+  return { suggestion: s };
+});
+
+router.post('/suggestions/:id/status', async (ctx) => {
+  requireLeader(ctx.account);
+  const body = await ctx.body();
+  let s;
+  try {
+    s = setSuggestionStatus(await loadSuggestion(ctx.env, ctx.params.id), str(body, 'status') as Parameters<typeof setSuggestionStatus>[1], typeof body.reply === 'string' ? body.reply : null, ctx.now.toISOString());
+  } catch (err) {
+    mapError(err);
+  }
+  await saveSuggestion(ctx.env, s!);
+  return { suggestion: s };
+});
+
+/** Automation export: GitHub Actions syncs ideas into issues so an agent can analyse them. */
+router.get('/suggestions/export', async (ctx) => {
+  const token = ctx.env.SUGGESTIONS_SYNC_TOKEN;
+  const given = ctx.request.headers.get('x-sync-token') ?? '';
+  if (!token || given !== token) throw new HttpError(404, 'not_found', 'Not found.');
+  return { exported_at: ctx.now.toISOString(), suggestions: await loadSuggestions(ctx.env) };
 });
 
 // ---- Mascot --------------------------------------------------------------------
