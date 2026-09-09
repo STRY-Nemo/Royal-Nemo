@@ -55,6 +55,13 @@ export function LoginScreen() {
         </button>
       </div>
 
+      {tab === 'signin' && (
+        <div className="callout small">
+          <span aria-hidden="true">ⓘ</span>
+          <span>No account yet? Tap <strong>Create account</strong>. The first person to register with the owner setup code becomes the leader; members register with an invite code from a leader.</span>
+        </div>
+      )}
+
       <form
         className="card"
         onSubmit={(e) => {
@@ -75,7 +82,8 @@ export function LoginScreen() {
           <>
             <div className="field">
               <label htmlFor="login-invite">Invite code</label>
-              <input id="login-invite" className="input" autoCapitalize="characters" value={invite} onChange={(e) => setInvite(e.target.value)} required placeholder="From a leader" />
+              <input id="login-invite" className="input" autoCapitalize="characters" value={invite} onChange={(e) => setInvite(e.target.value)} required placeholder="Owner setup code or a leader's invite" />
+              <p className="faint">Setting up the alliance? Enter the owner setup code you saved when deploying: that first account becomes the leader. Everyone after that uses an invite code a leader shares from Settings.</p>
             </div>
             <div className="field">
               <label>Which member are you?</label>
