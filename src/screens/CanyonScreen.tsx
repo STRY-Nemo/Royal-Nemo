@@ -5,6 +5,7 @@ import { DemoBanner, EmptyState, EventTimes, Header, StatusBadge, StickyActions 
 import { CalendarIcon, ChevronRight, HistoryIcon, UndoIcon } from '../ui/icons';
 import { publishBlockers, reserves, starters, teamPower } from '../engine/lifecycle';
 import { ConfirmSheet, OrbitSpinner, useFeedback, useSingleFlight } from '../motion';
+import { BUNDLED_IMPORTS } from '../data/bundledImports';
 
 export function CanyonScreen({ eventId }: { eventId?: string }) {
   const { state, currentEvent, eventById, isLeader, actions, canUndoAssignments, me } = useStore();
@@ -109,6 +110,20 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
               {!event.timezone ? 'Set the event timezone' : 'Confirm the event date'} before publishing. Times are 18:00 and 23:00 in the event timezone.
             </span>
           </div>
+        )}
+
+        {isLeader && !hasStarters && event.status === 'draft' && BUNDLED_IMPORTS.some((b) => b.event_date === event.date) && (
+          <button type="button" className="card interactive" onClick={() => router.navigate(`/canyon/import/${event.id}`)} aria-label="Import the in-game lineup">
+            <div className="card-row">
+              <div className="grow">
+                <h3>Lineup from the game is ready to import</h3>
+                <p className="muted small">
+                  {BUNDLED_IMPORTS.filter((b) => b.event_date === event.date).map((b) => b.label).join(', ')}: starters and substitutes from the in-game screen, plus who is on the other team. Review, then import in one tap.
+                </p>
+              </div>
+              <ChevronRight className="chevron" />
+            </div>
+          </button>
         )}
 
         {event.teams.map((t) => {
