@@ -2,6 +2,7 @@
  * Thin fetch client for the STRY alliance API (server/). Used only when the
  * build has VITE_API_URL set; otherwise the app runs in local demo mode.
  */
+import type { MoveTarget } from '../engine/lifecycle';
 import type { LineupRecord } from '../engine/lineupImport';
 import type { AttendanceOutcome, AvailabilityChoice, CanyonEvent, Member, MemberId, OrganizationState, Settings, TeamId } from '../domain/types';
 import type { SlotEdit } from '../engine/organization';
@@ -156,7 +157,7 @@ export class ApiClient {
   unlock(eventId: string, member_id: MemberId, expected_revision: number) {
     return this.ev(eventId, 'unlock', { member_id, expected_revision });
   }
-  move(eventId: string, member_id: MemberId, target: TeamId | 'reserve', expected_revision: number) {
+  move(eventId: string, member_id: MemberId, target: MoveTarget, expected_revision: number) {
     return this.ev(eventId, 'move', { member_id, target, expected_revision });
   }
   swap(eventId: string, a: MemberId, b: MemberId, expected_revision: number) {

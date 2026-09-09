@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Assignment, CanyonEvent, Member, MemberId, TeamId } from '../domain/types';
-import { reserves, starters, teamPower } from '../engine/lifecycle';
+import { reserveTarget, starters, teamPower, teamReserves, waitingList } from '../engine/lifecycle';
 import { allowedTeamIds, describeChoice } from '../engine/suggest';
 import { BottomSheet, ConfirmSheet, useFeedback, useFlash } from '../motion';
 import { useRouter } from '../store/router';
@@ -34,13 +34,65 @@ export function RosterScreen({ eventId }: { eventId?: string }) {
     );
   }
 
-  const list: Assignment[] = tab === 'reserve' ? reserves(event) : starters(event, tab);
-  const filtered = list.filter((a) => {
+  const list: Assignment[] = tab === 'reserve' ? waitingList(event) : starters(event, tab);
+  const subs: Assignment[] = tab === 'reserve' ? [] : teamReserves(event, tab);
+  const bySearch = (a: Assignment) => {
     const m = membersById.get(a.member_id);
     return m ? matchesSearch(m, query) : false;
-  });
+  };
+  const filtered = list.filter(bySearch);
+  const filteredSubs = subs.filter(bySearch);
   const team = event.teams.find((t) => t.id === tab);
   const editable = isLeader && event.status !== 'finalized' && event.status !== 'canceled';
+
+  const renderRow = (a: Assignment, i: number, prefix = '') => {
+    const m = membersById.get(a.member_id);
+    if (!m) return null;
+    const h = history[m.id];
+    const open = expanded === m.id;
+    return (
+      <div key={m.id} role="listitem">
+        <div className={`row${a.locked ? ' locked' : ''}${flashing.has(m.id) ? ' highlight' : ''}`} style={{ ['--i' as string]: i }}>
+          <span className="index">{prefix}{String(i + 1).padStart(2, '0')}</span>
+          <Avatar name={m.username} />
+          <div className="main">
+            <div className="name wrap">
+              {m.username}
+              {a.locked && (
+                <span className="badge lock" style={{ marginLeft: 6 }}>
+                  <LockIcon width={12} height={12} /> Locked
+                </span>
+              )}
+            </div>
+            <div className="meta">
+              <span className="mono">{fmtPower(m.arena_power_m)}</span>
+              <span>{h?.last_played_at ? `Last played ${h.last_played_at}` : 'Never recorded'}</span>
+              {event.status === 'published' && (
+                <span style={{ color: event.confirmations[m.id] ? 'var(--ok)' : 'var(--warn)' }}>{event.confirmations[m.id] ? 'Confirmed' : 'Pending'}</span>
+              )}
+            </div>
+          </div>
+          <div className="actions">
+            <button type="button" className="icon-btn" aria-expanded={open} aria-label={`${open ? 'Hide' : 'Show'} details for ${m.username}`} onClick={() => setExpanded(open ? null : m.id)}>
+              <ChevronDown style={{ transform: open ? 'rotate(180deg)' : undefined, transition: 'transform var(--m-press)' }} />
+            </button>
+            <button type="button" className="icon-btn" aria-label={`Actions for ${m.username}`} onClick={() => setActionFor(m.id)}>
+              <MoreIcon />
+            </button>
+          </div>
+        </div>
+        {open && (
+          <div className="row-details">
+            <div className="wrap">
+              <strong>Why:</strong> {a.reason}
+            </div>
+            {h?.history_incomplete && <div className="faint">History incomplete since tracking start {m.tracking_start}.</div>}
+            {event.availability[m.id] && <div className="faint">Available: {describeChoice(event.availability[m.id].choice, event.teams)}</div>}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <>
@@ -54,8 +106,8 @@ export function RosterScreen({ eventId }: { eventId?: string }) {
             </button>
           ))}
           <button type="button" role="tab" aria-selected={tab === 'reserve'} onClick={() => setTab('reserve')}>
-            Reserves
-            <small>{reserves(event).length}</small>
+            Waiting
+            <small>{waitingList(event).length}</small>
           </button>
         </div>
 
@@ -71,11 +123,11 @@ export function RosterScreen({ eventId }: { eventId?: string }) {
                   {list.length === team.capacity && <span className="badge published">Complete</span>}
                 </div>
                 <div className="small muted">
-                  Total arena power {fmtPower(teamPower(event, state.members, team.id))} · {Object.keys(event.confirmations).filter((id) => list.some((a) => a.member_id === id)).length} confirmed
+                  {subs.length} substitute{subs.length === 1 ? '' : 's'} · arena power {fmtPower(teamPower(event, state.members, team.id))} · {Object.keys(event.confirmations).filter((id) => list.some((a) => a.member_id === id) || subs.some((a) => a.member_id === id)).length} confirmed
                 </div>
               </>
             ) : (
-              <div className="small muted">Waiting players in rotation priority order. Reserves are not proof anyone played.</div>
+              <div className="small muted">Available players who are not on either team's bench yet, in rotation priority order. Each team's substitutes are listed under that team.</div>
             )}
           </div>
           <StatusBadge status={event.status} />
@@ -83,62 +135,27 @@ export function RosterScreen({ eventId }: { eventId?: string }) {
 
         <SearchInput value={query} onChange={setQuery} placeholder="Find a player" />
 
-        {list.length === 0 && (
-          <EmptyState title={tab === 'reserve' ? 'No reserves yet' : 'No players assigned'} action={editable && !event.assignments.length ? <button type="button" className="btn primary" onClick={() => router.navigate(`/canyon/${event.id}`)}>Generate suggestions</button> : undefined}>
-            {tab === 'reserve' ? 'Everyone available fit, or suggestions have not been generated.' : 'Generate suggestions or lock players from the reserves list.'}
+        {list.length === 0 && subs.length === 0 && (
+          <EmptyState title={tab === 'reserve' ? 'Nobody is waiting' : 'No players assigned'} action={editable && !event.assignments.length ? <button type="button" className="btn primary" onClick={() => router.navigate(`/canyon/${event.id}`)}>Generate suggestions</button> : undefined}>
+            {tab === 'reserve' ? 'Every available player is on a team or its bench, or suggestions have not been generated.' : 'Generate suggestions, import the in-game screen, or lock players from the waiting list.'}
           </EmptyState>
         )}
 
-        <div className="list" role="list">
-          {filtered.map((a, i) => {
-            const m = membersById.get(a.member_id);
-            if (!m) return null;
-            const h = history[m.id];
-            const open = expanded === m.id;
-            return (
-              <div key={m.id} role="listitem">
-                <div className={`row${a.locked ? ' locked' : ''}${flashing.has(m.id) ? ' highlight' : ''}`} style={{ ['--i' as string]: i }}>
-                  <span className="index">{String(i + 1).padStart(2, '0')}</span>
-                  <Avatar name={m.username} />
-                  <div className="main">
-                    <div className="name wrap">
-                      {m.username}
-                      {a.locked && (
-                        <span className="badge lock" style={{ marginLeft: 6 }}>
-                          <LockIcon width={12} height={12} /> Locked
-                        </span>
-                      )}
-                    </div>
-                    <div className="meta">
-                      <span className="mono">{fmtPower(m.arena_power_m)}</span>
-                      <span>{h?.last_played_at ? `Last played ${h.last_played_at}` : 'Never recorded'}</span>
-                      {event.status === 'published' && (
-                        <span style={{ color: event.confirmations[m.id] ? 'var(--ok)' : 'var(--warn)' }}>{event.confirmations[m.id] ? 'Confirmed' : 'Pending'}</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="actions">
-                    <button type="button" className="icon-btn" aria-expanded={open} aria-label={`${open ? 'Hide' : 'Show'} details for ${m.username}`} onClick={() => setExpanded(open ? null : m.id)}>
-                      <ChevronDown style={{ transform: open ? 'rotate(180deg)' : undefined, transition: 'transform var(--m-press)' }} />
-                    </button>
-                    <button type="button" className="icon-btn" aria-label={`Actions for ${m.username}`} onClick={() => setActionFor(m.id)}>
-                      <MoreIcon />
-                    </button>
-                  </div>
-                </div>
-                {open && (
-                  <div className="row-details">
-                    <div className="wrap">
-                      <strong>Why:</strong> {a.reason}
-                    </div>
-                    {h?.history_incomplete && <div className="faint">History incomplete since tracking start {m.tracking_start}.</div>}
-                    {event.availability[m.id] && <div className="faint">Available: {describeChoice(event.availability[m.id].choice, event.teams)}</div>}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+        <div className="list" role="list" aria-label={team ? `${team.name} starters` : 'Waiting list'}>
+          {filtered.map((a, i) => renderRow(a, i))}
         </div>
+
+        {team && subs.length > 0 && (
+          <>
+            <h3 style={{ marginTop: 12 }}>
+              {team.name} substitutes <span className="muted" style={{ fontWeight: 500 }}>({subs.length})</span>
+            </h3>
+            <p className="faint">Bench for this team only. Substitutes step in for this team's starters; the other team has its own bench.</p>
+            <div className="list" role="list" aria-label={`${team.name} substitutes`}>
+              {filteredSubs.map((a, i) => renderRow(a, i, 'S'))}
+            </div>
+          </>
+        )}
 
         {editable && canUndoAssignments(event.id) && (
           <button type="button" className="btn ghost" onClick={() => actions.undoAssignments(event.id).ok && toast({ kind: 'ok', text: 'Undone' })}>
@@ -230,7 +247,9 @@ export function PlayerActionSheet({ event, memberId, onClose, editable, onChange
       // The other player would move into this player's slot and vice versa.
       if (assignment.role === 'starter' && assignment.team_id && !otherAllowed.includes(assignment.team_id)) disabled.set(m.id, `not available for ${event.teams.find((t) => t.id === assignment.team_id)?.local_time}`);
       if (other.role === 'starter' && other.team_id && !allowed.includes(other.team_id)) disabled.set(m.id, `you are not available for ${event.teams.find((t) => t.id === other.team_id)?.local_time}`);
-      if (other.role === 'reserve' && assignment.role === 'reserve') disabled.set(m.id, 'both are reserves');
+      if (other.role === 'reserve' && assignment.role === 'reserve' && other.team_id === assignment.team_id) disabled.set(m.id, 'same bench');
+      if (other.role === 'reserve' && other.team_id && !allowed.includes(other.team_id)) disabled.set(m.id, `you are not available for ${event.teams.find((t) => t.id === other.team_id)?.local_time}`);
+      if (assignment.role === 'reserve' && assignment.team_id && !otherAllowed.includes(assignment.team_id)) disabled.set(m.id, `not available for ${event.teams.find((t) => t.id === assignment.team_id)?.local_time}`);
     }
     return disabled;
   }, [assignment, member, state.members, event, allowed]);
@@ -240,6 +259,12 @@ export function PlayerActionSheet({ event, memberId, onClose, editable, onChange
   if (!member) return null;
   const h = history[member.id];
   const teamOf = (a?: Assignment) => (a?.role === 'starter' ? event.teams.find((t) => t.id === a.team_id) : undefined);
+  const placeOf = (a?: Assignment) => {
+    if (!a) return 'Not in lineup';
+    const t = event.teams.find((x) => x.id === a.team_id);
+    if (a.role === 'starter') return `Currently in ${t?.name ?? 'a team'}`;
+    return t ? `Currently a ${t.name} substitute` : 'Currently on the waiting list';
+  };
   const counterpartAssignment = counterpart ? event.assignments.find((a) => a.member_id === counterpart) : undefined;
 
   return (
@@ -249,7 +274,7 @@ export function PlayerActionSheet({ event, memberId, onClose, editable, onChange
           <Avatar name={member.username} />
           <div className="grow">
             <div className="small muted">
-              {assignment ? (assignment.role === 'starter' ? `Currently in ${teamOf(assignment)?.name}` : 'Currently a reserve') : 'Not in lineup'} · {fmtPower(member.arena_power_m)}
+              {placeOf(assignment)} · {fmtPower(member.arena_power_m)}
             </div>
             <div className="faint">{availability ? describeChoice(availability.choice, event.teams) : 'No availability response'}</div>
           </div>
@@ -299,7 +324,7 @@ export function PlayerActionSheet({ event, memberId, onClose, editable, onChange
                 <SwapIcon />
                 <div className="grow">
                   <div className="label">Move to…</div>
-                  <div className="hint">Reserves, or a team with an open slot.</div>
+                  <div className="hint">A team with an open slot, a team's bench, or the waiting list.</div>
                 </div>
               </button>
             )}
@@ -378,10 +403,27 @@ export function PlayerActionSheet({ event, memberId, onClose, editable, onChange
                 </button>
               );
             })}
-            <button type="button" className="sheet-item" disabled={assignment?.role === 'reserve'} onClick={() => finish(actions.move(event.id, member.id, 'reserve').ok, `${member.username} moved to reserves`, [member.id])}>
+            {event.teams.map((t) => {
+              const here = assignment?.role === 'reserve' && assignment.team_id === t.id;
+              return (
+                <button
+                  key={`sub-${t.id}`}
+                  type="button"
+                  className="sheet-item"
+                  disabled={here || !allowed.includes(t.id)}
+                  onClick={() => finish(actions.move(event.id, member.id, reserveTarget(t.id)).ok, `${member.username} is now a ${t.name} substitute`, [member.id])}
+                >
+                  <div className="grow">
+                    <div className="label">{t.name} substitute</div>
+                    <div className="hint">{here ? 'Already on this bench' : !allowed.includes(t.id) ? 'Not available for this time' : `${teamReserves(event, t.id).length} on this bench · steps in for ${t.name} only`}</div>
+                  </div>
+                </button>
+              );
+            })}
+            <button type="button" className="sheet-item" disabled={assignment?.role === 'reserve' && assignment.team_id === null} onClick={() => finish(actions.move(event.id, member.id, 'reserve').ok, `${member.username} moved to the waiting list`, [member.id])}>
               <div className="grow">
-                <div className="label">Reserves</div>
-                <div className="hint">Waits this week; keeps bench credit if available.</div>
+                <div className="label">Waiting list</div>
+                <div className="hint">Not on either bench this week; keeps bench credit if available.</div>
               </div>
             </button>
             <button type="button" className="btn ghost" onClick={() => setMode('menu')}>
@@ -400,7 +442,7 @@ export function PlayerActionSheet({ event, memberId, onClose, editable, onChange
           disabledMembers={swapCandidates}
           extraHint={(m) => {
             const a = event.assignments.find((x) => x.member_id === m.id);
-            return a ? (a.role === 'starter' ? teamOf(a)?.name : 'Reserve') : undefined;
+            return a ? (a.role === 'starter' ? teamOf(a)?.name : a.team_id ? `${event.teams.find((t) => t.id === a.team_id)?.name} sub` : 'Waiting') : undefined;
           }}
           onPick={(o) => {
             setCounterpart(o.key);
@@ -435,7 +477,11 @@ export function PlayerActionSheet({ event, memberId, onClose, editable, onChange
 
 function SwapPreview({ a, aFrom, b, bFrom, event }: { a: Member; aFrom: Assignment; b: Member; bFrom: Assignment; event: CanyonEvent }) {
   const { state } = useStore();
-  const label = (x: Assignment) => (x.role === 'starter' ? `${event.teams.find((t) => t.id === x.team_id)?.name} (${event.teams.find((t) => t.id === x.team_id)?.local_time})` : 'Reserves');
+  const label = (x: Assignment) => {
+    const t = event.teams.find((tt) => tt.id === x.team_id);
+    if (x.role === 'starter') return `${t?.name} (${t?.local_time})`;
+    return t ? `${t.name} substitutes` : 'Waiting list';
+  };
   const powerAfter = (teamId: TeamId) => {
     let p = teamPower(event, state.members, teamId);
     if (aFrom.role === 'starter' && aFrom.team_id === teamId) p -= a.arena_power_m;

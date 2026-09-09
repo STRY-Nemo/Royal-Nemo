@@ -102,7 +102,7 @@ export function MemberDetailScreen({ memberId }: { memberId: string }) {
               <>
                 <dt>This week</dt>
                 <dd>
-                  {currentAssignment ? (currentAssignment.role === 'starter' ? `${currentEvent.teams.find((t) => t.id === currentAssignment.team_id)?.name}${currentAssignment.locked ? ' (locked)' : ''}` : 'Reserve') : currentEvent.availability[member.id] ? 'Available, not yet assigned' : 'No response'}
+                  {currentAssignment ? (currentAssignment.role === 'starter' ? `${currentEvent.teams.find((t) => t.id === currentAssignment.team_id)?.name}${currentAssignment.locked ? ' (locked)' : ''}` : currentAssignment.team_id ? `${currentEvent.teams.find((t) => t.id === currentAssignment.team_id)?.name} substitute` : 'Waiting list') : currentEvent.availability[member.id] ? 'Available, not yet assigned' : 'No response'}
                 </dd>
               </>
             )}

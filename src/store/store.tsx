@@ -148,7 +148,7 @@ export interface StoreValue {
     importLineup: (eventId: string, records: LineupRecord[], source?: string) => ActionResult;
     lock: (eventId: string, memberId: MemberId, teamId: TeamId, reason: string) => ActionResult;
     unlock: (eventId: string, memberId: MemberId) => ActionResult;
-    move: (eventId: string, memberId: MemberId, target: TeamId | 'reserve') => ActionResult;
+    move: (eventId: string, memberId: MemberId, target: L.MoveTarget) => ActionResult;
     swap: (eventId: string, a: MemberId, b: MemberId) => ActionResult;
     undoAssignments: (eventId: string) => ActionResult;
     publish: (eventId: string) => ActionResult;

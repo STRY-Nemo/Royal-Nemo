@@ -60,7 +60,8 @@ export function AttendanceScreen({ eventId }: { eventId?: string }) {
   }
 
   const summary = attendanceSummary(event);
-  const visible = rows.filter((r) => (tab === 'reserve' ? r.substitute || r.team_id === null : r.team_id === tab && !r.substitute) || (tab !== 'reserve' && r.substitute && r.team_id === tab));
+  // Team tabs show that team's starters and its own substitutes; the last tab shows players on neither bench.
+  const visible = rows.filter((r) => (tab === 'reserve' ? r.team_id === null : r.team_id === tab));
   const finalized = event.status === 'finalized';
   const canEdit = isLeader;
   const teamName = (id: TeamId | null) => event.teams.find((t) => t.id === id)?.name ?? 'No team';
@@ -104,7 +105,7 @@ export function AttendanceScreen({ eventId }: { eventId?: string }) {
             </button>
           ))}
           <button type="button" role="tab" aria-selected={tab === 'reserve'} onClick={() => setTab('reserve')}>
-            Reserves
+            Waiting
             <small>{rows.filter((r) => r.substitute && r.team_id === null).length}</small>
           </button>
         </div>

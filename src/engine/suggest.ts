@@ -151,6 +151,7 @@ function historyPhrase(h: MemberHistory): string {
  *    only; the selected set never changes.
  */
 export function generateSuggestions(input: SuggestInput): SuggestResult {
+  const benchCount: Record<TeamId, number> = {};
   const { event, members } = input;
   const teams = [...event.teams];
   const seed = event.selection_seed;
@@ -339,7 +340,14 @@ export function generateSuggestions(input: SuggestInput): SuggestResult {
       });
     } else {
       const reason = waitingReason(c, candidates, placement, teams, capacityLeft);
-      const reserveTeam = c.allowed.length === 1 ? c.allowed[0] : null;
+      // Each team keeps its own bench. Single-time players sit on that team's bench; flexible
+      // players go to whichever bench is shorter so both teams have substitutes.
+      let reserveTeam: TeamId | null = null;
+      if (c.allowed.length === 1) reserveTeam = c.allowed[0];
+      else if (c.allowed.length > 1) {
+        reserveTeam = [...c.allowed].sort((x, y) => (benchCount[x] ?? 0) - (benchCount[y] ?? 0) || teams.findIndex((t) => t.id === x) - teams.findIndex((t) => t.id === y))[0];
+      }
+      if (reserveTeam) benchCount[reserveTeam] = (benchCount[reserveTeam] ?? 0) + 1;
       assignments.push({
         event_id: event.id,
         member_id: c.member.id,

@@ -71,7 +71,7 @@ export function HomeScreen() {
                 <p className="muted small">{myAvailability ? describeChoice(myAvailability.choice, event.teams) : 'Not set — tap to choose a time'}</p>
                 {myAssignment && event.status === 'published' && (
                   <p className="small" style={{ color: 'var(--ok)' }}>
-                    Published: {myAssignment.role === 'starter' ? event.teams.find((t) => t.id === myAssignment.team_id)?.name : 'Reserve'}
+                    Published: {myAssignment.role === 'starter' ? event.teams.find((t) => t.id === myAssignment.team_id)?.name : myAssignment.team_id ? `${event.teams.find((t) => t.id === myAssignment.team_id)?.name} substitute` : 'Waiting list'}
                     {event.confirmations[me.id] ? ' · confirmed' : ' · tap to confirm'}
                   </p>
                 )}

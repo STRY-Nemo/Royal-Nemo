@@ -136,7 +136,7 @@ export function AvailabilityScreen({ eventId }: { eventId?: string }) {
               <div className="card raised">
                 <h3>Published assignment</h3>
                 <p>
-                  {myAssignment.role === 'starter' ? `${event.teams.find((t) => t.id === myAssignment.team_id)?.name} at ${event.teams.find((t) => t.id === myAssignment.team_id)?.local_time}` : 'Reserve'}
+                  {myAssignment.role === 'starter' ? `${event.teams.find((t) => t.id === myAssignment.team_id)?.name} at ${event.teams.find((t) => t.id === myAssignment.team_id)?.local_time}` : myAssignment.team_id ? `${event.teams.find((t) => t.id === myAssignment.team_id)?.name} substitute (${event.teams.find((t) => t.id === myAssignment.team_id)?.local_time})` : 'Waiting list'}
                   {myAssignment.locked && ' · leader pick'}
                 </p>
                 {event.confirmations[target.id] ? (

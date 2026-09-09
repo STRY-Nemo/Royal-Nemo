@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { TeamId } from '../domain/types';
-import { publishBlockers, reserves, starters, suggest, teamPower } from '../engine/lifecycle';
+import { publishBlockers, starters, suggest, teamPower, teamReserves, waitingList } from '../engine/lifecycle';
 import { ConfirmSheet, useFeedback, useSingleFlight } from '../motion';
 import { useRouter } from '../store/router';
 import { fmtPower, useStore } from '../store/store';
@@ -42,8 +42,9 @@ export function ReviewScreen({ eventId }: { eventId?: string }) {
   }
 
   const blockers = publishBlockers(event);
-  const waiting = reserves(event);
+  const waiting = waitingList(event);
   const shownStarters = view === 'waiting' ? [] : starters(event, view);
+  const shownSubs = view === 'waiting' ? [] : teamReserves(event, view);
   const incomplete = event.assignments.filter((a) => history[a.member_id]?.history_incomplete).length;
   const alreadyPublished = event.status === 'published';
   const changedSincePublish = alreadyPublished && JSON.stringify(event.assignments.map((a) => [a.member_id, a.team_id, a.role]).sort()) !== JSON.stringify((event.published_revisions.at(-1)?.assignments ?? []).map((a) => [a.member_id, a.team_id, a.role]).sort());
@@ -53,9 +54,14 @@ export function ReviewScreen({ eventId }: { eventId?: string }) {
     for (const t of event.teams) {
       lines.push('', `${t.name} ${t.local_time}:`);
       starters(event, t.id).forEach((a, i) => lines.push(`${i + 1}. ${membersById.get(a.member_id)?.username ?? a.member_id}${a.locked ? ' (lock)' : ''}`));
+      const subs = teamReserves(event, t.id);
+      if (subs.length) {
+        lines.push(`${t.name} substitutes:`);
+        subs.forEach((a) => lines.push(`- ${membersById.get(a.member_id)?.username ?? a.member_id}`));
+      }
     }
     if (waiting.length) {
-      lines.push('', 'Reserves:');
+      lines.push('', 'Waiting list:');
       waiting.forEach((a) => lines.push(`- ${membersById.get(a.member_id)?.username ?? a.member_id}`));
     }
     return lines.join('\n');
@@ -147,13 +153,15 @@ export function ReviewScreen({ eventId }: { eventId?: string }) {
         </div>
 
         <div className="list" role="list">
-          {(view === 'waiting' ? waiting : shownStarters).map((a, i) => {
+          {(view === 'waiting' ? waiting : [...shownStarters, ...shownSubs]).map((a, i) => {
+            const isSub = view !== 'waiting' && a.role === 'reserve';
+            const subIndex = i - shownStarters.length;
             const m = membersById.get(a.member_id);
             if (!m) return null;
             const h = history[m.id];
             return (
               <div key={m.id} className={`row${a.locked ? ' locked' : ''}`} role="listitem" style={{ ['--i' as string]: i, alignItems: 'flex-start' }}>
-                <span className="index">{String(i + 1).padStart(2, '0')}</span>
+                <span className="index">{isSub ? `S${String(subIndex + 1).padStart(2, '0')}` : String(i + 1).padStart(2, '0')}</span>
                 <Avatar name={m.username} />
                 <div className="main">
                   <div className="name wrap">
@@ -165,8 +173,8 @@ export function ReviewScreen({ eventId }: { eventId?: string }) {
                     )}
                   </div>
                   <div className="meta">
+                    {isSub && <span className="badge draft">Substitute</span>}
                     <span className="mono">{fmtPower(m.arena_power_m)}</span>
-                    {view === 'waiting' && a.team_id && <span>{event.teams.find((t) => t.id === a.team_id)?.local_time} only</span>}
                     {h?.history_incomplete && <span style={{ color: 'var(--warn)' }}>incomplete history</span>}
                   </div>
                   <div className="small muted wrap">{a.reason}</div>
@@ -174,7 +182,7 @@ export function ReviewScreen({ eventId }: { eventId?: string }) {
               </div>
             );
           })}
-          {view === 'waiting' && waiting.length === 0 && <EmptyState title="Nobody is waiting">Every available player has a slot this week.</EmptyState>}
+          {view === 'waiting' && waiting.length === 0 && <EmptyState title="Nobody is waiting">Every available player is on a team or its bench.</EmptyState>}
           {view !== 'waiting' && shownStarters.length === 0 && <EmptyState title="No starters yet" />}
         </div>
       </main>
@@ -193,7 +201,7 @@ export function ReviewScreen({ eventId }: { eventId?: string }) {
       <ConfirmSheet open={confirmOpen} title={alreadyPublished ? 'Publish a new revision?' : 'Publish this lineup?'} confirmLabel="Publish" busy={busy} onCancel={() => setConfirmOpen(false)} onConfirm={() => void publish()}>
         <div className="list">
           <div className="small">
-            {event.teams.map((t) => `${t.name} ${t.local_time}: ${starters(event, t.id).length}/${t.capacity}`).join(' · ')} · {waiting.length} reserves
+            {event.teams.map((t) => `${t.name} ${t.local_time}: ${starters(event, t.id).length}/${t.capacity} + ${teamReserves(event, t.id).length} subs`).join(' · ')} · {waiting.length} waiting
           </div>
           <div className="small muted">Members will see revision {event.revision + 1} and can confirm. Publishing records the selection; it does not count as anyone having played.</div>
         </div>

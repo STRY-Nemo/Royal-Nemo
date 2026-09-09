@@ -194,6 +194,23 @@ export function reserves(event: CanyonEvent): Assignment[] {
   return event.assignments.filter((a) => a.role === 'reserve');
 }
 
+/** Substitutes that belong to one team. Team 1 and Team 2 keep separate benches. */
+export function teamReserves(event: CanyonEvent, teamId: TeamId): Assignment[] {
+  return event.assignments.filter((a) => a.role === 'reserve' && a.team_id === teamId);
+}
+
+/** Available players who fit neither bench yet (no team). */
+export function waitingList(event: CanyonEvent): Assignment[] {
+  return event.assignments.filter((a) => a.role === 'reserve' && a.team_id === null);
+}
+
+/** Move target: a team's starters, that team's substitutes (`reserve:<teamId>`), or the general waiting list. */
+export type MoveTarget = TeamId | 'reserve' | `reserve:${string}`;
+
+export function reserveTarget(teamId: TeamId): MoveTarget {
+  return `reserve:${teamId}`;
+}
+
 export function teamPower(event: CanyonEvent, members: Member[], teamId: TeamId): number {
   const byId = new Map(members.map((m) => [m.id, m.arena_power_m]));
   const sum = starters(event, teamId).reduce((s, a) => s + (byId.get(a.member_id) ?? 0), 0);
@@ -250,23 +267,27 @@ export function unlockMember(event: CanyonEvent, memberId: MemberId, ctx: Contex
   };
 }
 
-/** Moves a member to a team's starters if there is room, or to reserves. */
-export function moveMember(event: CanyonEvent, memberId: MemberId, target: TeamId | 'reserve', ctx: Context, expectedRevision?: number): Result {
+/** Moves a member to a team's starters if there is room, to a team's substitutes, or to the waiting list. */
+export function moveMember(event: CanyonEvent, memberId: MemberId, target: MoveTarget, ctx: Context, expectedRevision?: number): Result {
   assertEditable(event);
   assertRevision(event, expectedRevision);
   const existing = event.assignments.find((a) => a.member_id === memberId) ?? null;
   let next: Assignment;
-  if (target === 'reserve') {
+  if (target === 'reserve' || target.startsWith('reserve:')) {
     const av = event.availability[memberId];
     const allowed = av ? allowedTeamIds(av.choice, event.teams) : [];
     if (!allowed.length) throw new LifecycleError('unavailable', 'This member has not marked themselves available.');
+    const wanted = target === 'reserve' ? null : (target.slice('reserve:'.length) as TeamId);
+    const subTeam = wanted ? event.teams.find((t) => t.id === wanted) : undefined;
+    if (wanted && !subTeam) throw new LifecycleError('not_found', 'Unknown team.');
+    if (wanted && !allowed.includes(wanted)) throw new LifecycleError('unavailable', 'This member is not available for that team time.');
     next = {
       event_id: event.id,
       member_id: memberId,
-      team_id: allowed.length === 1 ? allowed[0] : null,
+      team_id: wanted ?? null,
       role: 'reserve',
       locked: false,
-      reason: 'Moved to reserves by leader',
+      reason: subTeam ? `${subTeam.name} substitute (leader)` : 'Moved to the waiting list by leader',
       revision: event.revision + 1,
     };
   } else {
@@ -301,25 +322,17 @@ export function swapMembers(event: CanyonEvent, aId: MemberId, bId: MemberId, ct
   const a = event.assignments.find((x) => x.member_id === aId);
   const b = event.assignments.find((x) => x.member_id === bId);
   if (!a || !b) throw new LifecycleError('not_assigned', 'Both players must be in the lineup or reserves.');
-  const targetForA = b.role === 'starter' ? b.team_id : 'reserve';
-  const targetForB = a.role === 'starter' ? a.team_id : 'reserve';
-  if (targetForA !== 'reserve' && targetForA && !memberAllowed(event, aId, targetForA)) {
+  if (a.role === b.role && a.team_id === b.team_id) throw new LifecycleError('same_slot', 'These two players are already in the same place.');
+  // Each player takes the other's place: a team's starters, a team's substitutes, or the waiting list.
+  if (b.team_id && !memberAllowed(event, aId, b.team_id)) {
     throw new LifecycleError('unavailable', `${aId} is not available for the other team's time.`);
   }
-  if (targetForB !== 'reserve' && targetForB && !memberAllowed(event, bId, targetForB)) {
+  if (a.team_id && !memberAllowed(event, bId, a.team_id)) {
     throw new LifecycleError('unavailable', `${bId} is not available for the other team's time.`);
   }
   const rev = event.revision + 1;
   const nextA: Assignment = { ...a, team_id: b.team_id, role: b.role, reason: `Swapped with ${bId} by leader`, revision: rev };
   const nextB: Assignment = { ...b, team_id: a.team_id, role: a.role, reason: `Swapped with ${aId} by leader`, revision: rev };
-  if (nextA.role === 'reserve' && nextA.team_id === null) {
-    const av = event.availability[aId];
-    nextA.team_id = av && allowedTeamIds(av.choice, event.teams).length === 1 ? allowedTeamIds(av.choice, event.teams)[0] : null;
-  }
-  if (nextB.role === 'reserve' && nextB.team_id === null) {
-    const av = event.availability[bId];
-    nextB.team_id = av && allowedTeamIds(av.choice, event.teams).length === 1 ? allowedTeamIds(av.choice, event.teams)[0] : null;
-  }
   const assignments = replaceAssignment(replaceAssignment(event.assignments, nextA), nextB);
   return {
     event: { ...event, assignments, revision: rev },

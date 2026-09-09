@@ -3,7 +3,7 @@ import { useRouter } from '../store/router';
 import { fmtPower, useStore } from '../store/store';
 import { DemoBanner, EmptyState, EventTimes, Header, StatusBadge, StickyActions } from '../ui/common';
 import { CalendarIcon, ChevronRight, HistoryIcon, UndoIcon } from '../ui/icons';
-import { publishBlockers, reserves, starters, teamPower } from '../engine/lifecycle';
+import { publishBlockers, starters, teamPower, teamReserves, waitingList } from '../engine/lifecycle';
 import { ConfirmSheet, OrbitSpinner, useFeedback, useSingleFlight } from '../motion';
 import { BUNDLED_IMPORTS } from '../data/bundledImports';
 
@@ -75,7 +75,7 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
   const blockers = publishBlockers(event);
   const eligible = responses.total - responses.unavailable;
   const hasStarters = event.assignments.some((a) => a.role === 'starter');
-  const reserveCount = reserves(event).length;
+  const reserveCount = waitingList(event).length;
   // Bundled team screen files for this date whose team has no starters yet.
   const pendingImports = BUNDLED_IMPORTS.filter((b) => b.event_date === event.date && event.teams[b.team - 1] && starters(event, event.teams[b.team - 1].id).length === 0);
   const otherOpen = state.events.filter((e) => e.id !== event.id && (e.status === 'draft' || e.status === 'published'));
@@ -146,6 +146,10 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
                       <span className="label">{full ? 'assigned · complete' : 'assigned'}</span>
                     </div>
                     <div className="stat">
+                      <span className="value">{teamReserves(event, t.id).length}</span>
+                      <span className="label">substitutes</span>
+                    </div>
+                    <div className="stat">
                       <span className="value">{fmtPower(teamPower(event, state.members, t.id))}</span>
                       <span className="label">arena power</span>
                     </div>
@@ -212,8 +216,8 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
         <button type="button" className="card interactive" onClick={() => router.navigate(`/canyon/roster/${event.id}?team=reserve`)}>
           <div className="card-row">
             <div className="grow">
-              <h3>Reserves</h3>
-              <p className="muted small">{reserveCount === 0 ? 'No reserves yet' : `${reserveCount} waiting`}</p>
+              <h3>Waiting list</h3>
+              <p className="muted small">{reserveCount === 0 ? 'Nobody waiting; each team lists its own substitutes' : `${reserveCount} available but on neither bench`}</p>
             </div>
             <ChevronRight className="chevron" />
           </div>

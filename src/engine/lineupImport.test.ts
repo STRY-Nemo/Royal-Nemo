@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadSeedMembers } from '../data/seed';
 import { parseCsv, parseXlsx } from '../import/tables';
-import { applySuggestions, createDraftEvent, LifecycleError, publishBlockers, reserves, setAvailability, starters } from './lifecycle';
+import { applySuggestions, createDraftEvent, LifecycleError, publishBlockers, reserves, setAvailability, starters, teamReserves } from './lifecycle';
 import { applyLineupImport, matchLineup, parseLineupRows, planLineupImport, type LineupRecord } from './lineupImport';
 import { APOCALYPSE_TIME_ZONE } from './recurrence';
 
@@ -176,7 +176,7 @@ describe('applying the import', () => {
     expect(stillReserve).toEqual(importedReserves);
     // Importing again replaces only Team 2 and leaves Team 1 alone.
     const again = applyLineupImport(gen.event, parsed.records, members, {}, ctx);
-    expect(again.plan.replaced).toBe(29);
+    expect(again.plan.replaced).toBe(20 + teamReserves(gen.event, ev.teams[1].id).length);
     expect(starters(again.event, ev.teams[0].id)).toHaveLength(20);
     expect(starters(again.event, ev.teams[1].id).map((a) => a.member_id).sort()).toEqual(importedStarters);
   });

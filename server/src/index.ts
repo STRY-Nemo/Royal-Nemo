@@ -303,7 +303,7 @@ router.post('/events/:id/move', async (ctx) => {
   const account = requireLeader(ctx.account);
   const body = await ctx.body();
   const target = str(body, 'target');
-  const event = await mutateEvent(ctx, ctx.params.id, (e) => L.moveMember(e, str(body, 'member_id'), target === 'reserve' ? 'reserve' : (target as TeamId), ctxFor(account, ctx.now), expected(body)));
+  const event = await mutateEvent(ctx, ctx.params.id, (e) => L.moveMember(e, str(body, 'member_id'), target as L.MoveTarget, ctxFor(account, ctx.now), expected(body)));
   return { event };
 });
 
