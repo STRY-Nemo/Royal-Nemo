@@ -1,4 +1,4 @@
-/** One-link invites: https://…/Royal-Nemo/#/join/CODE opens the app straight on the join form. */
+/** One-link invites: <site>/#/join/CODE opens the app straight on the join form. */
 export function joinLink(code: string): string {
   return `${window.location.origin}${window.location.pathname}#/join/${encodeURIComponent(code)}`;
 }

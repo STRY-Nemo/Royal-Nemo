@@ -34,7 +34,8 @@ jobs:
       - name: Build for GitHub Pages sub-path
         run: npm run build
         env:
-          BASE_PATH: /${{ github.event.repository.name }}/
+          # A repository named <owner>.github.io is served from the root of the site.
+          BASE_PATH: ${{ endsWith(github.event.repository.name, '.github.io') && '/' || format('/{0}/', github.event.repository.name) }}
           # VITE_API_URL comes from .env.production (the deployed Worker URL). Remove that file for demo mode.
       - uses: actions/upload-pages-artifact@v3
         with:
