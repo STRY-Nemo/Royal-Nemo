@@ -9,11 +9,19 @@ Short handoff so another coding agent can resume without the original conversati
 | 1. Mobile shell, seed data, Friday scheduling, availability, Organize page, shared motion, demo persistence | **Done** | All 100 members load; 16 responsibilities round-trip; localStorage demo clearly labeled; no fabricated attendance |
 | 2. Deterministic rotation engine + tests, explanations, locks/swaps | **Done** | `src/engine/suggest.ts`, 28 Vitest cases pass (`npm test`) |
 | 3. Publish/revisions, attendance, finalization, history, next-week rotation | **Done** | End-to-end verified in tests and a Playwright phone walkthrough |
-| 4. Authenticated shared DB, server authorization, concurrency, deployment, backup/export, phone QA | **Not started** | See "Next steps" |
+| 4. Authenticated shared DB, server authorization, concurrency, deployment, backup/export, phone QA | **Built, awaiting deployment** | `server/` Worker + D1, deploy workflow gated on Cloudflare secrets (`docs/DEPLOY.md`). Physical-phone QA still pending |
 
 ## Hosting
 
 GitHub Pages, deployed by Actions from `main` and `claude/alliance-app-last-z-f572n4`: https://ryanrhernandez-design.github.io/Royal-Nemo/. The workflow also runs typecheck, tests and build on pull requests. `BASE_PATH` sets the Vite base for the repository sub-path. Note: this repository's Pages site previously served a game from the `claude/game-copy-vibe-65sbfz` branch; that deployment is replaced by the alliance app. Re-running that branch's workflow would swap it back.
+
+## Milestone 4 summary
+
+- `server/src/index.ts`: every mutation endpoint loads the event/board, runs the pure engine function, and writes with `UPDATE … WHERE revision = ?` inside a D1 batch with the audit rows (409 on conflict). Members may only touch their own availability/confirmation; leaders everything else. Mechanical notes and audit are stripped for members.
+- Auth: PBKDF2 passwords, hashed bearer tokens (90 days), `OWNER_SETUP_CODE` bootstraps the first leader only while no leader exists, invites (`role`, `uses`, `days`) for everyone else, accounts screen for leaders.
+- Client: `src/store/store.tsx` picks demo or API mode from `VITE_API_URL`; API mode applies changes optimistically, then replaces with the server copy or rolls back with a toast; refreshes on navigation, focus and every 30 s; caches the last state for offline reading.
+- Deploy: `deploy-worker.yml` creates the D1 database, applies migrations, deploys, stores `API_URL` as a repo variable and re-triggers the Pages build. Until the secrets exist it exits with a notice.
+- Tests: `npm run test:server` (10 cases, local wrangler). Two-browser Playwright flow verified locally (owner + member).
 
 ## Commits
 
@@ -40,14 +48,12 @@ Open Settings (gear icon) → choose a member and the Leader role. Canyon → Ev
 - **Motion**: `data-motion` on `<html>` (`system|full|reduced|off`) drives CSS tokens in `src/styles/tokens.css`. All screens use `src/motion` components (BottomSheet, ConfirmSheet, toasts with Undo, live region, StarBurst, OrbitSpinner, SaveIndicator, useSingleFlight).
 - **Drag and drop** (`src/ui/useLongPressDrag.ts`): 250 ms long-press on the grip, pointer capture, edge auto-scroll that accounts for the header and tab bar, Escape cancels. Every drag has a tap equivalent ("Move to another slot…", "Swap with another slot…").
 
-## Next steps (milestone 4)
+## Next steps
 
-1. Choose the backend (spec: relational). Suggested: a small Node/TypeScript API over Postgres/SQLite; keep `src/engine` shared. Tables mirror `src/domain/types.ts`.
-2. Auth + `Account membership` mapping (`account_id`, `member_id`, `app_role`). Bootstrap the owner separately; never infer leader from a self-entered name.
-3. Server-enforce capacity, uniqueness, one attendance outcome per member per event, role permissions and revision checks. Publish, swap and finalize as transactions.
-4. Replace `src/store/store.tsx` persistence with API calls; keep optimistic updates with rollback and the Saving / Saved / Failed states.
-5. Export/backup endpoints (the demo already has "Export everything as JSON" in Settings).
-6. Physical-phone QA for drag auto-scroll, keyboard-aware sheets and reduced-motion. Verification so far was emulator-only.
+1. Owner follows `docs/DEPLOY.md` (Cloudflare account, three GitHub secrets, run the deploy workflow), creates the first leader account, invites the alliance.
+2. Physical-phone QA for drag auto-scroll, keyboard-aware sheets and reduced-motion. Verification so far was emulator-only.
+3. Optional hardening: rate-limit `/auth/login` (Cloudflare WAF rule or a KV counter), password reset via a leader-issued reset code, scheduled D1 export to R2 for off-platform backups.
+4. Deferred features from the spec: other alliance events, game data import for attendance (with review before finalization), reminders, analytics.
 
 ## Known gaps / small follow-ups
 

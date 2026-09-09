@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { FeedbackProvider, applyMotionPreference } from './motion';
+import { FeedbackProvider, Skeleton, applyMotionPreference } from './motion';
 import { RouterProvider, useRouter } from './store/router';
 import { StoreProvider, useStore } from './store/store';
 import { UiStateProvider } from './store/ui';
@@ -17,6 +17,8 @@ import { MappingScreen } from './screens/MappingScreen';
 import { MembersScreen } from './screens/MembersScreen';
 import { MemberDetailScreen } from './screens/MemberDetailScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
+import { LoginScreen } from './screens/LoginScreen';
+import { AccountsScreen } from './screens/AccountsScreen';
 
 function MotionSync() {
   const { state } = useStore();
@@ -43,10 +45,34 @@ function Routes() {
       if (second) return <MemberDetailScreen memberId={second} />;
       return <MembersScreen />;
     case 'settings':
+      if (second === 'accounts') return <AccountsScreen />;
       return <SettingsScreen />;
     default:
       return <HomeScreen />;
   }
+}
+
+/** Gates the app on authentication when connected to the alliance server. */
+function Gate() {
+  const { mode, authState } = useStore();
+  if (mode === 'api' && authState === 'signed_out') return <LoginScreen />;
+  if (mode === 'api' && authState === 'loading') {
+    return (
+      <main className="page" aria-busy="true">
+        <div style={{ textAlign: 'center', paddingTop: 48 }}>
+          <img src={`${import.meta.env.BASE_URL}brand/stry-logo.png`} alt="STRY" width={96} height={96} />
+          <p className="muted small">Connecting to the alliance…</p>
+        </div>
+        <Skeleton rows={4} height={72} />
+      </main>
+    );
+  }
+  return (
+    <>
+      <Routes />
+      <TabBar />
+    </>
+  );
 }
 
 export function App() {
@@ -57,8 +83,7 @@ export function App() {
           <RouterProvider>
             <MotionSync />
             <div className="app">
-              <Routes />
-              <TabBar />
+              <Gate />
             </div>
           </RouterProvider>
         </UiStateProvider>

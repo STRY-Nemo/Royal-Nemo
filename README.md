@@ -10,7 +10,7 @@ The app is published to GitHub Pages by `.github/workflows/deploy-pages.yml` on 
 
 **https://ryanrhernandez-design.github.io/Royal-Nemo/**
 
-Open it on a phone and use "Add to Home Screen" for an app-like icon. Because this build stores data only in each phone's browser, every person sees their own private copy; shared alliance data arrives with milestone 4.
+Open it on a phone and use "Add to Home Screen" for an app-like icon. Until the alliance server is deployed the site runs in **demo mode** (data stays in each phone). Follow `docs/DEPLOY.md` (about 10 minutes, phone-friendly) to deploy the shared server; after that everyone signs in and sees the same data.
 
 ## Quick start
 
@@ -26,11 +26,19 @@ Open the app, tap the gear icon, and choose which member you are and whether to 
 
 ## Stack
 
-- **Vite + React 19 + TypeScript** with plain CSS custom properties for the celestial design tokens. No UI framework, no AI API. Weekly selection runs entirely on-device.
-- **Pure engine** in `src/engine/` with no React or storage imports, so a future server can run the same functions inside transactions.
-- **Vitest** for the engine and lifecycle acceptance scenarios.
+- **Vite + React 19 + TypeScript** with plain CSS custom properties for the celestial design tokens. No UI framework, no AI API. Weekly selection runs with no external service.
+- **Pure engine** in `src/engine/` with no React or storage imports. The client and the server run the same functions.
+- **Cloudflare Worker + D1 (SQLite)** in `server/`: username/password accounts, leader invite codes, server-enforced rules and revision compare-and-set, audit trail, export. Deployed by GitHub Actions; see `docs/DEPLOY.md`.
+- **Vitest** for the engine and lifecycle acceptance scenarios, plus integration tests that boot the Worker locally with wrangler.
 
-The repository was empty apart from a README, so a small maintained stack was chosen as the spec allows. A relational backend (milestone 4) is not yet implemented; the store already routes every mutation through the engine and carries revision numbers for optimistic concurrency.
+The repository was empty apart from a README, so a small maintained stack was chosen as the spec allows.
+
+## Modes
+
+| Mode | When | Data |
+| --- | --- | --- |
+| Demo | `VITE_API_URL` is empty (default GitHub Pages build until the server is deployed) | localStorage on each device, labelled in the UI, role switch in Settings |
+| Connected | `VITE_API_URL` points at the deployed Worker | Shared D1 database, real accounts and roles, optimistic updates rolled back when the server rejects them, refresh on navigation / focus / every 30 s |
 
 ## Layout
 
@@ -43,7 +51,10 @@ The repository was empty apart from a README, so a small maintained stack was ch
 | `src/engine/organization.ts` | Responsibility slot edits, moves, atomic swaps, undo inverses, task management, source-name mapping suggestions |
 | `src/engine/recurrence.ts` | Friday derivation, IANA timezone wall-clock conversion (DST-safe), device-local display helpers |
 | `src/engine/*.test.ts` | Acceptance tests from PRODUCT_SPEC and ORGANIZATION |
-| `src/store/` | Demo store (localStorage), hash router with per-tab memory and scroll restore, in-memory UI state |
+| `src/store/` | Store (demo persistence or API sync with optimistic updates), hash router with per-tab memory and scroll restore, in-memory UI state |
+| `src/api/client.ts` | Typed fetch client for the API |
+| `server/` | Cloudflare Worker (`src/index.ts` routes, `auth.ts`, `db.ts`), D1 migrations, integration tests |
+| `.github/workflows/` | `deploy-pages.yml` (test, build, publish site) and `deploy-worker.yml` (migrate + deploy API once Cloudflare secrets exist) |
 | `src/motion/` | Motion tokens, Full / Reduced / Off, bottom sheet, toasts with Undo, live announcements, star burst, orbital progress, single-flight guard |
 | `src/screens/` | Home, Canyon overview, Availability, Schedule, Roster + player action sheet, Suggestion review + publish, Attendance, History, Organize, Name mapping, Members, Member detail, Settings |
 | `src/data/` | Verified seed data: 100 members, 16 responsibilities, event draft |
@@ -63,7 +74,8 @@ The repository was empty apart from a README, so a small maintained stack was ch
 
 ## Verification done
 
-- 28 Vitest cases covering the spec's acceptance scenarios, including the five-week "everyone gets two plays" simulation.
+- 31 Vitest cases covering the spec's acceptance scenarios, including the five-week "everyone gets two plays" simulation, plus 10 API integration tests (owner bootstrap, invites, permissions, private notes, stale revisions, capacity/availability on locks, publish blockers, idempotent finalize, atomic slot edits, account management, CORS).
+- A two-browser Playwright test against the app built for a local Worker: owner registers with the setup code, schedules, fills availability, generates, publishes and creates an invite; a member registers with it in a second browser, sees the same published lineup, has no leader controls, confirms their slot, and is refused when calling a leader endpoint directly.
 - A Playwright walkthrough at 360×740 (touch, mobile emulation, America/New_York device vs Europe/Berlin event): schedule → availability → generate → move/lock/swap/undo → publish → confirm → attendance → finalize → next-week draft; Organize dropdown, long-press drag with swap preview, undo; member and leader roles; motion Off. No console errors and no horizontal overflow on any screen. **Emulator only** so far: please check on a physical phone.
 
 ## Remaining product assumptions
@@ -73,4 +85,5 @@ The repository was empty apart from a README, so a small maintained stack was ch
 - Attendance source is leader confirmation; there is no game integration.
 - Rotation defaults are the spec's proposed defaults, not agreed alliance policy.
 - Source names (Rouge, Nemo, …) stay as labels until mapped on the Organize → Map names screen. Nothing is merged automatically.
-- Roles are a demo switch. Real access control, shared persistence, transactional checks and backups arrive with milestone 4.
+- In demo mode roles are a switch. In connected mode roles come from accounts: the first leader is created with the owner setup code, later leaders via single-use leader invites.
+- Member-to-roster links chosen at sign-up are unverified until a leader verifies them in Alliance accounts.

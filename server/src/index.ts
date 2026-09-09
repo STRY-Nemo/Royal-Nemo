@@ -162,6 +162,17 @@ router.post('/auth/password', async (ctx) => {
 
 router.get('/me', async (ctx) => ({ account: requireAccount(ctx.account) }));
 
+/** A signed-in account without a linked member can link itself once (unverified until a leader confirms). */
+router.post('/me/link', async (ctx) => {
+  const account = requireAccount(ctx.account);
+  const body = await ctx.body();
+  const memberId = str(body, 'member_id');
+  if (account.member_id) throw new HttpError(422, 'already_linked', 'Ask a leader to change your linked member.');
+  await loadMember(ctx.env, memberId);
+  await ctx.env.DB.prepare('UPDATE accounts SET member_id = ?, verified = 0 WHERE id = ? AND member_id IS NULL').bind(memberId, account.id).run();
+  return { account: { ...account, member_id: memberId, verified: false } };
+});
+
 /** Public minimal roster (id + username) so a new member can pick themselves while registering. */
 router.get('/roster', async (ctx) => {
   const members = await loadMembers(ctx.env);

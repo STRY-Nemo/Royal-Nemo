@@ -99,12 +99,46 @@ export function Avatar({ name }: { name: string }) {
 }
 
 export function DemoBanner() {
-  const { restored } = useStore();
+  const { restored, mode, saveState, lastSyncedAt, loadError, account, actions } = useStore();
+  if (mode === 'api') {
+    if (loadError) {
+      return (
+        <div className="demo-banner" role="status">
+          <span aria-hidden="true">⚠️</span>
+          <span className="grow">
+            <strong>Offline.</strong> Showing the last synced copy{lastSyncedAt ? ` from ${new Date(lastSyncedAt).toLocaleTimeString()}` : ''}. Changes cannot be saved until the server is reachable.
+          </span>
+          <button type="button" className="btn ghost small" onClick={() => void actions.refresh()}>
+            Retry
+          </button>
+        </div>
+      );
+    }
+    if (saveState === 'failed') {
+      return (
+        <div className="demo-banner" role="status">
+          <span aria-hidden="true">⚠️</span>
+          <span>
+            <strong>Last change was not saved.</strong> It was rolled back; the latest shared data is shown.
+          </span>
+        </div>
+      );
+    }
+    if (account && !account.member_id) {
+      return (
+        <div className="callout warn small" role="status">
+          <span aria-hidden="true">👤</span>
+          <span>Your account is not linked to a roster member yet. Link it in Settings so you can set availability.</span>
+        </div>
+      );
+    }
+    return null;
+  }
   return (
     <div className="demo-banner" role="note">
       <span aria-hidden="true">⚠️</span>
       <span>
-        <strong>Demo mode.</strong> Data is stored only in this browser{restored ? ' (restored from local storage)' : ''}. Nothing is shared with other members until the server build (milestone 4).
+        <strong>Demo mode.</strong> Data is stored only in this browser{restored ? ' (restored from local storage)' : ''}. Nothing is shared with other members until the app is connected to the alliance server.
       </span>
     </div>
   );

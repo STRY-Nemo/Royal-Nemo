@@ -27,10 +27,17 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - name: API integration tests (local Worker + D1)
+        run: npm run test:server
+        env:
+          WRANGLER_SEND_METRICS: 'false'
       - name: Build for GitHub Pages sub-path
         run: npm run build
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
+          # Repository variable API_URL is set automatically by the "Deploy API to Cloudflare" workflow.
+          # Empty = local-only demo mode.
+          VITE_API_URL: ${{ vars.API_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

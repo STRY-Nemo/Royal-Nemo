@@ -7,7 +7,7 @@ import { starters } from '../engine/lifecycle';
 import { describeChoice } from '../engine/suggest';
 
 export function HomeScreen() {
-  const { state, currentEvent, me, isLeader, finalizedEvents, history } = useStore();
+  const { state, currentEvent, me, isLeader, finalizedEvents, history, mode } = useStore();
   const router = useRouter();
   const event = currentEvent;
   const myAvailability = event && me ? event.availability[me.id] : undefined;
@@ -82,12 +82,10 @@ export function HomeScreen() {
         )}
 
         {event && !me && (
-          <div className="callout warn">
+          <button type="button" className="callout warn" style={{ width: '100%', textAlign: 'left' }} onClick={() => router.navigate('/settings')}>
             <span aria-hidden="true">👤</span>
-            <span>
-              No member is linked to this session. Open Settings to choose who you are (demo) so you can set availability.
-            </span>
-          </div>
+            <span>{mode === 'api' ? 'Your account is not linked to a roster member yet. Tap to link it in Settings so you can set availability.' : 'No member is linked to this session. Open Settings to choose who you are (demo) so you can set availability.'}</span>
+          </button>
         )}
 
         {myHistory && (

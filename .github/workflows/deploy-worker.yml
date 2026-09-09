@@ -1,0 +1,96 @@
+name: Deploy API to Cloudflare
+
+# Deploys the shared alliance API (server/) to Cloudflare Workers + D1.
+# Does nothing until the repository secrets CLOUDFLARE_API_TOKEN and
+# CLOUDFLARE_ACCOUNT_ID exist (see docs/DEPLOY.md). After a successful deploy
+# it stores the API URL as the repository variable API_URL and rebuilds the
+# site so the app connects to the server.
+
+on:
+  push:
+    branches: [main, claude/alliance-app-last-z-f572n4]
+    paths:
+      - 'server/**'
+      - 'src/engine/**'
+      - 'src/domain/**'
+      - 'src/data/**'
+      - '.github/workflows/deploy-worker.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: worker-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      OWNER_SETUP_CODE: ${{ secrets.OWNER_SETUP_CODE }}
+      WRANGLER_SEND_METRICS: 'false'
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check Cloudflare secrets
+        id: check
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set; skipping API deploy. See docs/DEPLOY.md."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.configured == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.configured == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        if: steps.check.outputs.configured == 'true'
+      - name: Typecheck and test the API
+        if: steps.check.outputs.configured == 'true'
+        run: npm run typecheck && npm run test:server
+      - name: Ensure the D1 database exists
+        if: steps.check.outputs.configured == 'true'
+        working-directory: server
+        run: |
+          id=$(npx wrangler d1 list --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const l=JSON.parse(s);const d=l.find(x=>x.name==='stry-alliance');console.log(d?d.uuid:'')})")
+          if [ -z "$id" ]; then
+            echo "Creating D1 database stry-alliance"
+            npx wrangler d1 create stry-alliance >/dev/null
+            id=$(npx wrangler d1 list --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const l=JSON.parse(s);const d=l.find(x=>x.name==='stry-alliance');console.log(d?d.uuid:'')})")
+          fi
+          test -n "$id"
+          sed -i "s/replace-with-your-d1-database-id/$id/" wrangler.toml
+          echo "D1 database id: $id"
+      - name: Apply migrations
+        if: steps.check.outputs.configured == 'true'
+        working-directory: server
+        run: npx wrangler d1 migrations apply stry-alliance --remote
+      - name: Deploy the Worker
+        if: steps.check.outputs.configured == 'true'
+        id: deploy
+        working-directory: server
+        run: |
+          origins="https://${{ github.repository_owner }}.github.io,http://localhost:5173"
+          if [ -n "${{ vars.EXTRA_ALLOWED_ORIGINS }}" ]; then origins="$origins,${{ vars.EXTRA_ALLOWED_ORIGINS }}"; fi
+          npx wrangler deploy --var "ALLOWED_ORIGINS:$origins" | tee deploy.log
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -1)
+          test -n "$url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Set the owner setup code secret
+        if: steps.check.outputs.configured == 'true' && env.OWNER_SETUP_CODE != ''
+        working-directory: server
+        run: printf '%s' "$OWNER_SETUP_CODE" | npx wrangler secret put OWNER_SETUP_CODE
+      - name: Store API_URL and rebuild the site
+        if: steps.check.outputs.configured == 'true'
+        run: |
+          gh variable set API_URL --body "${{ steps.deploy.outputs.url }}" --repo "${{ github.repository }}"
+          gh workflow run deploy-pages.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}"
+          echo "::notice::API deployed to ${{ steps.deploy.outputs.url }}; site rebuild triggered."
