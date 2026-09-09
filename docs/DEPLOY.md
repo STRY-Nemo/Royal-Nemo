@@ -31,10 +31,11 @@ GitHub → **Actions → "Deploy API to Cloudflare" → Run workflow** (pick the
 - creates the `stry-alliance` D1 database if it does not exist,
 - applies the schema migrations,
 - deploys the Worker and prints its URL (`https://stry-alliance-api.<your-subdomain>.workers.dev`),
-- stores that URL as the repository variable `API_URL`,
-- rebuilds the GitHub Pages site so the app connects to the server.
+- checks that `.env.production` contains `VITE_API_URL=<that URL>`; if it does not (first deploy on a new account), commit that line and push, and the GitHub Pages build will connect to the server.
 
 Wait for both workflows to finish green (2–3 minutes).
+
+Token permissions that the deploy needs, all on the account: **Workers Scripts → Edit** and **D1 → Edit** (the "Edit Cloudflare Workers" template supplies the first; add the second). Account API Tokens are listed under Manage Account → Account API Tokens, not under the user profile.
 
 ### 6. Create the first leader account
 Open the app (https://ryanrhernandez-design.github.io/Royal-Nemo/), tap **Create account**, and use your `OWNER_SETUP_CODE` as the invite code. Pick your in-game name from the roster. This first account is a verified leader. The owner code stops working as soon as one leader exists.
@@ -55,3 +56,4 @@ Open the app (https://ryanrhernandez-design.github.io/Royal-Nemo/), tap **Create
 - Every write is checked server-side: role, ownership (members only edit their own availability and confirmation), capacity, uniqueness, availability, and the event or board revision. Two leaders editing the same revision get a "reload to compare" error instead of silently overwriting each other.
 - Leader-only mechanical notes and the audit trail are never sent to member accounts.
 - Browser origins allowed to call the API default to the GitHub Pages origin and localhost; add more via the repository variable `EXTRA_ALLOWED_ORIGINS` (comma-separated).
+- To fall back to demo mode, delete `.env.production` and push.

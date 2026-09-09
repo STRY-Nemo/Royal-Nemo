@@ -9,7 +9,7 @@ Short handoff so another coding agent can resume without the original conversati
 | 1. Mobile shell, seed data, Friday scheduling, availability, Organize page, shared motion, demo persistence | **Done** | All 100 members load; 16 responsibilities round-trip; localStorage demo clearly labeled; no fabricated attendance |
 | 2. Deterministic rotation engine + tests, explanations, locks/swaps | **Done** | `src/engine/suggest.ts`, 28 Vitest cases pass (`npm test`) |
 | 3. Publish/revisions, attendance, finalization, history, next-week rotation | **Done** | End-to-end verified in tests and a Playwright phone walkthrough |
-| 4. Authenticated shared DB, server authorization, concurrency, deployment, backup/export, phone QA | **Built, awaiting deployment** | `server/` Worker + D1, deploy workflow gated on Cloudflare secrets (`docs/DEPLOY.md`). Physical-phone QA still pending |
+| 4. Authenticated shared DB, server authorization, concurrency, deployment, backup/export, phone QA | **Deployed** | API live at https://stry-alliance-api.ryan-r-hernandez.workers.dev; site builds in connected mode via `.env.production`. Physical-phone QA still pending |
 
 ## Hosting
 
@@ -20,7 +20,7 @@ GitHub Pages, deployed by Actions from `main` and `claude/alliance-app-last-z-f5
 - `server/src/index.ts`: every mutation endpoint loads the event/board, runs the pure engine function, and writes with `UPDATE … WHERE revision = ?` inside a D1 batch with the audit rows (409 on conflict). Members may only touch their own availability/confirmation; leaders everything else. Mechanical notes and audit are stripped for members.
 - Auth: PBKDF2 passwords, hashed bearer tokens (90 days), `OWNER_SETUP_CODE` bootstraps the first leader only while no leader exists, invites (`role`, `uses`, `days`) for everyone else, accounts screen for leaders.
 - Client: `src/store/store.tsx` picks demo or API mode from `VITE_API_URL`; API mode applies changes optimistically, then replaces with the server copy or rolls back with a toast; refreshes on navigation, focus and every 30 s; caches the last state for offline reading.
-- Deploy: `deploy-worker.yml` creates the D1 database, applies migrations, deploys, stores `API_URL` as a repo variable and re-triggers the Pages build. Until the secrets exist it exits with a notice.
+- Deploy: `deploy-worker.yml` creates the D1 database, applies migrations, deploys, sets the `OWNER_SETUP_CODE` secret and verifies `.env.production` points at the Worker URL. Until the Cloudflare secrets exist it exits with a notice.
 - Tests: `npm run test:server` (10 cases, local wrangler). Two-browser Playwright flow verified locally (owner + member).
 
 ## Commits
@@ -50,7 +50,7 @@ Open Settings (gear icon) → choose a member and the Leader role. Canyon → Ev
 
 ## Next steps
 
-1. Owner follows `docs/DEPLOY.md` (Cloudflare account, three GitHub secrets, run the deploy workflow), creates the first leader account, invites the alliance.
+1. Owner creates the first leader account in the live app with the `OWNER_SETUP_CODE`, then invites the alliance (Settings → Alliance accounts).
 2. Physical-phone QA for drag auto-scroll, keyboard-aware sheets and reduced-motion. Verification so far was emulator-only.
 3. Optional hardening: rate-limit `/auth/login` (Cloudflare WAF rule or a KV counter), password reset via a leader-issued reset code, scheduled D1 export to R2 for off-platform backups.
 4. Deferred features from the spec: other alliance events, game data import for attendance (with review before finalization), reminders, analytics.
