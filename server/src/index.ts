@@ -119,6 +119,17 @@ router.get('/health', async () => {
 });
 
 // ---- Auth ---------------------------------------------------------------------
+/** Username of the enabled account already linked to this roster member (ignoring `except`), or null. */
+async function memberClaimedBy(env: Env, memberId: string, except?: string): Promise<string | null> {
+  const row = await env.DB.prepare('SELECT id, username FROM accounts WHERE member_id = ? AND disabled = 0').bind(memberId).all<{ id: string; username: string }>();
+  const other = row.results.find((r) => r.id !== except);
+  return other ? other.username : null;
+}
+
+function claimedError(memberName: string, by: string): HttpError {
+  return new HttpError(409, 'member_claimed', `Someone already joined as ${memberName} (account "${by}"). If that is you, sign in instead; otherwise ask a leader.`);
+}
+
 router.post('/auth/register', async (ctx) => {
   const body = await ctx.body();
   const username = validateUsername(str(body, 'username'));
@@ -131,7 +142,11 @@ router.post('/auth/register', async (ctx) => {
   const memberId = str(body, 'member_id', false) || null;
 
   if (await findAccountByUsername(ctx.env, username)) throw new HttpError(409, 'username_taken', 'That username is already taken.');
-  if (memberId) await loadMember(ctx.env, memberId);
+  if (memberId) {
+    const member = await loadMember(ctx.env, memberId);
+    const by = await memberClaimedBy(ctx.env, memberId);
+    if (by) throw claimedError(member.username, by);
+  }
 
   let role: 'leader' | 'member' = 'member';
   let verified = false;
@@ -198,7 +213,9 @@ router.post('/me/link', async (ctx) => {
   const body = await ctx.body();
   const memberId = str(body, 'member_id');
   if (account.member_id) throw new HttpError(422, 'already_linked', 'Ask a leader to change your linked member.');
-  await loadMember(ctx.env, memberId);
+  const member = await loadMember(ctx.env, memberId);
+  const by = await memberClaimedBy(ctx.env, memberId, account.id);
+  if (by) throw claimedError(member.username, by);
   await ctx.env.DB.prepare('UPDATE accounts SET member_id = ?, verified = 0 WHERE id = ? AND member_id IS NULL').bind(memberId, account.id).run();
   return { account: { ...account, member_id: memberId, verified: false } };
 });
@@ -206,7 +223,9 @@ router.post('/me/link', async (ctx) => {
 /** Public minimal roster (id + username) so a new member can pick themselves while registering. */
 router.get('/roster', async (ctx) => {
   const members = await loadMembers(ctx.env);
-  return { roster: members.filter((m) => m.active).map((m) => ({ id: m.id, username: m.username })) };
+  const linked = await ctx.env.DB.prepare('SELECT member_id FROM accounts WHERE member_id IS NOT NULL AND disabled = 0').all<{ member_id: string }>();
+  const taken = new Set(linked.results.map((r) => r.member_id));
+  return { roster: members.filter((m) => m.active).map((m) => ({ id: m.id, username: m.username, taken: taken.has(m.id) })) };
 });
 
 // ---- Bootstrap state ---------------------------------------------------------------
@@ -608,7 +627,11 @@ router.post('/accounts/:id', async (ctx) => {
   }
   if ('member_id' in body) {
     const memberId = typeof body.member_id === 'string' && body.member_id ? body.member_id : null;
-    if (memberId) await loadMember(ctx.env, memberId);
+    if (memberId) {
+      const member = await loadMember(ctx.env, memberId);
+      const by = await memberClaimedBy(ctx.env, memberId, row.id);
+      if (by) throw new HttpError(409, 'member_claimed', `${member.username} is already linked to the account "${by}". Unlink that account first.`);
+    }
     sets.push('member_id = ?');
     values.push(memberId);
   }
@@ -629,6 +652,24 @@ router.post('/accounts/:id', async (ctx) => {
   const updated = await ctx.env.DB.prepare('SELECT id, username, role, member_id, verified, disabled, created_at FROM accounts WHERE id = ?').bind(row.id).first<{ id: string; username: string; role: 'leader' | 'member'; member_id: string | null; verified: number; disabled: number; created_at: string }>();
   await ctx.env.DB.batch([auditStatement(ctx.env, { id: `${ctx.now.toISOString()}-acct-${randomToken(4)}`, event_id: null, actor_id: actorFor(leader), action: 'account.update', before: { id: row.id }, after: body, timestamp: ctx.now.toISOString() })]);
   return { account: updated && { ...updated, verified: updated.verified === 1, disabled: updated.disabled === 1 } };
+});
+
+/** Leader resets a member's PIN (they forgot it). Signs that account out everywhere; the leader tells them the new PIN in person. */
+router.post('/accounts/:id/password', async (ctx) => {
+  const leader = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const next = str(body, 'new_password');
+  validatePassword(next);
+  const row = await ctx.env.DB.prepare('SELECT id, username FROM accounts WHERE id = ?').bind(ctx.params.id).first<{ id: string; username: string }>();
+  if (!row) throw new HttpError(404, 'not_found', 'Account not found.');
+  if (row.id === leader.id) throw new HttpError(422, 'self_reset', 'Change your own PIN from Settings → Change password.');
+  const { hash, salt } = await hashPassword(next);
+  await ctx.env.DB.batch([
+    ctx.env.DB.prepare('UPDATE accounts SET password_hash = ?, salt = ? WHERE id = ?').bind(hash, salt, row.id),
+    ctx.env.DB.prepare('DELETE FROM sessions WHERE account_id = ?').bind(row.id),
+    auditStatement(ctx.env, { id: `${ctx.now.toISOString()}-pin-${randomToken(4)}`, event_id: null, actor_id: actorFor(leader), action: 'account.reset_password', before: { id: row.id }, after: { username: row.username }, timestamp: ctx.now.toISOString() }),
+  ]);
+  return { ok: true };
 });
 
 router.get('/invites', async (ctx) => {

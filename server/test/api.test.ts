@@ -330,9 +330,46 @@ describe('STRY API', () => {
     expect((await api('POST', '/organization/slots', { edits: [] }, memberToken)).status).toBe(403);
   });
 
+  it('blocks a second account from claiming an already-joined roster member, and lets a leader reset a PIN', async () => {
+    const roster = await api<{ roster: { id: string; username: string; taken: boolean }[] }>('GET', '/roster');
+    const low = roster.body.roster.find((m) => m.taken)!;
+    expect(low).toBeDefined();
+    expect(roster.body.roster.filter((m) => m.taken).length).toBeGreaterThan(0);
+    const inv = await api<{ invite: { code: string } }>('POST', '/invites', { role: 'member', uses: 3 }, leaderToken);
+    // Registering as the same member is refused; the message names the member and the account.
+    const dup = await api('POST', '/auth/register', { username: 'impostor', password: '1234', invite_code: inv.body.invite.code, member_id: low.id });
+    expect(dup.status).toBe(409);
+    expect(dup.body.error).toBe('member_claimed');
+    expect(String(dup.body.message)).toContain(low.username);
+    expect(String(dup.body.message)).toContain('lowrank');
+    // A refused registration does not burn an invite use.
+    expect((await api<{ uses_left: number }>('GET', `/invites/${inv.body.invite.code}/check`)).body.uses_left).toBe(3);
+    // Self-link and leader relink are refused the same way.
+    const free = roster.body.roster.find((m) => !m.taken)!;
+    const reg = await api<{ token: string; account: { id: string } }>('POST', '/auth/register', { username: 'latecomer', password: '1234', invite_code: inv.body.invite.code });
+    expect(reg.status).toBe(200);
+    expect((await api('POST', '/me/link', { member_id: low.id }, reg.body.token)).status).toBe(409);
+    expect((await api('POST', '/me/link', { member_id: free.id }, reg.body.token)).status).toBe(200);
+    expect((await api('POST', `/accounts/${reg.body.account.id}`, { member_id: low.id }, leaderToken)).status).toBe(409);
+    // Leader resets the PIN: old PIN and old session stop working, the new PIN signs in.
+    expect((await api('POST', `/accounts/${reg.body.account.id}/password`, { new_password: '12' }, leaderToken)).status).toBe(400);
+    expect((await api('POST', `/accounts/${reg.body.account.id}/password`, { new_password: '9999' }, reg.body.token)).status).toBe(403);
+    expect((await api('POST', `/accounts/${reg.body.account.id}/password`, { new_password: '9999' }, leaderToken)).status).toBe(200);
+    expect((await api('GET', '/me', undefined, reg.body.token)).status).toBe(401);
+    expect((await api('POST', '/auth/login', { username: 'latecomer', password: '1234' })).status).toBe(401);
+    expect((await api('POST', '/auth/login', { username: 'latecomer', password: '9999' })).status).toBe(200);
+    // A leader cannot reset their own PIN this way (Settings → Change password instead).
+    const me = (await api<{ account: { id: string } }>('GET', '/me', undefined, leaderToken)).body.account;
+    expect((await api('POST', `/accounts/${me.id}/password`, { new_password: '9999' }, leaderToken)).status).toBe(422);
+    // Clean up so the account list below stays predictable.
+    expect((await api('POST', `/accounts/${reg.body.account.id}`, { disabled: true }, leaderToken)).status).toBe(200);
+    // A disabled account no longer holds the claim.
+    expect((await api<{ roster: { id: string; taken: boolean }[] }>('GET', '/roster')).body.roster.find((m) => m.id === free.id)!.taken).toBe(false);
+  });
+
   it('manages accounts: last leader cannot demote themselves; disabled accounts lose sessions', async () => {
     const list = await api<{ accounts: { id: string; username: string }[] }>('GET', '/accounts', undefined, leaderToken);
-    expect(list.body.accounts.map((a) => a.username).sort()).toEqual(['appins', 'joiner', 'lowrank', 'ryan']);
+    expect(list.body.accounts.map((a) => a.username).sort()).toEqual(['appins', 'joiner', 'latecomer', 'lowrank', 'ryan']);
     const me = list.body.accounts.find((a) => a.username === 'ryan')!;
     const appins = list.body.accounts.find((a) => a.username === 'appins')!;
     expect((await api('POST', `/accounts/${me.id}`, { role: 'member' }, leaderToken)).status).toBe(422);

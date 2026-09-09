@@ -28,7 +28,7 @@ export function LoginScreen() {
   }, [joinCode, api]);
   const [memberId, setMemberId] = useState<string | null>(null);
   const [memberQuery, setMemberQuery] = useState('');
-  const [roster, setRoster] = useState<{ id: string; username: string }[]>([]);
+  const [roster, setRoster] = useState<{ id: string; username: string; taken?: boolean }[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -117,9 +117,10 @@ export function LoginScreen() {
                 {memberQuery && (
                   <div className="list" role="listbox" aria-label="Members">
                     {filtered.map((m) => (
-                      <button key={m.id} type="button" role="option" aria-selected={false} className="sheet-item" onClick={() => pickMember(m)}>
+                      <button key={m.id} type="button" role="option" aria-selected={false} aria-disabled={m.taken || undefined} className="sheet-item" onClick={() => (m.taken ? setError(`Someone already joined as ${m.username}. If that is you, sign in instead; otherwise ask a leader.`) : pickMember(m))}>
                         <div className="grow">
-                          <div className="label">{m.username}</div>
+                          <div className="label" style={m.taken ? { color: 'var(--text-3)' } : undefined}>{m.username}</div>
+                          {m.taken && <div className="hint">Already joined · sign in instead</div>}
                         </div>
                       </button>
                     ))}

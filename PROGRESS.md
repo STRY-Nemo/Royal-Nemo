@@ -22,7 +22,8 @@ Short handoff so another coding agent can resume without the original conversati
 - **Weeks ahead**: `ensureUpcomingDrafts` (max 4 Fridays), `POST /events/upcoming`, Canyon "Upcoming weeks" card, Home list with per-week availability status, "Back to this week" when viewing a future draft.
 - **Separate benches**: substitutes belong to one team (`teamReserves`, `waitingList`, move target `reserve:<teamId>`).
 - **Ideas** (`src/engine/suggestions.ts`, `src/screens/IdeasScreen.tsx`, `server/migrations/0002_suggestions.sql`, routes under `/suggestions`): members post (5 open max, 80/1000 char limits) and vote; leaders set status + reply; `GET /suggestions/export` for the sync workflow (header `x-sync-token`, 404 without the `SUGGESTIONS_SYNC_TOKEN` secret). `.github/workflows/suggestions-sync.yml` runs every 6 h and mirrors ideas into GitHub issues (`idea` label, one per suggestion, plus a rolling digest issue) for agent analysis.
-- Tests: 61 unit (+ real-file parsing and import scenarios, suggestions), 16 API integration.
+- **Join hardening**: one account per roster member (`memberClaimedBy` in `server/src/index.ts`, checked on register, self-link and leader relink; `GET /roster` returns `taken` so the join picker greys claimed names). Leader **Reset PIN** (`POST /accounts/:id/password`, clears that account's sessions; sheet in `AccountsScreen`). The ideas sync workflow stores `SUGGESTIONS_SYNC_TOKEN` on the Worker itself when the API rejects it, so no manual redeploy.
+- Tests: 61 unit (+ real-file parsing and import scenarios, suggestions), 17 API integration.
 
 ## Hosting
 

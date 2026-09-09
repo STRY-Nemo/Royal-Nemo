@@ -4,8 +4,9 @@ name: Sync ideas to issues
 # top-voted list. An agent (Claude Code on this repository) can then read,
 # analyse and act on them like any other issue.
 #
-# Needs the repository secret SUGGESTIONS_SYNC_TOKEN, which the API deploy also
-# stores on the Worker so the export endpoint accepts it.
+# Needs the repository secret SUGGESTIONS_SYNC_TOKEN (any long random string).
+# The workflow copies it onto the Worker itself the first time it runs (using the
+# same Cloudflare secrets as the API deploy), so adding the secret is the only step.
 
 on:
   schedule:
@@ -25,11 +26,33 @@ jobs:
         id: check
         run: |
           if [ -z "${{ secrets.SUGGESTIONS_SYNC_TOKEN }}" ]; then
-            echo "::notice::SUGGESTIONS_SYNC_TOKEN is not set; add it as a repository secret (any long random string) and re-run the API deploy."
+            echo "::notice::SUGGESTIONS_SYNC_TOKEN is not set; add it as a repository secret (any long random string) and run this workflow again."
             echo "configured=false" >> "$GITHUB_OUTPUT"
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
+      - name: Make sure the API accepts the token (copies it onto the Worker if needed)
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SYNC_TOKEN: ${{ secrets.SUGGESTIONS_SYNC_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          api=$(grep -oE 'VITE_API_URL=\S+' .env.production | cut -d= -f2)
+          if curl -sf -o /dev/null -H "x-sync-token: $SYNC_TOKEN" "$api/suggestions/export"; then
+            echo "API already accepts the token."; exit 0
+          fi
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::The API rejected the token and the Cloudflare secrets are missing, so it cannot be stored. See docs/DEPLOY.md."; exit 1
+          fi
+          echo "Storing SUGGESTIONS_SYNC_TOKEN on the Worker…"
+          npm ci --ignore-scripts >/dev/null
+          (cd server && printf '%s' "$SYNC_TOKEN" | npx wrangler secret put SUGGESTIONS_SYNC_TOKEN)
+          for i in $(seq 1 12); do
+            sleep 5
+            if curl -sf -o /dev/null -H "x-sync-token: $SYNC_TOKEN" "$api/suggestions/export"; then echo "API accepts the token now."; exit 0; fi
+          done
+          echo "::error::The API still rejects the token after storing it."; exit 1
       - name: Fetch and mirror ideas
         if: steps.check.outputs.configured == 'true'
         env:

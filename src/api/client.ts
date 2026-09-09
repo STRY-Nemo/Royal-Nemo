@@ -122,7 +122,7 @@ export class ApiClient {
     return this.request<{ ok: true }>('POST', '/auth/password', { current_password, new_password });
   }
   roster() {
-    return this.request<{ roster: { id: MemberId; username: string }[] }>('GET', '/roster');
+    return this.request<{ roster: { id: MemberId; username: string; taken?: boolean }[] }>('GET', '/roster');
   }
   me() {
     return this.request<{ account: ApiAccount }>('GET', '/me');
@@ -242,6 +242,9 @@ export class ApiClient {
   }
   checkInvite(code: string) {
     return this.request<{ valid: boolean; reason?: 'unknown' | 'used_up' | 'expired'; role?: 'leader' | 'member'; uses_left?: number; expires_at?: string }>('GET', `/invites/${encodeURIComponent(code)}/check`);
+  }
+  resetPassword(id: string, newPassword: string) {
+    return this.request<{ ok: true }>('POST', `/accounts/${encodeURIComponent(id)}/password`, { new_password: newPassword });
   }
   createInvite(input: { role: 'leader' | 'member'; uses?: number; days?: number }) {
     return this.request<{ invite: Invite }>('POST', '/invites', input);

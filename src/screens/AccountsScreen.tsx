@@ -13,6 +13,8 @@ export function AccountsScreen() {
   const [invites, setInvites] = useState<Invite[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<ApiAccount | null>(null);
+  const [resetFor, setResetFor] = useState<ApiAccount | null>(null);
+  const [newPin, setNewPin] = useState('');
   const [linkFor, setLinkFor] = useState<ApiAccount | null>(null);
   const [inviteRole, setInviteRole] = useState<'leader' | 'member'>('member');
   const [confirmInvite, setConfirmInvite] = useState(false);
@@ -50,6 +52,18 @@ export function AccountsScreen() {
       toast({ kind: 'ok', text: label });
       await load();
       setSelected(null);
+    } catch (err) {
+      toast({ kind: 'error', text: err instanceof Error ? err.message : String(err) });
+    }
+  };
+
+  const resetPin = async () => {
+    if (!resetFor) return;
+    try {
+      await api.resetPassword(resetFor.id, newPin);
+      toast({ kind: 'ok', text: `PIN reset for ${resetFor.username}. Tell them the new one.` });
+      setResetFor(null);
+      setNewPin('');
     } catch (err) {
       toast({ kind: 'error', text: err instanceof Error ? err.message : String(err) });
     }
@@ -196,6 +210,14 @@ export function AccountsScreen() {
               </div>
             </button>
             {selected.id !== me?.id && (
+              <button type="button" className="sheet-item" onClick={() => { setResetFor(selected); setNewPin(''); setSelected(null); }}>
+                <div className="grow">
+                  <div className="label">Reset PIN</div>
+                  <div className="hint">They forgot it. Set a new one and tell them in person; it signs them out everywhere.</div>
+                </div>
+              </button>
+            )}
+            {selected.id !== me?.id && (
               <button type="button" className="sheet-item" onClick={() => update(selected, { disabled: !selected.disabled }, selected.disabled ? 'Account enabled' : 'Account disabled')}>
                 <div className="grow">
                   <div className="label" style={{ color: selected.disabled ? undefined : 'var(--danger)' }}>
@@ -207,6 +229,24 @@ export function AccountsScreen() {
             )}
           </div>
         )}
+      </BottomSheet>
+
+      <BottomSheet open={!!resetFor} onClose={() => setResetFor(null)} title={`Reset PIN for ${resetFor?.username ?? ''}`}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void resetPin();
+          }}
+        >
+          <div className="field">
+            <label htmlFor="reset-pin">New PIN or password</label>
+            <input id="reset-pin" className="input" type="text" inputMode="numeric" autoComplete="off" autoCapitalize="none" value={newPin} onChange={(e) => setNewPin(e.target.value)} minLength={4} required placeholder="e.g. 4 digits" />
+            <p className="faint">At least 4 characters. Tell {resetFor?.username} the new PIN; they can change it afterwards from Settings.</p>
+          </div>
+          <button type="submit" className="btn primary block" disabled={newPin.length < 4}>
+            Set new PIN
+          </button>
+        </form>
       </BottomSheet>
 
       <MemberPickerSheet
@@ -223,7 +263,7 @@ export function AccountsScreen() {
       />
 
       <ConfirmSheet open={confirmInvite} title={`Create ${inviteRole} invite?`} confirmLabel="Create & share" onCancel={() => setConfirmInvite(false)} onConfirm={() => void createInvite()}>
-        <p className="small muted">{inviteRole === 'leader' ? 'A single-use code that creates a leader account. Only give it to someone you trust with lineups and attendance.' : 'A code up to 50 members can use in the next 14 days. You can revoke it any time.'}</p>
+        <p className="small muted">{inviteRole === 'leader' ? 'A single-use code that creates a leader account. Only give it to someone you trust with lineups and attendance.' : 'A link up to 200 members can use in the next 90 days. You can revoke it any time.'}</p>
       </ConfirmSheet>
     </>
   );
