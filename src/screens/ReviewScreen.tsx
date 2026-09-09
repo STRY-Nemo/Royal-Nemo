@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { TeamId } from '../domain/types';
-import { publishBlockers, starters, suggest, teamPower, teamReserves, waitingList } from '../engine/lifecycle';
+import { publishBlockers, starters, suggest, teamAveragePower, teamReserves, waitingList } from '../engine/lifecycle';
 import { ConfirmSheet, useFeedback, useSingleFlight } from '../motion';
 import { useRouter } from '../store/router';
 import { fmtPower, useStore } from '../store/store';
@@ -98,7 +98,7 @@ export function ReviewScreen({ eventId }: { eventId?: string }) {
                   {starters(event, t.id).length}/{t.capacity}
                 </span>
                 <span className="label">
-                  {t.name} · {fmtPower(teamPower(event, state.members, t.id))}
+                  {t.name} · avg {fmtPower(teamAveragePower(event, state.members, t.id))}
                 </span>
               </div>
             ))}

@@ -3,7 +3,7 @@ import { useRouter } from '../store/router';
 import { fmtPower, useStore } from '../store/store';
 import { DemoBanner, EmptyState, EventTimes, Header, StatusBadge, StickyActions } from '../ui/common';
 import { CalendarIcon, ChevronRight, HistoryIcon, UndoIcon } from '../ui/icons';
-import { publishBlockers, starters, teamPower, teamReserves, waitingList } from '../engine/lifecycle';
+import { publishBlockers, starters, teamAveragePower, teamReserves, waitingList } from '../engine/lifecycle';
 import { ConfirmSheet, OrbitSpinner, useFeedback, useSingleFlight } from '../motion';
 import { BUNDLED_IMPORTS } from '../data/bundledImports';
 import { Art } from '../ui/Art';
@@ -162,8 +162,8 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
                       <span className="label">substitutes</span>
                     </div>
                     <div className="stat">
-                      <span className="value">{fmtPower(teamPower(event, state.members, t.id))}</span>
-                      <span className="label">arena power</span>
+                      <span className="value">{fmtPower(teamAveragePower(event, state.members, t.id))}</span>
+                      <span className="label">avg arena power</span>
                     </div>
                   </div>
                 </div>

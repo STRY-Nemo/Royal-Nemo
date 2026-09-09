@@ -234,6 +234,13 @@ export function reserveTarget(teamId: TeamId): MoveTarget {
   return `reserve:${teamId}`;
 }
 
+/** Average arena power per starter (0 when the team is empty). Shown in the app instead of the sum. */
+export function teamAveragePower(event: CanyonEvent, members: Member[], teamId: TeamId): number {
+  const n = starters(event, teamId).length;
+  if (n === 0) return 0;
+  return Math.round((teamPower(event, members, teamId) / n) * 10) / 10;
+}
+
 export function teamPower(event: CanyonEvent, members: Member[], teamId: TeamId): number {
   const byId = new Map(members.map((m) => [m.id, m.arena_power_m]));
   const sum = starters(event, teamId).reduce((s, a) => s + (byId.get(a.member_id) ?? 0), 0);

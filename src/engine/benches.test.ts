@@ -60,3 +60,14 @@ describe('separate benches per team', () => {
     expect(() => swapMembers(e, flex1.member_id, teamReserves(e, t2)[0].member_id === flex1.member_id ? teamReserves(e, t2)[1].member_id : teamReserves(e, t2)[0].member_id, ctx)).toThrow(/same place/);
   });
 });
+
+describe('average arena power', () => {
+  it('is the starters\' mean, rounded to one decimal, and 0 for an empty team', async () => {
+    const { teamAveragePower, teamPower } = await import('./lifecycle');
+    const e = filled();
+    const t1 = e.teams[0].id;
+    expect(teamAveragePower(e, members, t1)).toBeCloseTo(Math.round((teamPower(e, members, t1) / 20) * 10) / 10, 5);
+    const empty = createDraftEvent({ series_id: 'canyon-friday', date: '2026-09-11', timezone: 'Etc/GMT+2' });
+    expect(teamAveragePower(empty, members, empty.teams[0].id)).toBe(0);
+  });
+});

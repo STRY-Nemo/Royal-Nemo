@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Assignment, CanyonEvent, Member, MemberId, TeamId } from '../domain/types';
-import { reserveTarget, starters, teamPower, teamReserves, waitingList } from '../engine/lifecycle';
+import { reserveTarget, starters, teamAveragePower, teamPower, teamReserves, waitingList } from '../engine/lifecycle';
 import { allowedTeamIds, describeAvailability } from '../engine/suggest';
 import { BottomSheet, ConfirmSheet, useFeedback, useFlash } from '../motion';
 import { useRouter } from '../store/router';
@@ -123,7 +123,7 @@ export function RosterScreen({ eventId }: { eventId?: string }) {
                   {list.length === team.capacity && <span className="badge published">Complete</span>}
                 </div>
                 <div className="small muted">
-                  {subs.length} substitute{subs.length === 1 ? '' : 's'} · arena power {fmtPower(teamPower(event, state.members, team.id))} · {Object.keys(event.confirmations).filter((id) => list.some((a) => a.member_id === id) || subs.some((a) => a.member_id === id)).length} confirmed
+                  {subs.length} substitute{subs.length === 1 ? '' : 's'} · avg arena power {fmtPower(teamAveragePower(event, state.members, team.id))} · {Object.keys(event.confirmations).filter((id) => list.some((a) => a.member_id === id) || subs.some((a) => a.member_id === id)).length} confirmed
                 </div>
               </>
             ) : (
@@ -488,7 +488,8 @@ function SwapPreview({ a, aFrom, b, bFrom, event }: { a: Member; aFrom: Assignme
     if (bFrom.role === 'starter' && bFrom.team_id === teamId) p -= b.arena_power_m;
     if (bFrom.role === 'starter' && bFrom.team_id === teamId) p += a.arena_power_m;
     if (aFrom.role === 'starter' && aFrom.team_id === teamId) p += b.arena_power_m;
-    return Math.round(p * 10) / 10;
+    const n = starters(event, teamId).length;
+    return n ? Math.round((p / n) * 10) / 10 : 0;
   };
   return (
     <div className="list">
@@ -509,7 +510,7 @@ function SwapPreview({ a, aFrom, b, bFrom, event }: { a: Member; aFrom: Assignme
         </div>
       </div>
       <div className="small muted">
-        Power after swap: {event.teams.map((t) => `${t.name} ${fmtPower(powerAfter(t.id))}`).join(' · ')}
+        Avg power after swap: {event.teams.map((t) => `${t.name} ${fmtPower(powerAfter(t.id))}`).join(' · ')}
       </div>
     </div>
   );
