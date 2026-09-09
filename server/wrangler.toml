@@ -11,4 +11,4 @@ migrations_dir = "migrations"
 
 [vars]
 # Comma-separated list of allowed browser origins for CORS.
-ALLOWED_ORIGINS = "https://ryanrhernandez-design.github.io,http://localhost:5173"
+ALLOWED_ORIGINS = "https://stry-nemo.github.io,https://ryanrhernandez-design.github.io,http://localhost:5173"

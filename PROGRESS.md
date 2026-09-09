@@ -25,7 +25,7 @@ Short handoff so another coding agent can resume without the original conversati
 
 ## Hosting
 
-GitHub Pages, deployed by Actions from `main` and `claude/alliance-app-last-z-f572n4`: https://ryanrhernandez-design.github.io/Royal-Nemo/. The workflow also runs typecheck, tests and build on pull requests. `BASE_PATH` sets the Vite base for the repository sub-path. Note: this repository's Pages site previously served a game from the `claude/game-copy-vibe-65sbfz` branch; that deployment is replaced by the alliance app. Re-running that branch's workflow would swap it back.
+GitHub Pages, deployed by Actions from `main` and `claude/alliance-app-last-z-f572n4`: https://stry-nemo.github.io/Royal-Nemo/. The workflow also runs typecheck, tests and build on pull requests. `BASE_PATH` sets the Vite base for the repository sub-path. Note: this repository's Pages site previously served a game from the `claude/game-copy-vibe-65sbfz` branch; that deployment is replaced by the alliance app. Re-running that branch's workflow would swap it back.
 
 ## Milestone 4 summary
 

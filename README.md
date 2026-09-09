@@ -8,7 +8,7 @@ The build follows the handoff package in `docs/spec/` (PRODUCT_SPEC, DESIGN, ORG
 
 The app is published to GitHub Pages by `.github/workflows/deploy-pages.yml` on every push to `main` or the app branch:
 
-**https://ryanrhernandez-design.github.io/Royal-Nemo/**
+**https://stry-nemo.github.io/Royal-Nemo/**
 
 Open it on a phone and use "Add to Home Screen" for an app-like icon. Until the alliance server is deployed the site runs in **demo mode** (data stays in each phone). Follow `docs/DEPLOY.md` (about 10 minutes, phone-friendly) to deploy the shared server; after that everyone signs in and sees the same data.
 

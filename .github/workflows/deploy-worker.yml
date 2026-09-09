@@ -82,7 +82,7 @@ jobs:
         id: deploy
         working-directory: server
         run: |
-          origins="https://${{ github.repository_owner }}.github.io,http://localhost:5173"
+          origins="https://${{ github.repository_owner }}.github.io,https://stry-nemo.github.io,http://localhost:5173"
           if [ -n "${{ vars.EXTRA_ALLOWED_ORIGINS }}" ]; then origins="$origins,${{ vars.EXTRA_ALLOWED_ORIGINS }}"; fi
           if ! npx wrangler deploy --var "ALLOWED_ORIGINS:$origins" | tee deploy.log; then
             echo "::error::Cloudflare refused to upload the Worker. The API token also needs Account → Workers Scripts → Edit (the 'Edit Cloudflare Workers' template includes it). Edit the token under Manage Account → Account API Tokens, add that permission, Continue to summary → Save, then re-run this workflow."
