@@ -12,6 +12,7 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
   const { toast, announce } = useFeedback();
   const event = eventId ? eventById(eventId) : currentEvent;
   const [confirmGenerate, setConfirmGenerate] = useState(false);
+  const [needAvailability, setNeedAvailability] = useState(false);
   const [generating, setGenerating] = useState(false);
 
   const [generate, busy] = useSingleFlight(async () => {
@@ -173,9 +174,15 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
               </div>
             </div>
           )}
+          {isLeader && eligible === 0 && (
+            <div className="callout warn small">
+              <span aria-hidden="true">ⓘ</span>
+              <span>Suggestions need availability first. Ask members to set theirs, or record it for them below (you can mark everyone as Either in one tap to try the rotation).</span>
+            </div>
+          )}
           {isLeader && (
             <button type="button" className="link-btn" onClick={() => router.navigate(`/canyon/availability/${event.id}?all=1`)}>
-              Record availability for a member
+              Record availability for members
             </button>
           )}
         </div>
@@ -225,7 +232,7 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
 
       {isLeader && event.status !== 'finalized' && event.status !== 'canceled' && (
         <StickyActions>
-          <button type="button" className="btn secondary" onClick={() => (hasStarters ? generate() : setConfirmGenerate(true))} disabled={busy || eligible === 0}>
+          <button type="button" className="btn secondary" onClick={() => (eligible === 0 ? setNeedAvailability(true) : hasStarters ? generate() : setConfirmGenerate(true))} disabled={busy}>
             {generating ? <OrbitSpinner label="Computing" /> : hasStarters ? 'Regenerate' : 'Generate suggestions'}
           </button>
           <button type="button" className="btn primary" onClick={() => router.navigate(`/canyon/review/${event.id}`)} disabled={!hasStarters}>
@@ -233,6 +240,21 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
           </button>
         </StickyActions>
       )}
+
+      <ConfirmSheet
+        open={needAvailability}
+        title="Nobody is available yet"
+        confirmLabel="Record availability"
+        onCancel={() => setNeedAvailability(false)}
+        onConfirm={() => {
+          setNeedAvailability(false);
+          router.navigate(`/canyon/availability/${event.id}?all=1`);
+        }}
+      >
+        <p className="small muted">
+          {responses.total === 0 ? 'No member has responded for this Friday, so there is nobody to place.' : `${responses.total} responded but all are unavailable.`} No response means unknown, not available. Members can set their own availability from Home, or you can record it for them, including everyone at once.
+        </p>
+      </ConfirmSheet>
 
       <ConfirmSheet open={confirmGenerate} title="Generate suggestions?" confirmLabel="Generate" onCancel={() => setConfirmGenerate(false)} onConfirm={() => { setConfirmGenerate(false); void generate(); }}>
         <p className="small muted">

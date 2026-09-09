@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { AvailabilityChoice, Member } from '../domain/types';
 import { describeChoice } from '../engine/suggest';
-import { useFeedback, useFlash } from '../motion';
+import { ConfirmSheet, useFeedback, useFlash } from '../motion';
 import { useRouter } from '../store/router';
 import { useStore } from '../store/store';
 import { useUiState } from '../store/ui';
@@ -16,6 +16,7 @@ export function AvailabilityScreen({ eventId }: { eventId?: string }) {
   const forAll = router.route.query.get('all') === '1';
   const [targetId, setTargetId] = useUiState<string | null>('availability.target', null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [flashing, flash] = useFlash();
 
   const target: Member | null = useMemo(() => {
@@ -37,6 +38,7 @@ export function AvailabilityScreen({ eventId }: { eventId?: string }) {
 
   const current = target ? event.availability[target.id] : undefined;
   const locked = event.status === 'finalized' || event.status === 'canceled';
+  const missingCount = state.members.filter((m) => m.active && !event.availability[m.id]).length;
   const published = event.status === 'published';
 
   const choose = (choice: AvailabilityChoice) => {
@@ -78,6 +80,17 @@ export function AvailabilityScreen({ eventId }: { eventId?: string }) {
             <button type="button" className="btn ghost block" onClick={() => setPickerOpen(true)}>
               {target ? target.username : 'Choose a member'}
             </button>
+            {isLeader && !locked && (
+              <>
+                <div className="divider" />
+                <p className="small muted">
+                  {missingCount === 0 ? 'Every active member has responded.' : `${missingCount} active member${missingCount === 1 ? ' has' : 's have'} not responded yet.`}
+                </p>
+                <button type="button" className="btn secondary block" disabled={missingCount === 0} onClick={() => setBulkOpen(true)}>
+                  Mark everyone without a response as Either
+                </button>
+              </>
+            )}
           </div>
         )}
 
@@ -140,6 +153,24 @@ export function AvailabilityScreen({ eventId }: { eventId?: string }) {
           </>
         )}
       </main>
+      <ConfirmSheet
+        open={bulkOpen}
+        title="Mark everyone as Either?"
+        confirmLabel={`Record for ${missingCount}`}
+        onCancel={() => setBulkOpen(false)}
+        onConfirm={() => {
+          const res = actions.fillMissingAvailability(event.id, 'either');
+          setBulkOpen(false);
+          if (res.ok) {
+            toast({ kind: 'ok', text: `Recorded Either for ${res.count ?? 0} member${res.count === 1 ? '' : 's'}` });
+            announce(`Recorded availability for ${res.count ?? 0} members.`);
+          }
+        }}
+      >
+        <p className="small muted">
+          Records "Either time" for the {missingCount} active member{missingCount === 1 ? '' : 's'} without a response, attributed to you. Existing responses are kept. Members can still change their own answer afterwards. Useful for trying the rotation; for a real week, ask members to answer themselves.
+        </p>
+      </ConfirmSheet>
       <MemberPickerSheet
         open={pickerOpen}
         title="Record availability for"

@@ -88,6 +88,8 @@ export interface StoreValue {
     updateSettings: (patch: Partial<Settings>) => ActionResult;
     setSession: (session: Session) => void;
     setAvailability: (eventId: string, memberId: MemberId, choice: AvailabilityChoice) => ActionResult;
+    /** Leader-only: records a choice for every active member who has not responded yet, attributed to the leader. Returns how many were recorded. */
+    fillMissingAvailability: (eventId: string, choice: AvailabilityChoice) => ActionResult & { count?: number };
     generate: (eventId: string) => ActionResult;
     lock: (eventId: string, memberId: MemberId, teamId: TeamId, reason: string) => ActionResult;
     unlock: (eventId: string, memberId: MemberId) => ActionResult;
@@ -248,6 +250,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const self = stateRef.current.session.member_id === memberId;
         if (!self && !isLeader) return fail(new L.LifecycleError('forbidden', 'You can only change your own availability.'));
         return runEvent(eventId, (e) => L.setAvailability(e, memberId, choice, ctx(), self ? 'self' : (stateRef.current.session.member_id ?? 'leader-demo')), { leader: false });
+      },
+      fillMissingAvailability: (eventId, choice) => {
+        const denied = requireLeader();
+        if (denied) return denied;
+        const recorder = stateRef.current.session.member_id ?? 'leader-demo';
+        let count = 0;
+        const res = runEvent(eventId, (e) => {
+          let next = e;
+          const audit: L.Result['audit'] = [];
+          for (const m of stateRef.current.members) {
+            if (!m.active || next.availability[m.id]) continue;
+            const r = L.setAvailability(next, m.id, choice, ctx(), recorder);
+            next = r.event;
+            audit.push(...r.audit);
+            count++;
+          }
+          return { event: next, audit };
+        });
+        return res.ok ? { ok: true, count } : res;
       },
       generate: (eventId) => runEvent(eventId, (e) => L.applySuggestions(e, stateRef.current.members, stateRef.current.events, ctx(), e.revision), { pushUndo: 'Generate suggestions' }),
       lock: (eventId, memberId, teamId, reason) => runEvent(eventId, (e) => L.lockMember(e, memberId, teamId, reason, ctx(), e.revision), { pushUndo: 'Lock' }),
