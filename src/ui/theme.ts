@@ -15,11 +15,16 @@ export interface Theme {
 
 export const THEMES: Theme[] = [
   { id: 'canyon-night', label: 'Canyon Night', blurb: 'The original: starry sky over the canyon.', swatch: ['#07111f', '#168cff'] },
-  { id: 'dawn', label: 'Dawn', blurb: 'Warm gold light breaking over the ridge.', swatch: ['#1a1208', '#ffb347'] },
-  { id: 'storm', label: 'Storm', blurb: 'Teal lightning and rolling grey clouds.', swatch: ['#0a1416', '#3fd1c4'] },
-  { id: 'ember', label: 'Ember', blurb: 'Red skies, smoke and glowing coals.', swatch: ['#170808', '#ff6b4a'] },
-  { id: 'frost', label: 'Frost', blurb: 'Ice-blue moonlight on a frozen canyon.', swatch: ['#0b1622', '#9fd8ff'] },
-  { id: 'void', label: 'Void', blurb: 'Deep violet nebula and drifting stars.', swatch: ['#0d0716', '#b388ff'] },
+  { id: 'rose-nebula', label: 'Rose Nebula', blurb: 'A pink crystal citadel drifting in a nebula.', swatch: ['#1a0a12', '#ff7fa3'] },
+  { id: 'jedi-sanctuary', label: 'Jedi Sanctuary', blurb: 'Blue-lit sanctuary under twin moons.', swatch: ['#07111c', '#7fc3ff'] },
+  { id: 'sith-eclipse', label: 'Sith Eclipse', blurb: 'A red eclipse over the dark fortress.', swatch: ['#140505', '#ff5b4a'] },
+  { id: 'leviathan-depths', label: 'Leviathan Depths', blurb: 'A sea dragon circling the sunken gate.', swatch: ['#03101f', '#5fd6ee'] },
+  { id: 'solar-phoenix', label: 'Solar Phoenix', blurb: 'A phoenix rising in gold fire.', swatch: ['#1a0d10', '#ffb84d'] },
+  { id: 'frost-crown', label: 'Frost Crown', blurb: 'A white wolf under the aurora.', swatch: ['#0b1728', '#8ecde5'] },
+  { id: 'neon-ronin', label: 'Neon Ronin', blurb: 'A ronin above the neon skyline.', swatch: ['#0b0b16', '#a9a3ff'] },
+  { id: 'emerald-dream', label: 'Emerald Dream', blurb: 'A glowing stag in the deep green forest.', swatch: ['#061209', '#6fe3a0'] },
+  { id: 'astral-dunes', label: 'Astral Dunes', blurb: 'Star dunes and a golden gate.', swatch: ['#0e0b10', '#f5c98a'] },
+  { id: 'event-horizon', label: 'Event Horizon', blurb: 'A lone ship at the edge of a black hole.', swatch: ['#0a0713', '#c9a8ff'] },
 ];
 
 export const DEFAULT_THEME = THEMES[0].id;

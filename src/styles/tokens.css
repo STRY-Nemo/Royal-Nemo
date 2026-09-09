@@ -86,64 +86,50 @@
 }
 
 /* ---- Themes (see src/ui/theme.ts; backgrounds in public/art/themes/<id>.jpg) ---- */
-[data-theme='dawn'] {
-  --bg: #1a1208;
-  --card: #2a1d10;
-  --raised: #3a2917;
-  --border: #6b4f2a;
-  --primary: #ffb347;
-  --primary-strong: #e08f1f;
-  --on-primary: #1a1208;
-  --focus: #ffd28a;
-  --cyan: #ffd166;
-  --text-2: #d9c6a9;
-  --text-3: #b0987a;
+[data-theme='rose-nebula'] {
+  --bg: #1a0a12; --card: #2a1220; --raised: #3a1a2c; --border: #703a52;
+  --primary: #ff7fa3; --primary-strong: #e0577f; --on-primary: #1a0a12; --focus: #ffb7cb; --cyan: #ffb7cb;
+  --text-2: #e0b8c8; --text-3: #b58ea0;
 }
-[data-theme='storm'] {
-  --bg: #0a1416;
-  --card: #122226;
-  --raised: #193035;
-  --border: #2f5560;
-  --primary: #3fd1c4;
-  --primary-strong: #22a89d;
-  --on-primary: #06161a;
-  --focus: #8fe8df;
-  --cyan: #8fe8df;
+[data-theme='jedi-sanctuary'] {
+  --bg: #07111c; --card: #0f1f30; --raised: #16304a; --border: #305a80;
+  --primary: #7fc3ff; --primary-strong: #4aa3f0; --on-primary: #06162b; --focus: #b8def0; --cyan: #b8def0;
 }
-[data-theme='ember'] {
-  --bg: #170808;
-  --card: #251010;
-  --raised: #351818;
-  --border: #6a2a2a;
-  --primary: #ff6b4a;
-  --primary-strong: #d94a2b;
-  --on-primary: #1a0808;
-  --focus: #ffa58f;
-  --cyan: #ffb199;
-  --text-2: #dbb8b0;
-  --text-3: #b08b84;
+[data-theme='sith-eclipse'] {
+  --bg: #140505; --card: #230a0a; --raised: #341010; --border: #6d2020;
+  --primary: #ff5b4a; --primary-strong: #d63a2a; --on-primary: #140505; --focus: #ffa08f; --cyan: #ff9f8a;
+  --text-2: #dcb0aa; --text-3: #b08680;
 }
-[data-theme='frost'] {
-  --bg: #0b1622;
-  --card: #142434;
-  --raised: #1c3247;
-  --border: #3c5f80;
-  --primary: #9fd8ff;
-  --primary-strong: #66b8f0;
-  --on-primary: #06162b;
-  --focus: #cfeaff;
-  --cyan: #cfeaff;
+[data-theme='leviathan-depths'] {
+  --bg: #03101f; --card: #08203a; --raised: #0e3050; --border: #1f5a80;
+  --primary: #5fd6ee; --primary-strong: #2fb4d3; --on-primary: #03101f; --focus: #a5ecf7; --cyan: #a5ecf7;
 }
-[data-theme='void'] {
-  --bg: #0d0716;
-  --card: #191027;
-  --raised: #241839;
-  --border: #4a3670;
-  --primary: #b388ff;
-  --primary-strong: #8f5ff0;
-  --on-primary: #120a20;
-  --focus: #d7c2ff;
-  --cyan: #d7c2ff;
-  --text-2: #c4b5dc;
-  --text-3: #9585b3;
+[data-theme='solar-phoenix'] {
+  --bg: #1a0d10; --card: #2b1518; --raised: #3c1f20; --border: #7a4a32;
+  --primary: #ffb84d; --primary-strong: #ec8f1c; --on-primary: #1a0d10; --focus: #ffd98f; --cyan: #ffe27a;
+  --text-2: #e6c6a8; --text-3: #bd9a7c;
+}
+[data-theme='frost-crown'] {
+  --bg: #0b1728; --card: #13263c; --raised: #1b3552; --border: #3a6288;
+  --primary: #8ecde5; --primary-strong: #5fb0d3; --on-primary: #0b1728; --focus: #c6e8f5; --cyan: #c6e8f5;
+}
+[data-theme='neon-ronin'] {
+  --bg: #0b0b16; --card: #161528; --raised: #22203c; --border: #4c4487;
+  --primary: #a9a3ff; --primary-strong: #7f74f0; --on-primary: #0b0b16; --focus: #d0ccff; --cyan: #ff7ff0;
+  --text-2: #c3bfe0; --text-3: #958fb8;
+}
+[data-theme='emerald-dream'] {
+  --bg: #061209; --card: #0f2114; --raised: #17301f; --border: #2f6a40;
+  --primary: #6fe3a0; --primary-strong: #3dc27a; --on-primary: #061209; --focus: #b0f2c9; --cyan: #b0f2c9;
+  --text-2: #b6d9c2; --text-3: #86a892;
+}
+[data-theme='astral-dunes'] {
+  --bg: #0e0b10; --card: #1c1620; --raised: #2a2130; --border: #5f4a5c;
+  --primary: #f5c98a; --primary-strong: #e2a95c; --on-primary: #1a0f12; --focus: #ffe2b8; --cyan: #7fdcd2;
+  --text-2: #dcc9b8; --text-3: #ad9a8c;
+}
+[data-theme='event-horizon'] {
+  --bg: #0a0713; --card: #171027; --raised: #241a3a; --border: #4f3c7a;
+  --primary: #c9a8ff; --primary-strong: #a077f0; --on-primary: #0a0713; --focus: #e3d2ff; --cyan: #ffd9a8;
+  --text-2: #c9bde0; --text-3: #9b8db8;
 }
