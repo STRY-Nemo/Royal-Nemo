@@ -60,7 +60,7 @@ The repository was empty apart from a README, so a small maintained stack was ch
 | `src/motion/` | Motion tokens, Full / Reduced / Off, bottom sheet, toasts with Undo, live announcements, star burst, orbital progress, single-flight guard |
 | `src/screens/` | Home, Canyon overview, Availability, Schedule, Roster + player action sheet, Suggestion review + publish, Attendance, History, Organize, Name mapping, Members, Member detail, Settings |
 | `src/data/` | Verified seed data: 100 members, 16 responsibilities, event draft, list of bundled team screen files |
-| `public/imports/` | Team screen exports shipped with the app (currently Team 2 for 2026-09-11) |
+| `public/imports/` | Team screen exports shipped with the app (Team 1 and Team 2 for 2026-09-11) |
 | `docs/spec/` | The original specification package, unchanged |
 | `docs/source/` | Original spreadsheets, unchanged |
 | `public/brand/` | Celestial logo (resized for web) |

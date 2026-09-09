@@ -3,15 +3,17 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadSeedMembers } from '../data/seed';
 import { parseCsv, parseXlsx } from '../import/tables';
-import { applySuggestions, createDraftEvent, LifecycleError, reserves, setAvailability, starters } from './lifecycle';
+import { applySuggestions, createDraftEvent, LifecycleError, publishBlockers, reserves, setAvailability, starters } from './lifecycle';
 import { applyLineupImport, matchLineup, parseLineupRows, planLineupImport, type LineupRecord } from './lineupImport';
 import { APOCALYPSE_TIME_ZONE } from './recurrence';
 
 const FILE = join(__dirname, '..', '..', 'public', 'imports', 'STRY_Canyon_Clash_Team2_20260911.xlsx');
+const FILE1 = join(__dirname, '..', '..', 'public', 'imports', 'STRY_Canyon_Clash_Team1_20260911.xlsx');
 const members = loadSeedMembers();
 const ctx = { actor: 'stry-003', now: '2026-09-09T12:00:00Z' } as const;
 const rows = parseXlsx(readFileSync(FILE));
 const parsed = parseLineupRows(rows);
+const parsed1 = parseLineupRows(parseXlsx(readFileSync(FILE1)));
 
 function draft() {
   return createDraftEvent({ series_id: 'canyon-friday', date: '2026-09-11', timezone: null, seed: 'test' });
@@ -37,6 +39,18 @@ describe('team screen file parsing', () => {
     expect(count('declined')).toBe(8);
     expect(parsed.records.filter((r) => r.other_team === 1)).toHaveLength(30);
     expect(parsed.records.find((r) => r.username === 'Tẽmujïn')?.other_team).toBe(1);
+  });
+
+  it('reads the Team 1 workbook, taking Decline from the Source badge column', () => {
+    expect(parsed1.records).toHaveLength(100);
+    expect(parsed1.team).toBe(1);
+    expect(parsed1.event_date).toBe('2026-09-11');
+    expect(parsed1.records.filter((r) => r.starter)).toHaveLength(20);
+    expect(parsed1.records.filter((r) => r.substitute)).toHaveLength(10);
+    expect(parsed1.records.filter((r) => r.declined)).toHaveLength(11);
+    expect(parsed1.records.filter((r) => r.ready)).toHaveLength(35);
+    expect(parsed1.records.filter((r) => r.other_team === 2)).toHaveLength(29);
+    expect(parsed1.records.find((r) => r.username === 'Mada')?.starter).toBe(true);
   });
 
   it('parses the same table from CSV, including quoted names and Unknown markers', () => {
@@ -91,6 +105,30 @@ describe('matching and planning', () => {
     const tooMany = planLineupImport(draft(), [...parsed.records.filter((r) => r.username !== extra.username), extra], members);
     expect(tooMany.errors[0]).toMatch(/21 starters/);
     expect(() => applyLineupImport(draft(), parsed.records, members, {}, ctx, { expectedRevision: 5 })).toThrow(/revision/);
+  });
+});
+
+describe('both team screens together', () => {
+  it('fills Team 1 and Team 2 exactly from the two files with nobody in two places', () => {
+    let ev = applyLineupImport(draft(), parsed.records, members, {}, ctx, { source: 'Team2.xlsx' }).event;
+    const res1 = applyLineupImport(ev, parsed1.records, members, {}, ctx, { source: 'Team1.xlsx' });
+    expect(res1.plan.errors).toEqual([]);
+    expect(res1.plan.starters).toHaveLength(20);
+    expect(res1.plan.reserves).toHaveLength(10);
+    expect(res1.plan.moved_from_elsewhere).toEqual([]);
+    ev = res1.event;
+    expect(starters(ev, ev.teams[0].id)).toHaveLength(20);
+    expect(starters(ev, ev.teams[1].id)).toHaveLength(20);
+    expect(reserves(ev)).toHaveLength(19);
+    expect(new Set(ev.assignments.map((a) => a.member_id)).size).toBe(59);
+    expect(ev.assignments.every((a) => a.locked)).toBe(true);
+    const blockers = publishBlockers(ev).map((b) => b.code);
+    expect(blockers).toEqual(['date']);
+    // Importing Team 1 first gives the same lineup.
+    let ev2 = applyLineupImport(draft(), parsed1.records, members, {}, ctx).event;
+    ev2 = applyLineupImport(ev2, parsed.records, members, {}, ctx).event;
+    const key = (e: typeof ev) => e.assignments.map((a) => `${a.member_id}:${a.team_id}:${a.role}`).sort();
+    expect(key(ev2)).toEqual(key(ev));
   });
 });
 

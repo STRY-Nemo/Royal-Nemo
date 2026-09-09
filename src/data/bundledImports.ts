@@ -13,6 +13,13 @@ export interface BundledImport {
 
 export const BUNDLED_IMPORTS: BundledImport[] = [
   {
+    file: 'STRY_Canyon_Clash_Team1_20260911.xlsx',
+    label: 'Team 1 screen for Friday 2026-09-11',
+    event_date: '2026-09-11',
+    team: 1,
+    captured: 'screen recording from 2026-09-09',
+  },
+  {
     file: 'STRY_Canyon_Clash_Team2_20260911.xlsx',
     label: 'Team 2 screen for Friday 2026-09-11',
     event_date: '2026-09-11',

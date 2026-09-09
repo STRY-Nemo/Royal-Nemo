@@ -36,6 +36,9 @@ export interface ParsedLineup {
   warnings: string[];
 }
 
+/** Some exports carry Ready / Decline only as a "Source badge" column; it is read as a fallback. */
+const BADGE_HEADERS = new Set(['sourcebadge', 'badge']);
+
 const HEADER_KEYS: Record<string, keyof LineupRecord | 'skip'> = {
   eventdate: 'event_date',
   date: 'event_date',
@@ -81,7 +84,9 @@ export function parseLineupRows(rows: string[][]): ParsedLineup {
   if (!rows.length) throw new LifecycleError('empty_file', 'The file has no rows.');
   const header = rows[0].map(headerKey);
   const col = new Map<keyof LineupRecord, number>();
+  let badgeCol = -1;
   header.forEach((h, i) => {
+    if (BADGE_HEADERS.has(h) && badgeCol < 0) badgeCol = i;
     const key = HEADER_KEYS[h];
     if (key && key !== 'skip' && !col.has(key)) col.set(key, i);
   });
@@ -97,7 +102,13 @@ export function parseLineupRows(rows: string[][]): ParsedLineup {
   for (const row of rows.slice(1)) {
     const username = (get(row, 'username') ?? '').trim();
     if (!username) continue;
-    const flags = { starter: yesNo(get(row, 'starter')), substitute: yesNo(get(row, 'substitute')), ready: yesNo(get(row, 'ready')), declined: yesNo(get(row, 'declined')) };
+    const badge = badgeCol >= 0 ? (row[badgeCol] ?? '').trim().toLowerCase() : '';
+    const flags = {
+      starter: yesNo(get(row, 'starter')),
+      substitute: yesNo(get(row, 'substitute')),
+      ready: col.has('ready') ? yesNo(get(row, 'ready')) : badge === 'ready',
+      declined: col.has('declined') ? yesNo(get(row, 'declined')) : /^declin/.test(badge),
+    };
     for (const k of Object.keys(flags) as (keyof typeof flags)[]) {
       if (flags[k] === 'unknown') {
         unknowns++;
