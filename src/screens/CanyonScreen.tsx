@@ -76,6 +76,8 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
   const eligible = responses.total - responses.unavailable;
   const hasStarters = event.assignments.some((a) => a.role === 'starter');
   const reserveCount = reserves(event).length;
+  // Bundled team screen files for this date whose team has no starters yet.
+  const pendingImports = BUNDLED_IMPORTS.filter((b) => b.event_date === event.date && event.teams[b.team - 1] && starters(event, event.teams[b.team - 1].id).length === 0);
   const otherOpen = state.events.filter((e) => e.id !== event.id && (e.status === 'draft' || e.status === 'published'));
 
   return (
@@ -112,13 +114,13 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
           </div>
         )}
 
-        {isLeader && !hasStarters && event.status === 'draft' && BUNDLED_IMPORTS.some((b) => b.event_date === event.date) && (
+        {isLeader && event.status !== 'finalized' && event.status !== 'canceled' && pendingImports.length > 0 && (
           <button type="button" className="card interactive" onClick={() => router.navigate(`/canyon/import/${event.id}`)} aria-label="Import the in-game lineup">
             <div className="card-row">
               <div className="grow">
-                <h3>Lineup from the game is ready to import</h3>
+                <h3>{pendingImports.length === 1 ? `${event.teams[pendingImports[0].team - 1]?.name ?? 'Team'} lineup from the game is ready to import` : 'Lineups from the game are ready to import'}</h3>
                 <p className="muted small">
-                  {BUNDLED_IMPORTS.filter((b) => b.event_date === event.date).map((b) => b.label).join(', ')}: starters and substitutes from the in-game screen, plus who is on the other team. Review, then import in one tap.
+                  {pendingImports.map((b) => b.label).join(', ')}: starters and substitutes from the in-game screen, plus who is on the other team. Review, then import in one tap.
                 </p>
               </div>
               <ChevronRight className="chevron" />
