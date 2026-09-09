@@ -1,11 +1,11 @@
 import type { AuditEntry, CanyonEvent, Member, OrganizationState, Settings } from '../../src/domain/types';
 import { loadSeedMembers, loadSeedOrganization, PACKAGE_DATE, SERIES_ID } from '../../src/data/seed';
 import { createDraftEvent } from '../../src/engine/lifecycle';
-import { nextFriday, todayInZone } from '../../src/engine/recurrence';
+import { APOCALYPSE_TIME_ZONE, nextFriday, todayInZone } from '../../src/engine/recurrence';
 import type { Env } from './env';
 import { HttpError } from './env';
 
-export const DEFAULT_SETTINGS: Settings = { timezone: null, motion: 'system', haptics: false, default_team_times: { team1: '18:00', team2: '23:00' } };
+export const DEFAULT_SETTINGS: Settings = { timezone: APOCALYPSE_TIME_ZONE, motion: 'system', haptics: false, default_team_times: { team1: '18:00', team2: '23:00' } };
 
 /** Inserts the verified seed roster, responsibilities, settings and the first draft if the database is empty. */
 export async function ensureSeeded(env: Env, now: Date): Promise<void> {
@@ -19,7 +19,7 @@ export async function ensureSeeded(env: Env, now: Date): Promise<void> {
   statements.push(env.DB.prepare('INSERT OR IGNORE INTO documents (key, revision, doc, updated_at) VALUES (?, ?, ?, ?)').bind('settings', 1, JSON.stringify(DEFAULT_SETTINGS), iso));
   const today = todayInZone('UTC', now);
   const firstFriday = today <= PACKAGE_DATE ? nextFriday(PACKAGE_DATE) : nextFriday(today, true);
-  const event = createDraftEvent({ series_id: SERIES_ID, date: firstFriday, timezone: null });
+  const event = createDraftEvent({ series_id: SERIES_ID, date: firstFriday, timezone: APOCALYPSE_TIME_ZONE });
   statements.push(env.DB.prepare('INSERT OR IGNORE INTO events (id, date, status, revision, doc, updated_at) VALUES (?, ?, ?, ?, ?, ?)').bind(event.id, event.date, event.status, event.revision, JSON.stringify(event), iso));
   await env.DB.batch(statements);
 }

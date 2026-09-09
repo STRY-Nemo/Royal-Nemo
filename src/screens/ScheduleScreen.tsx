@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { COMMON_TIME_ZONES, deviceTimeZone, isValidTimeZone, nextFriday, weekday } from '../engine/recurrence';
+import { COMMON_TIME_ZONES, deviceTimeZone, isValidTimeZone, nextFriday, timeZoneLabel, weekday } from '../engine/recurrence';
 import { ConfirmSheet, useFeedback } from '../motion';
 import { useRouter } from '../store/router';
 import { useStore } from '../store/store';
@@ -93,7 +93,7 @@ export function ScheduleScreen({ eventId }: { eventId?: string }) {
               {!COMMON_TIME_ZONES.includes(deviceTimeZone()) && <option value={deviceTimeZone()}>{deviceTimeZone()} (this device)</option>}
               {COMMON_TIME_ZONES.map((z) => (
                 <option key={z} value={z}>
-                  {z}
+                  {timeZoneLabel(z)}
                   {z === deviceTimeZone() ? ' (this device)' : ''}
                 </option>
               ))}
@@ -107,7 +107,7 @@ export function ScheduleScreen({ eventId }: { eventId?: string }) {
                 Unknown timezone name.
               </p>
             )}
-            <p className="faint">Required before publishing. Never assumed to be UTC. Members see their device-local conversion automatically.</p>
+            <p className="faint">Required before publishing. Apocalypse Time is the game clock: 00:00 AT is 7 pm US Pacific. Members see their device-local conversion automatically.</p>
           </div>
         </div>
 

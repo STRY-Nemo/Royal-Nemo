@@ -49,7 +49,9 @@ The repository was empty apart from a README, so a small maintained stack was ch
 | `src/engine/history.ts` | Rolling 8-finalized-event window derived from unique attendance records (never counters) |
 | `src/engine/lifecycle.ts` | Drafts, availability, locks, swaps, moves, publish revisions, confirmations, attendance, idempotent finalization, cancellation, schedule edits, next-week drafts |
 | `src/engine/organization.ts` | Responsibility slot edits, moves, atomic swaps, undo inverses, task management, source-name mapping suggestions |
-| `src/engine/recurrence.ts` | Friday derivation, IANA timezone wall-clock conversion (DST-safe), device-local display helpers |
+| `src/engine/recurrence.ts` | Friday derivation, IANA timezone wall-clock conversion (DST-safe), Apocalypse Time (game clock, `Etc/GMT+2`), device-local display helpers |
+| `src/engine/lineupImport.ts` | Import of the in-game team screen table (starters, substitutes, declined, other team) into a draft: name matching, review plan, locked assignments |
+| `src/import/tables.ts` | Small .xlsx / .csv readers (first sheet, dates as ISO) used by the import screen |
 | `src/engine/*.test.ts` | Acceptance tests from PRODUCT_SPEC and ORGANIZATION |
 | `src/store/` | Store (demo persistence or API sync with optimistic updates), hash router with per-tab memory and scroll restore, in-memory UI state |
 | `src/api/client.ts` | Typed fetch client for the API |
@@ -57,7 +59,8 @@ The repository was empty apart from a README, so a small maintained stack was ch
 | `.github/workflows/` | `deploy-pages.yml` (test, build, publish site) and `deploy-worker.yml` (migrate + deploy API once Cloudflare secrets exist) |
 | `src/motion/` | Motion tokens, Full / Reduced / Off, bottom sheet, toasts with Undo, live announcements, star burst, orbital progress, single-flight guard |
 | `src/screens/` | Home, Canyon overview, Availability, Schedule, Roster + player action sheet, Suggestion review + publish, Attendance, History, Organize, Name mapping, Members, Member detail, Settings |
-| `src/data/` | Verified seed data: 100 members, 16 responsibilities, event draft |
+| `src/data/` | Verified seed data: 100 members, 16 responsibilities, event draft, list of bundled team screen files |
+| `public/imports/` | Team screen exports shipped with the app (currently Team 2 for 2026-09-11) |
 | `docs/spec/` | The original specification package, unchanged |
 | `docs/source/` | Original spreadsheets, unchanged |
 | `public/brand/` | Celestial logo (resized for web) |
@@ -71,6 +74,7 @@ The repository was empty apart from a README, so a small maintained stack was ch
 - Locks require a reason, are audited, and never bypass capacity, uniqueness or availability. Conflicting locks block generation with actionable errors.
 - Publishing records selection only. Leader-confirmed attendance (played / no-show / withdrew / unused reserve / unknown, incl. substitutes) drives history. Finalization is idempotent; corrections recalculate.
 - Canceled events and Glory Wars data never affect fairness. Tracking starts on import (2026-09-09).
+- **In-game team screen import** (Canyon → "Import the in-game team screen", leaders): reads the recording export (.xlsx/.csv), matches names to the roster (case, accents and leader name mappings), shows a review (starters, substitutes, declined, other team, unmatched names, availability updates), then writes locked starters and locked substitutes for that team and the availability those rows imply. Generate keeps them and fills the other team fairly. It records selection only; attendance is still confirmed after the match. The same rules run on the server.
 
 ## Verification done
 
@@ -80,7 +84,7 @@ The repository was empty apart from a README, so a small maintained stack was ch
 
 ## Remaining product assumptions
 
-- **Timezone** is unconfirmed. The app blocks publishing until a leader sets it on the Schedule screen.
+- **Timezone**: event times are in **Apocalypse Time**, the game clock (00:00 AT = 7 pm US Pacific, so AT is a fixed UTC−2, IANA `Etc/GMT+2`). It is the default and the first option in the timezone pickers; every member also sees the device-local conversion. If the game clock ever shifts with US daylight saving, pick another zone on the Schedule screen.
 - **Date**: 2026-09-11 is derived as the next Friday after the package date and must be confirmed by a leader.
 - Attendance source is leader confirmation; there is no game integration.
 - Rotation defaults are the spec's proposed defaults, not agreed alliance policy.

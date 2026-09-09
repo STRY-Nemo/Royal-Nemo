@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { CanyonEvent, EventStatus, Member, MemberId, Team } from '../domain/types';
-import { deviceTimeZone, formatInZone, isValidTimeZone, zonedWallTimeToUtc, zoneAbbreviation } from '../engine/recurrence';
+import { deviceTimeZone, formatInZone, isApocalypseTime, isValidTimeZone, timeZoneLabel, zonedWallTimeToUtc, zoneAbbreviation } from '../engine/recurrence';
 import { normalizeName } from '../engine/organization';
 import { BottomSheet } from '../motion';
 import { useRouter, type Tab } from '../store/router';
@@ -160,7 +160,7 @@ export function EventTimes({ event, compact }: { event: CanyonEvent; compact?: b
       </div>
       {tz ? (
         <div className="small muted wrap">
-          Event timezone: {tz}
+          {isApocalypseTime(tz) ? 'Times are in Apocalypse Time (game time)' : `Event timezone: ${timeZoneLabel(tz)}`}
           {!compact && device !== tz && <> · Your device: {device}</>}
         </div>
       ) : (

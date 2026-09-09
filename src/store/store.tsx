@@ -11,13 +11,14 @@
  * All mutations go through src/engine so invariants are identical on both
  * sides.
  */
+import { applyLineupImport, type LineupRecord } from '../engine/lineupImport';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Assignment, AttendanceOutcome, AuditEntry, AvailabilityChoice, CanyonEvent, Member, MemberId, OrganizationState, ResponsibilityId, ResponsibilitySlot, Session, Settings, TeamId } from '../domain/types';
-import { loadSeedMembers, loadSeedOrganization, PACKAGE_DATE, SERIES_ID } from '../data/seed';
+import { loadSeedMembers, loadSeedOrganization, PACKAGE_DATE, seedEventDraft, SERIES_ID } from '../data/seed';
 import * as L from '../engine/lifecycle';
 import * as O from '../engine/organization';
 import { computeHistory, type MemberHistory } from '../engine/history';
-import { deviceTimeZone, nextFriday, todayInZone } from '../engine/recurrence';
+import { APOCALYPSE_TIME_ZONE, deviceTimeZone, nextFriday, todayInZone } from '../engine/recurrence';
 import { useFeedback, type SaveState } from '../motion';
 import { ApiClient, ApiError, apiBaseUrl, type ApiAccount, type ApiState } from '../api/client';
 
@@ -41,13 +42,13 @@ export interface PersistedState {
 
 export type ActionResult = { ok: true } | { ok: false; code: string; message: string };
 
-const DEFAULT_SETTINGS: Settings = { timezone: null, motion: 'system', haptics: false, default_team_times: { team1: '18:00', team2: '23:00' } };
+const DEFAULT_SETTINGS: Settings = { timezone: APOCALYPSE_TIME_ZONE, motion: 'system', haptics: false, default_team_times: { team1: '18:00', team2: '23:00' } };
 
 function initialDemoState(): PersistedState {
   const tz = deviceTimeZone();
   const today = todayInZone(tz);
   const firstFriday = today <= PACKAGE_DATE ? nextFriday(PACKAGE_DATE) : nextFriday(today, true);
-  const event = L.createDraftEvent({ series_id: SERIES_ID, date: firstFriday, timezone: null });
+  const event = L.createDraftEvent({ series_id: SERIES_ID, date: firstFriday, timezone: seedEventDraft.timezone ?? APOCALYPSE_TIME_ZONE });
   return {
     version: STATE_VERSION,
     members: loadSeedMembers(),
@@ -144,6 +145,7 @@ export interface StoreValue {
     setAvailability: (eventId: string, memberId: MemberId, choice: AvailabilityChoice) => ActionResult;
     fillMissingAvailability: (eventId: string, choice: AvailabilityChoice) => ActionResult & { count?: number };
     generate: (eventId: string) => ActionResult;
+    importLineup: (eventId: string, records: LineupRecord[], source?: string) => ActionResult;
     lock: (eventId: string, memberId: MemberId, teamId: TeamId, reason: string) => ActionResult;
     unlock: (eventId: string, memberId: MemberId) => ActionResult;
     move: (eventId: string, memberId: MemberId, target: TeamId | 'reserve') => ActionResult;
@@ -547,6 +549,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return res.ok ? { ok: true, count } : res;
       },
       generate: (eventId) => runEvent(eventId, (e) => L.applySuggestions(e, stateRef.current.members, stateRef.current.events, ctx(), e.revision), { pushUndo: 'Generate suggestions' }, (a, before) => a.generate(eventId, before.revision)),
+      importLineup: (eventId, records, source) => runEvent(eventId, (e) => applyLineupImport(e, records, stateRef.current.members, stateRef.current.organization.name_mapping, ctx(), { expectedRevision: e.revision, source }), { pushUndo: 'Import lineup' }, (a, before) => a.importLineup(eventId, records, source, before.revision)),
       lock: (eventId, memberId, teamId, reason) => runEvent(eventId, (e) => L.lockMember(e, memberId, teamId, reason, ctx(), e.revision), { pushUndo: 'Lock' }, (a, before) => a.lock(eventId, memberId, teamId, reason, before.revision)),
       unlock: (eventId, memberId) => runEvent(eventId, (e) => L.unlockMember(e, memberId, ctx(), e.revision), { pushUndo: 'Unlock' }, (a, before) => a.unlock(eventId, memberId, before.revision)),
       move: (eventId, memberId, target) => runEvent(eventId, (e) => L.moveMember(e, memberId, target, ctx(), e.revision), { pushUndo: 'Move' }, (a, before) => a.move(eventId, memberId, target, before.revision)),

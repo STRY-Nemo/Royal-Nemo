@@ -168,7 +168,12 @@ export function applySuggestions(event: CanyonEvent, members: Member[], allEvent
   if (!result.ok) {
     throw new LifecycleError('locks_conflict', result.errors.map((e) => e.message).join(' '));
   }
-  const next: CanyonEvent = { ...event, assignments: result.assignments, revision: event.revision + 1 };
+  // Locked substitutes (e.g. imported from the in-game screen) survive a regenerate unless they were promoted to starter.
+  const starterIds = new Set(result.assignments.filter((a) => a.role === 'starter').map((a) => a.member_id));
+  const lockedReserves = event.assignments.filter((a) => a.role === 'reserve' && a.locked && !starterIds.has(a.member_id));
+  const lockedIds = new Set(lockedReserves.map((a) => a.member_id));
+  const assignments = [...result.assignments.filter((a) => !lockedIds.has(a.member_id)), ...lockedReserves.map((a) => ({ ...a, revision: event.revision + 1 }))];
+  const next: CanyonEvent = { ...event, assignments, revision: event.revision + 1 };
   return { event: next, result, audit: [audit(ctx, event.id, 'suggestions.generate', summarize(event.assignments), summarize(next.assignments))] };
 }
 

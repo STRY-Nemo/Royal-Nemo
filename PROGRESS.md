@@ -11,6 +11,12 @@ Short handoff so another coding agent can resume without the original conversati
 | 3. Publish/revisions, attendance, finalization, history, next-week rotation | **Done** | End-to-end verified in tests and a Playwright phone walkthrough |
 | 4. Authenticated shared DB, server authorization, concurrency, deployment, backup/export, phone QA | **Deployed** | API live at https://stry-alliance-api.ryan-r-hernandez.workers.dev; site builds in connected mode via `.env.production`. Physical-phone QA still pending |
 
+## Latest additions (2026-09-09)
+
+- **Apocalypse Time** (`APOCALYPSE_TIME_ZONE = 'Etc/GMT+2'`) is the default event and settings timezone, labelled in pickers and shown as "AT" next to team times.
+- **In-game team screen import** (`src/engine/lineupImport.ts`, `src/import/tables.ts`, `src/screens/ImportScreen.tsx`, `POST /events/:id/import-lineup`). The Team 2 file for 2026-09-11 ships in `public/imports/` and is offered with one tap when the event date matches. Starters and substitutes are imported as locked assignments; `applySuggestions` now keeps locked reserves.
+- Tests: 43 unit (+ real-file parsing and import scenarios), 11 API integration.
+
 ## Hosting
 
 GitHub Pages, deployed by Actions from `main` and `claude/alliance-app-last-z-f572n4`: https://ryanrhernandez-design.github.io/Royal-Nemo/. The workflow also runs typecheck, tests and build on pull requests. `BASE_PATH` sets the Vite base for the repository sub-path. Note: this repository's Pages site previously served a game from the `claude/game-copy-vibe-65sbfz` branch; that deployment is replaced by the alliance app. Re-running that branch's workflow would swap it back.

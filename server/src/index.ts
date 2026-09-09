@@ -9,6 +9,7 @@
 import type { AttendanceOutcome, AvailabilityChoice, CanyonEvent, Member, OrganizationState, Settings, TeamId } from '../../src/domain/types';
 import { SERIES_ID } from '../../src/data/seed';
 import * as L from '../../src/engine/lifecycle';
+import { applyLineupImport, type LineupRecord } from '../../src/engine/lineupImport';
 import * as O from '../../src/engine/organization';
 import { isValidTimeZone, todayInZone } from '../../src/engine/recurrence';
 import {
@@ -241,6 +242,33 @@ router.post('/events/:id/generate', async (ctx) => {
   const [members, events] = await Promise.all([loadMembers(ctx.env), loadEvents(ctx.env)]);
   const event = await mutateEvent(ctx, ctx.params.id, (e) => L.applySuggestions(e, members, events, ctxFor(account, ctx.now), expected(body) ?? e.revision));
   return { event };
+});
+
+router.post('/events/:id/import-lineup', async (ctx) => {
+  const account = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const raw = Array.isArray(body.records) ? (body.records as Record<string, unknown>[]) : [];
+  if (!raw.length || raw.length > 500) throw new HttpError(400, 'bad_request', 'records must be a non-empty list.');
+  const records: LineupRecord[] = raw.map((r) => ({
+    username: String(r.username ?? '').trim(),
+    team: r.team === 1 ? 1 : 2,
+    starter: r.starter === true,
+    substitute: r.substitute === true,
+    ready: r.ready === true,
+    declined: r.declined === true,
+    other_team: r.other_team === 1 ? 1 : r.other_team === 2 ? 2 : null,
+    event_date: typeof r.event_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.event_date) ? r.event_date : null,
+  }));
+  if (records.some((r) => !r.username)) throw new HttpError(400, 'bad_request', 'Every record needs a username.');
+  const source = str(body, 'source', false)?.slice(0, 120) || undefined;
+  const [members, org] = await Promise.all([loadMembers(ctx.env), loadOrganization(ctx.env)]);
+  let summary: unknown = null;
+  const event = await mutateEvent(ctx, ctx.params.id, (e) => {
+    const res = applyLineupImport(e, records, members, org.name_mapping, ctxFor(account, ctx.now), { expectedRevision: expected(body), source });
+    summary = { starters: res.plan.starters.length, reserves: res.plan.reserves.length, unmatched: res.plan.unmatched.map((r) => r.username), availability_changes: res.plan.availability.length };
+    return res;
+  });
+  return { event, summary };
 });
 
 router.post('/events/:id/lock', async (ctx) => {

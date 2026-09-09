@@ -142,8 +142,29 @@ export function formatInZone(
   }).format(instant);
 }
 
-/** Short zone label like "GMT+2" or "PDT" for an instant. */
+/**
+ * "Apocalypse Time" is the game's own clock, shared by every player. 00:00 AT
+ * is 19:00 US Pacific (PDT), i.e. a fixed UTC-2. IANA spells fixed offsets with
+ * the POSIX sign, so UTC-2 is "Etc/GMT+2".
+ */
+export const APOCALYPSE_TIME_ZONE = 'Etc/GMT+2';
+
+const TIME_ZONE_LABELS: Record<string, string> = {
+  [APOCALYPSE_TIME_ZONE]: 'Apocalypse Time (game time, UTC−2)',
+};
+
+/** Friendly label for a zone in pickers and headers; IANA name otherwise. */
+export function timeZoneLabel(tz: string): string {
+  return TIME_ZONE_LABELS[tz] ?? tz;
+}
+
+export function isApocalypseTime(tz: string | null | undefined): boolean {
+  return tz === APOCALYPSE_TIME_ZONE;
+}
+
+/** Short zone label like "GMT+2", "PDT" or "AT" (Apocalypse Time) for an instant. */
 export function zoneAbbreviation(instant: Date, tz: string): string {
+  if (isApocalypseTime(tz)) return 'AT';
   const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' }).formatToParts(instant);
   return parts.find((p) => p.type === 'timeZoneName')?.value ?? tz;
 }
@@ -164,6 +185,7 @@ export function todayInZone(tz: string, now: Date = new Date()): string {
 
 /** Common IANA zones offered in settings; any valid IANA name is also accepted. */
 export const COMMON_TIME_ZONES: string[] = [
+  APOCALYPSE_TIME_ZONE,
   'UTC',
   'America/Los_Angeles',
   'America/Denver',

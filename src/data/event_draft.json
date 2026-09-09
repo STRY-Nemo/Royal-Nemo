@@ -1,7 +1,7 @@
 {
   "event_type": "canyon_clash",
   "event_date": "2026-09-11",
-  "timezone": null,
+  "timezone": "Etc/GMT+2",
   "status": "draft",
   "teams": [
     {

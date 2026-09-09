@@ -185,6 +185,11 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
               Record availability for members
             </button>
           )}
+          {isLeader && event.status !== 'finalized' && event.status !== 'canceled' && (
+            <button type="button" className="link-btn" onClick={() => router.navigate(`/canyon/import/${event.id}`)}>
+              Import the in-game team screen
+            </button>
+          )}
         </div>
 
         <button type="button" className="card interactive" onClick={() => router.navigate(`/canyon/roster/${event.id}?team=reserve`)}>

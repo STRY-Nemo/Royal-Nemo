@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { MotionPreference } from '../domain/types';
-import { COMMON_TIME_ZONES, deviceTimeZone, isValidTimeZone } from '../engine/recurrence';
+import { COMMON_TIME_ZONES, deviceTimeZone, isValidTimeZone, timeZoneLabel } from '../engine/recurrence';
 import { BottomSheet, ConfirmSheet, SaveIndicator, useEffectiveMotion, useFeedback } from '../motion';
 import { useRouter } from '../store/router';
 import { STORAGE_KEY, useStore } from '../store/store';
@@ -133,7 +133,7 @@ export function SettingsScreen() {
               <option value="">Not set</option>
               {COMMON_TIME_ZONES.map((z) => (
                 <option key={z} value={z}>
-                  {z}
+                  {timeZoneLabel(z)}
                   {z === deviceTimeZone() ? ' (this device)' : ''}
                 </option>
               ))}

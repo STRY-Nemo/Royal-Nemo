@@ -19,6 +19,7 @@ import { MemberDetailScreen } from './screens/MemberDetailScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { LoginScreen } from './screens/LoginScreen';
 import { AccountsScreen } from './screens/AccountsScreen';
+import { ImportScreen } from './screens/ImportScreen';
 
 function MotionSync() {
   const { state } = useStore();
@@ -37,6 +38,7 @@ function Routes() {
       if (second === 'attendance') return <AttendanceScreen eventId={third} />;
       if (second === 'history') return <HistoryScreen eventId={third} />;
       if (second === 'schedule') return <ScheduleScreen eventId={third} />;
+      if (second === 'import') return <ImportScreen eventId={third} />;
       return <CanyonScreen eventId={second} />;
     case 'organize':
       if (second === 'mapping') return <MappingScreen />;

@@ -180,6 +180,36 @@ describe('STRY API', () => {
     expect(state.body.events).toHaveLength(2);
   });
 
+  it('imports an in-game team screen into the next draft: leaders only, validated, locked', async () => {
+    const state = await api<{ events: { id: string; date: string; status: string; revision: number; timezone: string | null; teams: { id: string }[] }[] }>('GET', '/state', undefined, leaderToken);
+    const next = state.body.events.find((e) => e.status === 'draft')!;
+    const row = (username: string, extra: Record<string, unknown>) => ({ username, team: 2, starter: false, substitute: false, ready: false, declined: false, other_team: null, event_date: next.date, ...extra });
+    const records = [row('Queen Rouge', { starter: true }), row('Mario AK47', { starter: true, ready: true }), row('Appins', { substitute: true }), row('Mada', { other_team: 1 }), row('Nobody Known', { starter: true }), row('hausshavoc', { declined: true })];
+    expect((await api('POST', `/events/${next.id}/import-lineup`, { records }, memberToken)).status).toBe(403);
+    expect((await api('POST', `/events/${next.id}/import-lineup`, { records: [] }, leaderToken)).status).toBe(400);
+    const wrongDate = await api('POST', `/events/${next.id}/import-lineup`, { records: records.map((r) => ({ ...r, event_date: '2026-09-11' })) }, leaderToken);
+    expect(wrongDate.status).toBe(422);
+    expect(String(wrongDate.body.message)).toMatch(/2026-09-11/);
+    const stale = await api('POST', `/events/${next.id}/import-lineup`, { records, expected_revision: next.revision + 5 }, leaderToken);
+    expect(stale.status).toBe(409);
+    const ok = await api<{ event: { revision: number; timezone: string; availability: Record<string, { choice: string }>; assignments: { member_id: string; role: string; team_id: string; locked: boolean; lock_reason: string }[] }; summary: { starters: number; reserves: number; unmatched: string[] } }>(
+      'POST',
+      `/events/${next.id}/import-lineup`,
+      { records, source: 'Team2.xlsx', expected_revision: next.revision },
+      leaderToken,
+    );
+    expect(ok.status).toBe(200);
+    expect(ok.body.summary).toMatchObject({ starters: 2, reserves: 1, unmatched: ['Nobody Known'] });
+    expect(ok.body.event.revision).toBe(next.revision + 1);
+    // The next-week draft inherited the finalized event's zone; an import never overrides a zone that is already set.
+    expect(ok.body.event.timezone).toBe(next.timezone);
+    const team2 = next.teams[1].id;
+    expect(ok.body.event.assignments.filter((a) => a.role === 'starter' && a.team_id === team2)).toHaveLength(2);
+    expect(ok.body.event.assignments.every((a) => a.locked && a.lock_reason === 'In-game Team 2 lineup (Team2.xlsx)')).toBe(true);
+    expect(ok.body.event.availability[memberId].choice).toBe('team2');
+    expect(ok.body.event.availability['stry-024'].choice).toBe('team1');
+  });
+
   it('edits organization slots atomically with revision checks and undo inverses', async () => {
     const state = await api<{ organization: { revision: number; responsibilities: { id: string; slots: { position: number; source_name: string | null }[] }[] } }>('GET', '/state', undefined, leaderToken);
     const org = state.body.organization;
