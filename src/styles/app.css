@@ -121,8 +121,9 @@ p {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
   backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   padding: calc(var(--space-2) + var(--safe-top)) var(--page-pad) var(--space-2);
   display: flex;
   align-items: center;
@@ -204,8 +205,9 @@ p {
   z-index: 30;
   display: flex;
   justify-content: center;
-  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
   backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   padding-bottom: var(--safe-bottom);
 }
@@ -213,7 +215,7 @@ p {
   width: 100%;
   max-width: 480px;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   height: var(--nav-height);
 }
 .tab {
@@ -1562,15 +1564,46 @@ body {
   object-position: center top;
   z-index: 0;
   pointer-events: none;
-  opacity: 0.55;
-  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.85) 40%, rgba(0, 0, 0, 0.6) 100%);
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.85) 40%, rgba(0, 0, 0, 0.6) 100%);
+  opacity: 0.92;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.95) 50%, rgba(0, 0, 0, 0.8) 100%);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.95) 50%, rgba(0, 0, 0, 0.8) 100%);
 }
+/* Glass cards: the scene shows through, a blur plus a faint top highlight keeps text readable. */
 .card,
 .card.raised {
-  background-color: color-mix(in srgb, var(--card) 88%, transparent);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background-color: color-mix(in srgb, var(--card) 52%, transparent);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 45%);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+.card.raised {
+  background-color: color-mix(in srgb, var(--raised) 58%, transparent);
+}
+
+/* Text that sits straight on the scene (headings, intro lines) gets a soft shadow for contrast. */
+.page > :not(.card):not(button):not(.list) {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+/* ---- Theme picker ---- */
+.theme-row {
+  gap: var(--space-3);
+}
+.theme-thumb {
+  flex: none;
+  width: 44px;
+  height: 64px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  display: block;
+}
+.theme-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 /* ---- Roaming bear ---- */

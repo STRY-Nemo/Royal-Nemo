@@ -84,3 +84,66 @@
   transition-duration: 0ms !important;
   animation-duration: 0ms !important;
 }
+
+/* ---- Themes (see src/ui/theme.ts; backgrounds in public/art/themes/<id>.jpg) ---- */
+[data-theme='dawn'] {
+  --bg: #1a1208;
+  --card: #2a1d10;
+  --raised: #3a2917;
+  --border: #6b4f2a;
+  --primary: #ffb347;
+  --primary-strong: #e08f1f;
+  --on-primary: #1a1208;
+  --focus: #ffd28a;
+  --cyan: #ffd166;
+  --text-2: #d9c6a9;
+  --text-3: #b0987a;
+}
+[data-theme='storm'] {
+  --bg: #0a1416;
+  --card: #122226;
+  --raised: #193035;
+  --border: #2f5560;
+  --primary: #3fd1c4;
+  --primary-strong: #22a89d;
+  --on-primary: #06161a;
+  --focus: #8fe8df;
+  --cyan: #8fe8df;
+}
+[data-theme='ember'] {
+  --bg: #170808;
+  --card: #251010;
+  --raised: #351818;
+  --border: #6a2a2a;
+  --primary: #ff6b4a;
+  --primary-strong: #d94a2b;
+  --on-primary: #1a0808;
+  --focus: #ffa58f;
+  --cyan: #ffb199;
+  --text-2: #dbb8b0;
+  --text-3: #b08b84;
+}
+[data-theme='frost'] {
+  --bg: #0b1622;
+  --card: #142434;
+  --raised: #1c3247;
+  --border: #3c5f80;
+  --primary: #9fd8ff;
+  --primary-strong: #66b8f0;
+  --on-primary: #06162b;
+  --focus: #cfeaff;
+  --cyan: #cfeaff;
+}
+[data-theme='void'] {
+  --bg: #0d0716;
+  --card: #191027;
+  --raised: #241839;
+  --border: #4a3670;
+  --primary: #b388ff;
+  --primary-strong: #8f5ff0;
+  --on-primary: #120a20;
+  --focus: #d7c2ff;
+  --cyan: #d7c2ff;
+  --text-2: #c4b5dc;
+  --text-3: #9585b3;
+}

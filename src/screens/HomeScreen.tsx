@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from '../store/router';
 import { useStore } from '../store/store';
 import { DemoBanner, EmptyState, EventTimes, Header, StatusBadge } from '../ui/common';
@@ -7,6 +7,8 @@ import { starters } from '../engine/lifecycle';
 import { describeAvailability } from '../engine/suggest';
 import { BearFeeder } from '../ui/Bear';
 import { Art } from '../ui/Art';
+import { PaletteIcon } from '../ui/icons';
+import { ThemeSheet } from '../ui/ThemeSheet';
 
 function weekLabel(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
@@ -24,9 +26,17 @@ export function HomeScreen() {
   const unassignedTasks = useMemo(() => state.organization.responsibilities.filter((r) => !r.archived && r.slots.every((s) => !s.member_id && !s.source_name)).length, [state.organization]);
   const myHistory = me ? history[me.id] : null;
 
+  const [themeOpen, setThemeOpen] = useState(false);
+
   return (
     <>
-      <Header />
+      <Header
+        actions={
+          <button type="button" className="icon-btn" aria-label="Change theme" onClick={() => setThemeOpen(true)}>
+            <PaletteIcon />
+          </button>
+        }
+      />
       <main className="page">
         <DemoBanner />
         <Art name="home-hero" alt="" className="art-banner" />
@@ -176,6 +186,7 @@ export function HomeScreen() {
           </div>
         </button>
       </main>
+      <ThemeSheet open={themeOpen} onClose={() => setThemeOpen(false)} />
     </>
   );
 }

@@ -1,4 +1,6 @@
 import { roamingBearEnabled, setRoamingBearEnabled } from '../ui/RoamingBear';
+import { THEMES, useTheme } from '../ui/theme';
+import { ThemeSheet } from '../ui/ThemeSheet';
 import { useState } from 'react';
 import type { MotionPreference } from '../domain/types';
 import { COMMON_TIME_ZONES, deviceTimeZone, isValidTimeZone, timeZoneLabel } from '../engine/recurrence';
@@ -13,6 +15,8 @@ export function SettingsScreen() {
   const { toast } = useFeedback();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [roaming, setRoaming] = useState(roamingBearEnabled);
+  const [themeOpen, setThemeOpen] = useState(false);
+  const theme = useTheme();
   const [resetOpen, setResetOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -159,6 +163,16 @@ export function SettingsScreen() {
         </div>
 
         <div className="card">
+          <h3>Theme</h3>
+          <button type="button" className="sheet-item" onClick={() => setThemeOpen(true)}>
+            <div className="grow">
+              <div className="label">{THEMES.find((t) => t.id === theme)?.label ?? 'Canyon Night'}</div>
+              <div className="hint">Background art and colours on this phone. Tap to change.</div>
+            </div>
+          </button>
+        </div>
+
+        <div className="card">
           <h3>Motion</h3>
           <div className="segmented" role="tablist" aria-label="Animation">
             {(['system', 'full', 'reduced', 'off'] as MotionPreference[]).map((m) => (
@@ -283,6 +297,7 @@ export function SettingsScreen() {
           <input id="pw-next" className="input" type="password" autoComplete="new-password" value={pwNext} onChange={(e) => setPwNext(e.target.value)} />
         </div>
       </BottomSheet>
+      <ThemeSheet open={themeOpen} onClose={() => setThemeOpen(false)} />
     </>
   );
 }

@@ -48,3 +48,20 @@ Used at the top of a screen as a wide strip with rounded corners.
 ## Full-screen background
 
 - `app-background.jpg` — portrait 1080×1920 (or 9:16), JPEG, dark. Rendered behind every screen at 55% opacity with a soft fade toward the bottom; cards blur what is behind them. Keep the top third the most detailed (sky, moon, star) and the lower two-thirds dark and quiet so lists stay readable.
+
+## Theme backgrounds (portrait JPG, `public/art/themes/<id>.jpg`)
+
+The Theme button on Home (and Settings → Theme) lets each person pick a background and matching colours. Each theme looks for one file; until it exists the theme uses the original canyon sky with its own colours, so you can add them one at a time.
+
+Size: portrait, 1242×2688 or similar 9:19.5, JPG at quality ~80, under 700 KB (phones load it on every open). Keep the top third quieter (headers sit there) and avoid pure white areas (cards are see-through).
+
+| File | Theme | Prompt (paste the shared style prompt first) |
+| --- | --- | --- |
+| `app-background.jpg` (already in `public/art/`) | Canyon Night | The existing starry canyon night. |
+| `themes/dawn.jpg` | Dawn | Portrait: the canyon rim at first light, warm gold and amber sky with a few fading stars, long soft shadows, the STRY star sigil faint in the clouds. Palette leans gold #ffb347 and deep brown #1a1208. |
+| `themes/storm.jpg` | Storm | Portrait: rolling grey-teal storm clouds over the canyon, one forked lightning bolt in teal #3fd1c4, rain haze, dark slate ground. Moody but not black. |
+| `themes/ember.jpg` | Ember | Portrait: a smouldering canyon after battle, deep red sky #170808 fading to orange, drifting embers and smoke, a lone banner on the ridge. Glow colour #ff6b4a. |
+| `themes/frost.jpg` | Frost | Portrait: the canyon frozen under an ice-blue moon, snow on the cliff edges, pale aurora, crisp stars. Palette #0b1622 with highlights #9fd8ff. |
+| `themes/void.jpg` | Void | Portrait: a violet nebula filling the sky above the canyon silhouette, drifting star dust, faint purple aurora. Palette #0d0716 with glow #b388ff. |
+
+Want a different set of names or more themes? They are listed in `src/ui/theme.ts` (id, label, blurb, two swatch colours) with the colour tokens in `src/styles/tokens.css`.

@@ -140,3 +140,12 @@ export const ShareIcon = (p: P) => (
     <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" />
   </svg>
 );
+
+export const PaletteIcon = (p: P) => (
+  <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...p}>
+    <path d="M12 3a9 9 0 0 0 0 18h1.5a2 2 0 0 0 1.4-3.4 2 2 0 0 1 1.4-3.4H18a3 3 0 0 0 3-3A8.5 8.5 0 0 0 12 3Z" />
+    <circle cx="7.5" cy="11.5" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="10.5" cy="7.5" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="15" cy="7.5" r="1.2" fill="currentColor" stroke="none" />
+  </svg>
+);
