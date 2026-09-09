@@ -56,6 +56,19 @@ jobs:
       - name: Typecheck and test the API
         if: steps.check.outputs.configured == 'true'
         run: npm run typecheck && npm run test:server
+      - name: Check the Cloudflare token
+        if: steps.check.outputs.configured == 'true'
+        working-directory: server
+        run: |
+          npx wrangler whoami | tee whoami.log
+          if ! grep -qi 'd1' whoami.log; then
+            echo "::error::The Cloudflare API token has no D1 permission. Edit the token at https://dash.cloudflare.com/profile/api-tokens and add: Account → D1 → Edit."
+            exit 1
+          fi
+          if ! grep -qiE 'workers scripts' whoami.log; then
+            echo "::error::The Cloudflare API token cannot edit Workers. Use the 'Edit Cloudflare Workers' template."
+            exit 1
+          fi
       - name: Ensure the D1 database exists
         if: steps.check.outputs.configured == 'true'
         working-directory: server
