@@ -44,3 +44,7 @@ Used at the top of a screen as a wide strip with rounded corners.
 - PNG only. Banners opaque and dark so white text stays readable; emblems, empty-state and food items transparent.
 - Keep faces and key details away from the outer 10% of banners (rounded corners crop them).
 - Generate the two team emblems in one session so they match.
+
+## Full-screen background
+
+- `app-background.jpg` — portrait 1080×1920 (or 9:16), JPEG, dark. Rendered behind every screen at 55% opacity with a soft fade toward the bottom; cards blur what is behind them. Keep the top third the most detailed (sky, moon, star) and the lower two-thirds dark and quiet so lists stay readable.

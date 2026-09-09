@@ -1,6 +1,13 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useEffectiveMotion } from '../motion';
 import { useStore } from '../store/store';
+
+/** Optional full-screen scene from public/art/app-background.jpg, dimmed so cards stay readable. */
+function Backdrop() {
+  const [missing, setMissing] = useState(false);
+  if (missing) return null;
+  return <img src={`${import.meta.env.BASE_URL}art/app-background.jpg`} alt="" className="app-backdrop" aria-hidden="true" draggable={false} onError={() => setMissing(true)} />;
+}
 
 /** Slow celestial starfield behind the app. Static under reduced motion, hidden when motion is off. */
 export function Starfield() {
@@ -83,6 +90,10 @@ export function Starfield() {
     };
   }, [motion]);
 
-  if (motion === 'off') return null;
-  return <canvas ref={ref} className="starfield" aria-hidden="true" />;
+  return (
+    <>
+      <Backdrop />
+      {motion !== 'off' && <canvas ref={ref} className="starfield" aria-hidden="true" />}
+    </>
+  );
 }

@@ -1,6 +1,6 @@
 # STRY Bear art prompt (15 evolution stages)
 
-Paste this into ChatGPT (or any image model). Generate the stages one at a time, reusing the first image as the style reference so the character stays consistent. Save each result as a transparent PNG named `stage-01.png` … `stage-15.png` and drop them into `public/bear/`. The app picks them up automatically (until then it shows a drawn placeholder).
+Paste this into ChatGPT (or any image model). Generate the stages one at a time, reusing the first image as the style reference so the character stays consistent. The delivered set (STRY_Bear_15_Stages_Transparent_1024.zip) is trimmed, resized to 512 px and converted to WebP as `public/bear/stage-NN.webp` plus 96 px `stage-NN-thumb.webp` thumbnails; the originals stay out of the repo to keep the site light. To replace a stage, run the same conversion (see git history for the script) or drop a 512 px transparent WebP with the same name.
 
 ## Master prompt (use once, then reference it for every stage)
 

@@ -4,10 +4,10 @@ import { cooldownRemaining, DAILY_FEED_CAP, FEED_COOLDOWN_MS, feedsToday, nextSt
 import { haptic, useFeedback } from '../motion';
 import { useStore } from '../store/store';
 
-/** Bear artwork: public/bear/stage-NN.png when present, otherwise a drawn placeholder that grows and armors up. */
+/** Bear artwork: public/bear/stage-NN.webp (96 px thumbs for small sizes); a drawn placeholder if a file is missing. */
 export function BearSprite({ stage, size = 160, bounce, className }: { stage: Stage; size?: number; bounce?: boolean; className?: string }) {
   const [missing, setMissing] = useState<Record<number, boolean>>({});
-  const src = `${import.meta.env.BASE_URL}bear/stage-${String(stage.n).padStart(2, '0')}.png`;
+  const src = `${import.meta.env.BASE_URL}bear/stage-${String(stage.n).padStart(2, '0')}${size <= 96 ? '-thumb' : ''}.webp`;
   const cls = `bear-sprite${bounce ? ' bounce' : ''}${className ? ` ${className}` : ''}`;
   if (!missing[stage.n]) {
     return <img src={src} alt={`${stage.name}, stage ${stage.n}`} width={size} height={size} className={cls} draggable={false} onError={() => setMissing((m) => ({ ...m, [stage.n]: true }))} />;
