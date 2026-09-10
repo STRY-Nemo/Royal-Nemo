@@ -156,10 +156,10 @@ export function ImportScreen({ eventId }: { eventId?: string }) {
             <dl className="kv">
               <dt>{plan.team.name} starters</dt>
               <dd>
-                {plan.starters.length} of {plan.team.capacity} (locked)
+                {plan.starters.length} of {plan.team.capacity}
               </dd>
               <dt>Substitutes</dt>
-              <dd>{plan.reserves.length} (kept as locked reserves)</dd>
+              <dd>{plan.reserves.length}</dd>
               <dt>Declined {plan.team.name}</dt>
               <dd>{plan.declined.length}</dd>
               <dt>Shown on the other team</dt>
@@ -208,7 +208,7 @@ export function ImportScreen({ eventId }: { eventId?: string }) {
               </details>
             )}
             <p className="faint">
-              Starters and substitutes are locked to {plan.team.name} with the file name as the reason, so Generate keeps them and fills the other team fairly. The import records selection only: attendance is still confirmed after the match.
+              Starters and substitutes are placed on {plan.team.name} exactly as the game shows them, unlocked, so you can still move, swap or lock players until the match. Regenerate would replace them (it asks first). The import records selection only: attendance is still confirmed after the match.
             </p>
           </div>
         )}

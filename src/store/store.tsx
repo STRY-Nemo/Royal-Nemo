@@ -24,6 +24,7 @@ import { applyStats, validateStats, type StatsPatch } from '../engine/memberStat
 import { APOCALYPSE_TIME_ZONE, deviceTimeZone, nextFriday, todayInZone } from '../engine/recurrence';
 import { useFeedback, type SaveState } from '../motion';
 import { ApiClient, ApiError, apiBaseUrl, type ApiAccount, type ApiState } from '../api/client';
+import { guestEnabled } from '../ui/guest';
 
 export const STORAGE_KEY = 'stry-alliance-demo-v1';
 export const API_CACHE_KEY = 'stry-alliance-api-cache-v1';
@@ -155,6 +156,10 @@ export interface StoreValue {
     setSession: (session: Session) => void;
     setAvailability: (eventId: string, memberId: MemberId, choice: AvailabilityChoice, slots?: SlotPriorities) => ActionResult;
     fillMissingAvailability: (eventId: string, choice: AvailabilityChoice) => ActionResult & { count?: number };
+    /** Copies last week's answers for members who have not answered this week. */
+    carryOverAvailability: (eventId: string) => ActionResult & { count?: number };
+    /** Removes every lock on the event so Generate can reshuffle it. */
+    unlockAll: (eventId: string) => ActionResult & { count?: number };
     generate: (eventId: string) => ActionResult;
     importLineup: (eventId: string, records: LineupRecord[], source?: string) => ActionResult;
     lock: (eventId: string, memberId: MemberId, teamId: TeamId, reason: string) => ActionResult;
@@ -207,7 +212,8 @@ type RemoteEvent = (api: ApiClient, before: CanyonEvent) => Promise<{ event: Can
 type RemoteOrg = (api: ApiClient, before: OrganizationState) => Promise<{ organization: OrganizationState }>;
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const base = useMemo(() => apiBaseUrl(), []);
+  // A guest tour runs the app in demo mode (sample data, local only) even when an API is configured.
+  const base = useMemo(() => (guestEnabled() ? null : apiBaseUrl()), []);
   const mode: StoreMode = base ? 'api' : 'demo';
   const api = useMemo(() => (base ? new ApiClient(base) : null), [base]);
   const device = useMemo(loadDeviceSettings, []);
@@ -579,6 +585,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         );
         return res.ok ? { ok: true, count } : res;
       },
+      carryOverAvailability: (eventId) => {
+        const denied = requireLeader();
+        if (denied) return denied;
+        const recorder = stateRef.current.session.member_id ?? 'leader-demo';
+        let count = 0;
+        const res = runEvent(
+          eventId,
+          (e) => {
+            const from = L.previousEventWithAvailability(e, stateRef.current.events);
+            if (!from) throw new L.LifecycleError('no_previous', 'No earlier week has availability answers to copy.');
+            const r = L.carryOverAvailability(e, from, stateRef.current.members, ctx(), recorder);
+            count = r.count;
+            return r;
+          },
+          { pushUndo: 'Copy availability' },
+          (a) => a.carryOverAvailability(eventId),
+        );
+        return res.ok ? { ok: true, count } : res;
+      },
+      unlockAll: (eventId) => {
+        let count = 0;
+        const res = runEvent(
+          eventId,
+          (e) => {
+            const r = L.unlockAll(e, ctx(), e.revision);
+            count = r.count;
+            return r;
+          },
+          { pushUndo: 'Unlock all' },
+          (a, before) => a.unlockAll(eventId, before.revision),
+        );
+        return res.ok ? { ok: true, count } : res;
+      },
       generate: (eventId) => runEvent(eventId, (e) => L.applySuggestions(e, stateRef.current.members, stateRef.current.events, ctx(), e.revision), { pushUndo: 'Generate suggestions' }, (a, before) => a.generate(eventId, before.revision)),
       importLineup: (eventId, records, source) => runEvent(eventId, (e) => applyLineupImport(e, records, stateRef.current.members, stateRef.current.organization.name_mapping, ctx(), { expectedRevision: e.revision, source }), { pushUndo: 'Import lineup' }, (a, before) => a.importLineup(eventId, records, source, before.revision)),
       lock: (eventId, memberId, teamId, reason) => runEvent(eventId, (e) => L.lockMember(e, memberId, teamId, reason, ctx(), e.revision), { pushUndo: 'Lock' }, (a, before) => a.lock(eventId, memberId, teamId, reason, before.revision)),
@@ -769,9 +808,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (denied) return denied;
         const before = stateRef.current.suggestions.find((x) => x.id === id);
         if (!before) return fail(new L.LifecycleError('not_found', 'Idea not found.'));
+        const st = stateRef.current;
+        const acct = accountRef.current;
+        const by = { id: acct ? acct.id : (st.session.member_id ?? 'demo'), name: (st.session.member_id && st.members.find((m) => m.id === st.session.member_id)?.username) || acct?.username || 'A leader' };
         let next: Suggestion;
         try {
-          next = setSuggestionStatus(before, status, reply, new Date().toISOString());
+          next = setSuggestionStatus(before, status, reply, new Date().toISOString(), by);
         } catch (err) {
           return fail(err);
         }

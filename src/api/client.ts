@@ -147,6 +147,12 @@ export class ApiClient {
   fillAvailability(eventId: string, choice: AvailabilityChoice) {
     return this.ev(eventId, 'availability/fill', { choice });
   }
+  carryOverAvailability(eventId: string) {
+    return this.ev(eventId, 'availability/carry');
+  }
+  unlockAll(eventId: string, expected_revision: number) {
+    return this.ev(eventId, 'unlock-all', { expected_revision });
+  }
   generate(eventId: string, expected_revision: number) {
     return this.ev(eventId, 'generate', { expected_revision });
   }

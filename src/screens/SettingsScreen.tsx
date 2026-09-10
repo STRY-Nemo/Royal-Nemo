@@ -1,4 +1,8 @@
 import { roamingBearEnabled, setRoamingBearEnabled } from '../ui/RoamingBear';
+import { THEMES, useTheme } from '../ui/theme';
+import { useSfxSetting } from '../ui/sfx';
+import { exitGuest, guestEnabled, guestLink, guestMessage } from '../ui/guest';
+import { ThemeSheet } from '../ui/ThemeSheet';
 import { useState } from 'react';
 import type { MotionPreference } from '../domain/types';
 import { COMMON_TIME_ZONES, deviceTimeZone, isValidTimeZone, timeZoneLabel } from '../engine/recurrence';
@@ -13,6 +17,9 @@ export function SettingsScreen() {
   const { toast } = useFeedback();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [roaming, setRoaming] = useState(roamingBearEnabled);
+  const [themeOpen, setThemeOpen] = useState(false);
+  const theme = useTheme();
+  const [sfx, setSfx] = useSfxSetting();
   const [resetOpen, setResetOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -20,6 +27,19 @@ export function SettingsScreen() {
   const [pwNext, setPwNext] = useState('');
   const effective = useEffectiveMotion(state.settings.motion);
   const tz = state.settings.timezone ?? '';
+
+  const shareGuest = async () => {
+    const text = guestMessage();
+    try {
+      if (navigator.share) await navigator.share({ title: 'STRY alliance app', text, url: guestLink() });
+      else {
+        await navigator.clipboard.writeText(text);
+        toast({ kind: 'ok', text: 'Guest tour link copied' });
+      }
+    } catch {
+      toast({ kind: 'info', text: guestLink() });
+    }
+  };
 
   const exportJson = async () => {
     let json: string;
@@ -158,6 +178,38 @@ export function SettingsScreen() {
           </div>
         </div>
 
+        {guestEnabled() ? (
+          <div className="card">
+            <h3>Guest tour</h3>
+            <p className="muted small">You are exploring with sample data. Nothing here is saved or shared with the alliance.</p>
+            <button type="button" className="btn secondary block" onClick={exitGuest}>
+              Exit tour and sign in
+            </button>
+          </div>
+        ) : (
+          mode === 'api' &&
+          isLeader && (
+            <div className="card">
+              <h3>Show the app to others</h3>
+              <p className="muted small">A guest tour link opens every screen with sample data and no account. Real alliance data stays private.</p>
+              <div className="mono small wrap" style={{ wordBreak: 'break-all' }}>{guestLink()}</div>
+              <button type="button" className="btn secondary block" onClick={() => void shareGuest()}>
+                Share guest tour link
+              </button>
+            </div>
+          )
+        )}
+
+        <div className="card">
+          <h3>Theme</h3>
+          <button type="button" className="sheet-item" onClick={() => setThemeOpen(true)}>
+            <div className="grow">
+              <div className="label">{THEMES.find((t) => t.id === theme)?.label ?? 'Canyon Night'}</div>
+              <div className="hint">Background art and colours on this phone. Tap to change.</div>
+            </div>
+          </button>
+        </div>
+
         <div className="card">
           <h3>Motion</h3>
           <div className="segmented" role="tablist" aria-label="Animation">
@@ -177,6 +229,13 @@ export function SettingsScreen() {
             <span>
               Roaming bear
               <span className="faint" style={{ display: 'block' }}>The STRY Bear wanders along the bottom of every screen. Tap it to feed.</span>
+            </span>
+          </label>
+          <label className="card-row" style={{ minHeight: 44 }}>
+            <input type="checkbox" checked={sfx} onChange={(e) => setSfx(e.target.checked)} style={{ width: 22, height: 22 }} />
+            <span>
+              Bear sound effects
+              <span className="faint" style={{ display: 'block' }}>Some reactions make a noise (yes, that one). Off keeps the bear silent on this phone.</span>
             </span>
           </label>
         </div>
@@ -283,6 +342,7 @@ export function SettingsScreen() {
           <input id="pw-next" className="input" type="password" autoComplete="new-password" value={pwNext} onChange={(e) => setPwNext(e.target.value)} />
         </div>
       </BottomSheet>
+      <ThemeSheet open={themeOpen} onClose={() => setThemeOpen(false)} />
     </>
   );
 }

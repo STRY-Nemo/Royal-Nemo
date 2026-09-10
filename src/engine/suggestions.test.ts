@@ -23,7 +23,13 @@ describe('suggestions', () => {
     expect(s.votes).toEqual(['b', 'c']);
     s = toggleVote(s, 'b', now);
     expect(s.votes).toEqual(['c']);
-    const done = setSuggestionStatus(mk(2), 'done', '  Shipped!  ', now);
+    const done = setSuggestionStatus(mk(2), 'done', '  Shipped!  ', now, { id: 'lead-1', name: 'Nemo Hoes' });
+    expect(done.activity?.map((a) => a.kind)).toEqual(['created', 'status', 'reply']);
+    expect(done.activity?.[1]).toMatchObject({ by: 'Nemo Hoes', by_account: 'lead-1', status: 'done' });
+    expect(done.activity?.[2]).toMatchObject({ by: 'Nemo Hoes', reply: 'Shipped!' });
+    // Same status and reply again adds nothing; a new reply adds one entry naming the replier.
+    expect(setSuggestionStatus(done, 'done', 'Shipped!', now, { id: 'lead-1', name: 'Nemo Hoes' }).activity).toHaveLength(3);
+    expect(setSuggestionStatus(done, 'done', 'Also fixed the typo', now, { id: 'lead-2', name: 'Queen Rouge' }).activity?.at(-1)).toMatchObject({ by: 'Queen Rouge', kind: 'reply' });
     expect(done.status).toBe('done');
     expect(done.leader_reply).toBe('Shipped!');
     expect(setSuggestionStatus(done, 'planned', null, now).leader_reply).toBe('Shipped!');

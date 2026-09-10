@@ -25,3 +25,7 @@ export function suggestUsername(name: string): string {
 export function joinMessage(code: string): string {
   return `Join the STRY alliance app. Tap the link, pick your in-game name and choose a PIN. That's it.\n${joinLink(code)}`;
 }
+
+export function leaderJoinMessage(code: string): string {
+  return `Leader access for the STRY alliance app. Tap the link, pick your in-game name and choose a PIN. Your account is created as a leader (lineups, attendance, accounts). Please don't forward this link.\n${joinLink(code)}`;
+}

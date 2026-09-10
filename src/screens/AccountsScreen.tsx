@@ -1,4 +1,4 @@
-import { joinLink, joinMessage } from '../ui/join';
+import { joinLink, joinMessage, leaderJoinMessage } from '../ui/join';
 import { useCallback, useEffect, useState } from 'react';
 import type { ApiAccount, Invite } from '../api/client';
 import { BottomSheet, ConfirmSheet, useFeedback } from '../motion';
@@ -18,6 +18,8 @@ export function AccountsScreen() {
   const [linkFor, setLinkFor] = useState<ApiAccount | null>(null);
   const [inviteRole, setInviteRole] = useState<'leader' | 'member'>('member');
   const [confirmInvite, setConfirmInvite] = useState(false);
+  const [confirmLeaderLink, setConfirmLeaderLink] = useState(false);
+  const [leaderSeats, setLeaderSeats] = useState(10);
 
   const load = useCallback(async () => {
     if (!api) return;
@@ -70,7 +72,7 @@ export function AccountsScreen() {
   };
 
   const shareCode = async (code: string, role: 'leader' | 'member') => {
-    const text = role === 'leader' ? `Leader invite for the STRY alliance app (single use):\n${joinLink(code)}` : joinMessage(code);
+    const text = role === 'leader' ? leaderJoinMessage(code) : joinMessage(code);
     try {
       if (navigator.share) await navigator.share({ title: 'STRY alliance app', text, url: joinLink(code) });
       else {
@@ -82,9 +84,10 @@ export function AccountsScreen() {
     }
   };
 
-  const createInvite = async () => {
+  const createInvite = async (opts?: { role: 'leader' | 'member'; uses: number; days: number }) => {
+    const role = opts?.role ?? inviteRole;
     try {
-      const r = await api.createInvite({ role: inviteRole, uses: inviteRole === 'leader' ? 1 : 200, days: inviteRole === 'leader' ? 7 : 90 });
+      const r = await api.createInvite(opts ?? { role, uses: role === 'leader' ? 1 : 200, days: role === 'leader' ? 7 : 90 });
       setConfirmInvite(false);
       await load();
       await shareCode(r.invite.code, r.invite.role);
@@ -93,7 +96,19 @@ export function AccountsScreen() {
     }
   };
 
-  const allianceLink = invites.find((i) => i.role === 'member' && i.uses_left > 0 && i.expires_at > new Date().toISOString());
+  const revoke = async (code: string) => {
+    try {
+      await api.deleteInvite(code);
+      toast({ kind: 'ok', text: 'Link revoked' });
+      await load();
+    } catch (err) {
+      toast({ kind: 'error', text: err instanceof Error ? err.message : String(err) });
+    }
+  };
+
+  const now = new Date().toISOString();
+  const allianceLink = invites.find((i) => i.role === 'member' && i.uses_left > 0 && i.expires_at > now);
+  const leaderLink = invites.find((i) => i.role === 'leader' && i.uses_left > 1 && i.expires_at > now);
 
   return (
     <>
@@ -113,15 +128,39 @@ export function AccountsScreen() {
               </button>
             </>
           ) : (
-            <button type="button" className="btn primary block" onClick={() => { setInviteRole('member'); void createInvite(); }}>
+            <button type="button" className="btn primary block" onClick={() => void createInvite({ role: 'member', uses: 200, days: 90 })}>
               Create the alliance join link
             </button>
           )}
         </div>
 
         <div className="card">
+          <h3>Leader join link</h3>
+          <p className="muted small">One link for all your leaders. Anyone who uses it gets a leader account straight away, so send it privately (leader chat or direct messages), not in alliance chat.</p>
+          {leaderLink ? (
+            <>
+              <div className="mono small wrap" style={{ wordBreak: 'break-all' }}>{joinLink(leaderLink.code)}</div>
+              <div className="small muted">{leaderLink.uses_left} leader sign-ups left · valid until {new Date(leaderLink.expires_at).toLocaleDateString()}</div>
+              <div className="card-row">
+                <button type="button" className="btn secondary grow" onClick={() => void shareCode(leaderLink.code, 'leader')}>
+                  Share leader link
+                </button>
+                <button type="button" className="btn ghost small" style={{ color: 'var(--danger)' }} onClick={() => void revoke(leaderLink.code)}>
+                  Revoke
+                </button>
+              </div>
+            </>
+          ) : (
+            <button type="button" className="btn secondary block" onClick={() => setConfirmLeaderLink(true)}>
+              Create the leader join link
+            </button>
+          )}
+          <p className="faint">Already-joined members don't need it: open their account below and tap "Make leader".</p>
+        </div>
+
+        <div className="card">
           <h3>Invite codes</h3>
-          <p className="faint">Every code doubles as a link. Member links allow 200 sign-ups over 90 days; leader links are single-use and expire in 7 days. Revoke any of them here.</p>
+          <p className="faint">Extra codes for special cases. Every code doubles as a link. Single-use leader codes expire in 7 days. Revoke any of them here.</p>
           <div className="segmented" role="tablist" aria-label="Invite role">
             <button type="button" role="tab" aria-selected={inviteRole === 'member'} onClick={() => setInviteRole('member')}>
               Member
@@ -151,10 +190,7 @@ export function AccountsScreen() {
                   <button
                     type="button"
                     className="btn danger small"
-                    onClick={async () => {
-                      await api.deleteInvite(i.code);
-                      await load();
-                    }}
+                    onClick={() => void revoke(i.code)}
                   >
                     Revoke
                   </button>
@@ -262,6 +298,22 @@ export function AccountsScreen() {
         }}
       />
 
+      <ConfirmSheet
+        open={confirmLeaderLink}
+        title="Create the leader join link?"
+        confirmLabel="Create & share"
+        onCancel={() => setConfirmLeaderLink(false)}
+        onConfirm={() => {
+          setConfirmLeaderLink(false);
+          void createInvite({ role: 'leader', uses: Math.min(50, Math.max(2, leaderSeats)), days: 7 });
+        }}
+      >
+        <p className="small muted">Everyone who opens this link within 7 days becomes a leader. Set how many can use it, and revoke it as soon as your leaders are in.</p>
+        <div className="field">
+          <label htmlFor="leader-seats">How many leaders</label>
+          <input id="leader-seats" className="input" type="number" inputMode="numeric" min={2} max={50} value={leaderSeats} onChange={(e) => setLeaderSeats(Number(e.target.value) || 2)} />
+        </div>
+      </ConfirmSheet>
       <ConfirmSheet open={confirmInvite} title={`Create ${inviteRole} invite?`} confirmLabel="Create & share" onCancel={() => setConfirmInvite(false)} onConfirm={() => void createInvite()}>
         <p className="small muted">{inviteRole === 'leader' ? 'A single-use code that creates a leader account. Only give it to someone you trust with lineups and attendance.' : 'A link up to 200 members can use in the next 90 days. You can revoke it any time.'}</p>
       </ConfirmSheet>
