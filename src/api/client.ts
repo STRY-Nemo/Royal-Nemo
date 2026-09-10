@@ -229,7 +229,7 @@ export class ApiClient {
   }
 
   // ---- members / settings ----
-  updateMember(id: MemberId, patch: { mechanical_notes?: string; active?: boolean }) {
+  updateMember(id: MemberId, patch: { mechanical_notes?: string; active?: boolean; arena_power_m?: number; level?: number; rank?: Member['rank'] }) {
     return this.request<{ member: Member }>('POST', `/members/${encodeURIComponent(id)}`, patch);
   }
   updateSettings(patch: Partial<Pick<Settings, 'timezone' | 'default_team_times'>>) {

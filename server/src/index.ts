@@ -32,6 +32,7 @@ import {
 import { auditStatement, ensureSeeded, insertEvent, loadDocument, loadEvent, loadEvents, loadMascot, loadMember, loadMembers, loadOrganization, loadSettings, loadSuggestion, loadSuggestions, recentAudit, saveDocumentCas, saveEventCas, saveMember, saveSuggestion } from './db';
 import { createSuggestion, setSuggestionStatus, toggleVote } from '../../src/engine/suggestions';
 import { feedMascot, MascotError } from '../../src/engine/mascot';
+import { applyStats, type StatsPatch } from '../../src/engine/memberStats';
 import type { Account, Env } from './env';
 import { HttpError } from './env';
 import { corsHeaders, num, readJson, Router, str, type Ctx } from './router';
@@ -604,15 +605,34 @@ router.post('/organization/mapping', async (ctx) => {
 
 // ---- Members ------------------------------------------------------------------------
 router.post('/members/:id', async (ctx) => {
-  const account = requireLeader(ctx.account);
+  const account = requireAccount(ctx.account);
   const body = await ctx.body();
   const member = await loadMember(ctx.env, ctx.params.id);
+  const isLeader = account.role === 'leader';
+  const isSelf = account.member_id === member.id;
+  if (!isLeader && !isSelf) throw new HttpError(403, 'forbidden', 'You can only update your own stats.');
   let next = member;
-  if (typeof body.mechanical_notes === 'string') next = L.withMechanicalNote(next, body.mechanical_notes);
-  if (typeof body.active === 'boolean') next = { ...next, active: body.active };
+  if (isLeader) {
+    if (typeof body.mechanical_notes === 'string') next = L.withMechanicalNote(next, body.mechanical_notes);
+    if (typeof body.active === 'boolean') next = { ...next, active: body.active };
+  } else if ('mechanical_notes' in body || 'active' in body || 'rank' in body) {
+    throw new HttpError(403, 'forbidden', 'Members can update their own arena power and level; leaders change rank, notes and status.');
+  }
+  const stats: StatsPatch = {};
+  if ('arena_power_m' in body) stats.arena_power_m = Number(body.arena_power_m);
+  if ('level' in body) stats.level = Number(body.level);
+  if ('rank' in body) stats.rank = body.rank as StatsPatch['rank'];
+  if (Object.keys(stats).length) {
+    try {
+      next = applyStats(next, stats, ctx.now.toISOString().slice(0, 10));
+    } catch (err) {
+      mapError(err);
+    }
+  }
   await saveMember(ctx.env, next, ctx.now);
+  const pick = (m: Member) => ({ active: m.active, has_notes: !!m.mechanical_notes, arena_power_m: m.arena_power_m, level: m.level, rank: m.rank });
   await ctx.env.DB.batch([
-    auditStatement(ctx.env, { id: `${ctx.now.toISOString()}-member-${randomToken(4)}`, event_id: null, actor_id: actorFor(account), action: 'member.update', before: { active: member.active, has_notes: !!member.mechanical_notes }, after: { active: next.active, has_notes: !!next.mechanical_notes }, timestamp: ctx.now.toISOString() }),
+    auditStatement(ctx.env, { id: `${ctx.now.toISOString()}-member-${randomToken(4)}`, event_id: null, actor_id: actorFor(account), action: 'member.update', before: pick(member), after: pick(next), timestamp: ctx.now.toISOString() }),
   ]);
   return { member: next };
 });

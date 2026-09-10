@@ -65,6 +65,8 @@ The repository was empty apart from a README, so a small maintained stack was ch
 | `docs/source/` | Original spreadsheets, unchanged |
 | `public/brand/` | Celestial logo (resized for web) |
 
+- **Player stats**: leaders edit a member's arena power, level and rank from the member page ("Edit stats"); members update their own power and level. A power change stamps the "as of" date; the server validates ranges and records an audit entry.
+
 ## Rotation rules implemented
 
 - Eligible = active member with an explicit availability for that team's time. No response means unknown, not available. One team per member per week.

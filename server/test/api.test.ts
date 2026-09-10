@@ -373,6 +373,35 @@ describe('STRY API', () => {
     expect((await api<{ roster: { id: string; taken: boolean }[] }>('GET', '/roster')).body.roster.find((m) => m.id === free.id)!.taken).toBe(false);
   });
 
+  it('lets leaders edit player stats and members update only their own power and level', async () => {
+    const meMember = await api<{ account: { member_id: string | null } }>('GET', '/me', undefined, memberToken);
+    let mine = meMember.body.account.member_id;
+    const state = await api<{ members: { id: string; arena_power_m: number; level: number; rank: string; power_as_of: string }[] }>('GET', '/state', undefined, leaderToken);
+    if (!mine) {
+      const free = state.body.members.find((m) => m.id === 'stry-050')!;
+      expect((await api('POST', '/me/link', { member_id: free.id }, memberToken)).status).toBe(200);
+      mine = free.id;
+    }
+    const other = state.body.members.find((m) => m.id !== mine)!;
+    // Leader: all three fields, power stamps today's date, rounding to one decimal.
+    const lead = await api<{ member: { arena_power_m: number; level: number; rank: string; power_as_of: string } }>('POST', `/members/${other.id}`, { arena_power_m: 412.36, level: 77, rank: 'R3' }, leaderToken);
+    expect(lead.status).toBe(200);
+    expect(lead.body.member).toMatchObject({ arena_power_m: 412.4, level: 77, rank: 'R3' });
+    expect(lead.body.member.power_as_of).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(lead.body.member.power_as_of).not.toBe(other.power_as_of);
+    // Validation.
+    expect((await api('POST', `/members/${other.id}`, { arena_power_m: -5 }, leaderToken)).status).toBe(422);
+    expect((await api('POST', `/members/${other.id}`, { level: 3.5 }, leaderToken)).status).toBe(422);
+    expect((await api('POST', `/members/${other.id}`, { rank: 'R9' }, leaderToken)).status).toBe(422);
+    // Member: own power and level only.
+    expect((await api('POST', `/members/${other.id}`, { arena_power_m: 100 }, memberToken)).status).toBe(403);
+    expect((await api('POST', `/members/${mine}`, { rank: 'R5' }, memberToken)).status).toBe(403);
+    expect((await api('POST', `/members/${mine}`, { mechanical_notes: 'x' }, memberToken)).status).toBe(403);
+    const self = await api<{ member: { arena_power_m: number; level: number; rank: string } }>('POST', `/members/${mine}`, { arena_power_m: 250.5, level: 60 }, memberToken);
+    expect(self.status).toBe(200);
+    expect(self.body.member).toMatchObject({ arena_power_m: 250.5, level: 60 });
+  });
+
   it('copies last week\'s availability into the next draft and unlocks a whole week', async () => {
     const state = await api<{ events: { id: string; date: string; status: string; availability: Record<string, unknown>; teams: { id: string }[] }[]; members: { id: string }[] }>('GET', '/state', undefined, leaderToken);
     const from = [...state.body.events].sort((a, b) => Object.keys(b.availability).length - Object.keys(a.availability).length)[0];

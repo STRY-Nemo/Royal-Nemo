@@ -20,6 +20,7 @@ import * as O from '../engine/organization';
 import { computeHistory, type MemberHistory } from '../engine/history';
 import { feedMascot, initialMascot, MascotError } from '../engine/mascot';
 import { createSuggestion, setSuggestionStatus, toggleVote } from '../engine/suggestions';
+import { applyStats, validateStats, type StatsPatch } from '../engine/memberStats';
 import { APOCALYPSE_TIME_ZONE, deviceTimeZone, nextFriday, todayInZone } from '../engine/recurrence';
 import { useFeedback, type SaveState } from '../motion';
 import { ApiClient, ApiError, apiBaseUrl, type ApiAccount, type ApiState } from '../api/client';
@@ -192,6 +193,8 @@ export interface StoreValue {
     setSuggestionStatus: (id: string, status: SuggestionStatus, reply: string | null) => ActionResult;
     setMechanicalNote: (memberId: MemberId, note: string) => ActionResult;
     setMemberActive: (memberId: MemberId, active: boolean) => ActionResult;
+    /** Arena power, level (leaders or the member themselves) and rank (leaders). */
+    updateMemberStats: (memberId: MemberId, patch: StatsPatch) => ActionResult;
     resetDemo: () => void;
     exportJson: () => Promise<string>;
   };
@@ -884,6 +887,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             async () => {
               const r = await api.updateMember(memberId, { active });
               commit((s) => ({ ...s, members: s.members.map((m) => (m.id === memberId ? r.member : m)) }));
+            },
+          );
+        }
+        return { ok: true };
+      },
+      updateMemberStats: (memberId, patch) => {
+        const s = stateRef.current;
+        const leader = s.session.role === 'leader';
+        const self = s.session.member_id === memberId;
+        if (!leader && !self) return fail(new L.LifecycleError('forbidden', 'You can only update your own stats.'));
+        if (!leader && patch.rank !== undefined) return fail(new L.LifecycleError('forbidden', 'Only leaders change rank.'));
+        const current = s.members.find((m) => m.id === memberId);
+        if (!current) return fail(new L.LifecycleError('not_found', 'Member not found.'));
+        let next: Member;
+        try {
+          next = applyStats(current, patch, new Date().toISOString().slice(0, 10));
+        } catch (err) {
+          return fail(err);
+        }
+        const before = s.members;
+        commit((st) => ({ ...st, members: st.members.map((m) => (m.id === memberId ? next : m)) }));
+        if (api) {
+          sync(
+            'Player stats',
+            () => commit((st) => ({ ...st, members: before })),
+            async () => {
+              const r = await api.updateMember(memberId, validateStats(patch));
+              commit((st) => ({ ...st, members: st.members.map((m) => (m.id === memberId ? r.member : m)) }));
             },
           );
         }

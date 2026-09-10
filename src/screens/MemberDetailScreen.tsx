@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import { finalStarters } from '../engine/history';
 import { slotDisplay } from '../engine/organization';
-import { SaveIndicator, useFeedback, type SaveState } from '../motion';
+import { BottomSheet, SaveIndicator, useFeedback, type SaveState } from '../motion';
+import { LEVEL_MAX, POWER_MAX_M, RANKS } from '../engine/memberStats';
+import type { AllianceRank } from '../domain/types';
 import { useRouter } from '../store/router';
 import { fmtPower, useStore } from '../store/store';
 import { Avatar, EmptyState, Header } from '../ui/common';
@@ -13,6 +15,34 @@ export function MemberDetailScreen({ memberId }: { memberId: string }) {
   const member = membersById.get(memberId);
   const [note, setNote] = useState(member?.mechanical_notes ?? '');
   const [noteState, setNoteState] = useState<SaveState>('idle');
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [power, setPower] = useState('');
+  const [level, setLevel] = useState('');
+  const [rank, setRank] = useState<AllianceRank>('R1');
+  const canEditStats = isLeader || me?.id === memberId;
+  const openStats = () => {
+    if (!member) return;
+    setPower(String(member.arena_power_m));
+    setLevel(String(member.level));
+    setRank(member.rank);
+    setStatsOpen(true);
+  };
+  const saveStats = () => {
+    if (!member) return;
+    const patch: { arena_power_m?: number; level?: number; rank?: AllianceRank } = {};
+    if (power.trim() !== '' && Number(power) !== member.arena_power_m) patch.arena_power_m = Number(power);
+    if (level.trim() !== '' && Number(level) !== member.level) patch.level = Number(level);
+    if (isLeader && rank !== member.rank) patch.rank = rank;
+    if (Object.keys(patch).length === 0) {
+      setStatsOpen(false);
+      return;
+    }
+    const res = actions.updateMemberStats(member.id, patch);
+    if (res.ok) {
+      setStatsOpen(false);
+      toast({ kind: 'ok', text: 'Stats updated' });
+    } else toast({ kind: 'error', text: res.message });
+  };
 
   const responsibilities = useMemo(
     () => state.organization.responsibilities.filter((r) => !r.archived && r.slots.some((s) => s.member_id === memberId)).map((r) => ({ title: r.title, label: r.slots.find((s) => s.member_id === memberId)?.label ?? '' })),
@@ -72,6 +102,11 @@ export function MemberDetailScreen({ memberId }: { memberId: string }) {
               <span className="label">arena power · as of {member.power_as_of}</span>
             </div>
           </div>
+          {canEditStats && (
+            <button type="button" className="btn secondary block" onClick={openStats}>
+              {isLeader ? 'Edit stats' : 'Update my power and level'}
+            </button>
+          )}
           {!member.active && <div className="callout warn small">Inactive. History is retained; not eligible for selection.</div>}
         </div>
 
@@ -173,6 +208,40 @@ export function MemberDetailScreen({ memberId }: { memberId: string }) {
         )}
         <p className="faint">Current responsibilities: {state.organization.responsibilities.filter((r) => r.slots.some((s) => s.member_id === member.id)).map((r) => `${r.title} (${slotDisplay(r.slots.find((s) => s.member_id === member.id)!, membersById)})`).join(', ') || 'none'}.</p>
       </main>
+      <BottomSheet open={statsOpen} onClose={() => setStatsOpen(false)} title={`Stats · ${member.username}`}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            saveStats();
+          }}
+        >
+          <div className="field">
+            <label htmlFor="stat-power">Arena power (millions)</label>
+            <input id="stat-power" className="input" type="number" inputMode="decimal" step="0.1" min={0} max={POWER_MAX_M} value={power} onChange={(e) => setPower(e.target.value)} placeholder="e.g. 301.3" />
+            <p className="faint">Type it as the game shows it, in millions. Saving stamps today as the "as of" date.</p>
+          </div>
+          <div className="field">
+            <label htmlFor="stat-level">Level</label>
+            <input id="stat-level" className="input" type="number" inputMode="numeric" step="1" min={1} max={LEVEL_MAX} value={level} onChange={(e) => setLevel(e.target.value)} />
+          </div>
+          {isLeader && (
+            <div className="field">
+              <label>Rank</label>
+              <div className="segmented" role="tablist" aria-label="Rank">
+                {RANKS.map((r) => (
+                  <button key={r} type="button" role="tab" aria-selected={rank === r} onClick={() => setRank(r)}>
+                    {r}
+                  </button>
+                ))}
+              </div>
+              <p className="faint">R4 and R5 unlock the Organize page once their account is verified.</p>
+            </div>
+          )}
+          <button type="submit" className="btn primary block">
+            Save stats
+          </button>
+        </form>
+      </BottomSheet>
     </>
   );
 }
