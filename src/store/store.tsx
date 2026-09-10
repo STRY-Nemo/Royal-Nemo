@@ -803,9 +803,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (denied) return denied;
         const before = stateRef.current.suggestions.find((x) => x.id === id);
         if (!before) return fail(new L.LifecycleError('not_found', 'Idea not found.'));
+        const st = stateRef.current;
+        const acct = accountRef.current;
+        const by = { id: acct ? acct.id : (st.session.member_id ?? 'demo'), name: (st.session.member_id && st.members.find((m) => m.id === st.session.member_id)?.username) || acct?.username || 'A leader' };
         let next: Suggestion;
         try {
-          next = setSuggestionStatus(before, status, reply, new Date().toISOString());
+          next = setSuggestionStatus(before, status, reply, new Date().toISOString(), by);
         } catch (err) {
           return fail(err);
         }

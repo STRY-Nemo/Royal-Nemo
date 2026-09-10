@@ -505,11 +505,12 @@ router.post('/suggestions/:id/vote', async (ctx) => {
 });
 
 router.post('/suggestions/:id/status', async (ctx) => {
-  requireLeader(ctx.account);
+  const account = requireLeader(ctx.account);
   const body = await ctx.body();
+  const member = account.member_id ? await loadMember(ctx.env, account.member_id).catch(() => null) : null;
   let s;
   try {
-    s = setSuggestionStatus(await loadSuggestion(ctx.env, ctx.params.id), str(body, 'status') as Parameters<typeof setSuggestionStatus>[1], typeof body.reply === 'string' ? body.reply : null, ctx.now.toISOString());
+    s = setSuggestionStatus(await loadSuggestion(ctx.env, ctx.params.id), str(body, 'status') as Parameters<typeof setSuggestionStatus>[1], typeof body.reply === 'string' ? body.reply : null, ctx.now.toISOString(), { id: account.id, name: member?.username ?? account.username });
   } catch (err) {
     mapError(err);
   }

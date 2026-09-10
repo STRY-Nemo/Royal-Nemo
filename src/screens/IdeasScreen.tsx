@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Suggestion, SuggestionStatus } from '../domain/types';
-import { BODY_MAX, OPEN_PER_PERSON, sortSuggestions, TITLE_MAX } from '../engine/suggestions';
+import { BODY_MAX, lastReplier, OPEN_PER_PERSON, sortSuggestions, TITLE_MAX } from '../engine/suggestions';
 import { BottomSheet, useFeedback } from '../motion';
 import { useStore } from '../store/store';
 import { useUiState } from '../store/ui';
@@ -98,9 +98,22 @@ export function IdeasScreen() {
                       <div className="callout small" style={{ marginTop: 6 }}>
                         <span aria-hidden="true">💬</span>
                         <span className="wrap">
-                          <strong>Leaders:</strong> {s.leader_reply}
+                          <strong>{lastReplier(s)?.by ?? 'Leaders'}:</strong> {s.leader_reply}
                         </span>
                       </div>
+                    )}
+                    {(s.activity?.length ?? 0) > 0 && (
+                      <details className="idea-activity">
+                        <summary className="small muted">Activity ({s.activity!.length})</summary>
+                        <ul className="small">
+                          {s.activity!.map((a, i) => (
+                            <li key={i}>
+                              <span className="muted">{new Date(a.at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span> · <strong>{a.by}</strong>{' '}
+                              {a.kind === 'created' ? 'posted this idea' : a.kind === 'status' ? `set ${STATUS_LABEL[a.status ?? 'new']}` : `replied: "${a.reply}"`}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
                     )}
                     {isLeader && (
                       <button type="button" className="link-btn" style={{ padding: 0, marginTop: 4 }} onClick={() => { setTriage(s); setReply(s.leader_reply ?? ''); }}>

@@ -286,8 +286,14 @@ describe('STRY API', () => {
     expect(vote.body.suggestion.votes).toHaveLength(1);
     expect((await api<{ suggestion: { votes: string[] } }>('POST', `/suggestions/${id}/vote`, undefined, leaderToken)).body.suggestion.votes).toHaveLength(0);
     expect((await api('POST', `/suggestions/${id}/status`, { status: 'planned', reply: 'Next week' }, memberToken)).status).toBe(403);
-    const triaged = await api<{ suggestion: { status: string; leader_reply: string } }>('POST', `/suggestions/${id}/status`, { status: 'planned', reply: 'Next week' }, leaderToken);
+    const triaged = await api<{ suggestion: { status: string; leader_reply: string; activity: { kind: string; by: string; reply?: string }[] } }>('POST', `/suggestions/${id}/status`, { status: 'planned', reply: 'Next week' }, leaderToken);
     expect(triaged.body.suggestion).toMatchObject({ status: 'planned', leader_reply: 'Next week' });
+    // The activity trail says who set the status and who replied (the leader's in-game name).
+    expect(triaged.body.suggestion.activity.map((a) => a.kind)).toEqual(['created', 'status', 'reply']);
+    const meNow = await api<{ account: { member_id: string | null; username: string } }>('GET', '/me', undefined, leaderToken);
+    const leaderState = await api<{ members: { id: string; username: string }[] }>('GET', '/state', undefined, leaderToken);
+    const expectedName = leaderState.body.members.find((m) => m.id === meNow.body.account.member_id)?.username ?? meNow.body.account.username;
+    expect(triaged.body.suggestion.activity[2]).toMatchObject({ by: expectedName, reply: 'Next week' });
     const state = await api<{ suggestions: { id: string }[] }>('GET', '/state', undefined, memberToken);
     expect(state.body.suggestions.some((s) => s.id === id)).toBe(true);
     expect((await api('GET', '/suggestions/export')).status).toBe(404);
