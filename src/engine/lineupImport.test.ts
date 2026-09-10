@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadSeedMembers } from '../data/seed';
 import { parseCsv, parseXlsx } from '../import/tables';
-import { applySuggestions, createDraftEvent, LifecycleError, publishBlockers, reserves, setAvailability, starters, teamReserves } from './lifecycle';
+import { applySuggestions, createDraftEvent, LifecycleError, lockMember, publishBlockers, reserves, setAvailability, starters, swapMembers, teamReserves } from './lifecycle';
 import { applyLineupImport, matchLineup, parseLineupRows, planLineupImport, type LineupRecord } from './lineupImport';
 import { APOCALYPSE_TIME_ZONE } from './recurrence';
 
@@ -83,7 +83,7 @@ describe('matching and planning', () => {
     expect(matches.find((m) => m.record.username === 'Rockysaurus')?.member?.id).toBe(rocky.id);
   });
 
-  it('plans 20 locked starters, 9 substitutes, availability for everyone marked, and the game timezone', () => {
+  it('plans 20 starters, 9 substitutes, availability for everyone marked, and the game timezone', () => {
     const plan = planLineupImport(draft(), parsed.records, members);
     expect(plan.errors).toEqual([]);
     expect(plan.team.name).toBe('Team 2');
@@ -121,7 +121,7 @@ describe('both team screens together', () => {
     expect(starters(ev, ev.teams[1].id)).toHaveLength(20);
     expect(reserves(ev)).toHaveLength(19);
     expect(new Set(ev.assignments.map((a) => a.member_id)).size).toBe(59);
-    expect(ev.assignments.every((a) => a.locked)).toBe(true);
+    expect(ev.assignments.every((a) => !a.locked)).toBe(true);
     const blockers = publishBlockers(ev).map((b) => b.code);
     expect(blockers).toEqual(['date']);
     // Importing Team 1 first gives the same lineup.
@@ -133,7 +133,7 @@ describe('both team screens together', () => {
 });
 
 describe('applying the import', () => {
-  it('writes locked starters and substitutes, records availability, sets the timezone and bumps the revision', () => {
+  it('writes editable starters and substitutes, records availability, sets the timezone and bumps the revision', () => {
     const before = draft();
     const { event, audit, plan } = applyLineupImport(before, parsed.records, members, {}, ctx, { source: 'Team2.xlsx' });
     const team2 = event.teams[1].id;
@@ -141,7 +141,10 @@ describe('applying the import', () => {
     expect(event.timezone).toBe(APOCALYPSE_TIME_ZONE);
     expect(starters(event, team2)).toHaveLength(20);
     expect(reserves(event)).toHaveLength(9);
-    expect(event.assignments.every((a) => a.locked && a.team_id === team2 && a.lock_reason === 'In-game Team 2 lineup (Team2.xlsx)')).toBe(true);
+    expect(event.assignments.every((a) => !a.locked && a.team_id === team2 && /on the in-game Team 2 screen \(Team2.xlsx\)/.test(a.reason ?? ''))).toBe(true);
+    // Opt-in locking is still available for leaders who want the game lineup pinned.
+    const pinned = applyLineupImport(before, parsed.records, members, {}, ctx, { source: 'Team2.xlsx', lock: true }).event;
+    expect(pinned.assignments.every((a) => a.locked && a.lock_reason === 'In-game Team 2 lineup (Team2.xlsx)')).toBe(true);
     for (const m of [...plan.starters, ...plan.reserves]) expect(event.availability[m.id].choice).toBe('team2');
     const mada = members.find((m) => m.username === 'Mada')!;
     expect(event.availability[mada.id].choice).toBe('team1');
@@ -163,21 +166,27 @@ describe('applying the import', () => {
     expect(plan.availability.find((c) => c.member.id === queen.id)?.from).toBe('team1');
   });
 
-  it('survives Generate: locked starters stay, substitutes stay reserves, Team 1 fills from the rest', () => {
+  it('stays editable: leaders can move imported players without unlocking; Regenerate replaces it unless locked', () => {
     let ev = applyLineupImport(draft(), parsed.records, members, {}, ctx).event;
     for (const m of members) if (!ev.availability[m.id]) ev = setAvailability(ev, m.id, 'either', ctx, 'stry-003').event;
-    const importedStarters = starters(ev, ev.teams[1].id).map((a) => a.member_id).sort();
-    const importedReserves = reserves(ev).map((a) => a.member_id).sort();
-    const gen = applySuggestions(ev, members, [ev], ctx, ev.revision);
+    const team2 = ev.teams[1].id;
+    const importedStarters = starters(ev, team2).map((a) => a.member_id).sort();
+    const sub = teamReserves(ev, team2)[0].member_id;
+    const starter = importedStarters[0];
+    // Swap an imported starter with an imported substitute: no unlock needed.
+    const swapped = swapMembers(ev, starter, sub, ctx).event;
+    expect(starters(swapped, team2).some((a) => a.member_id === sub)).toBe(true);
+    expect(teamReserves(swapped, team2).some((a) => a.member_id === starter)).toBe(true);
+    // A leader can pin one player; Regenerate keeps that one and re-ranks the rest.
+    const pinned = lockMember(ev, starter, team2, 'shot caller', ctx).event;
+    const gen = applySuggestions(pinned, members, [pinned], ctx, pinned.revision);
     expect(gen.result.ok).toBe(true);
-    expect(starters(gen.event, ev.teams[1].id).map((a) => a.member_id).sort()).toEqual(importedStarters);
+    expect(starters(gen.event, team2).some((a) => a.member_id === starter && a.locked)).toBe(true);
     expect(starters(gen.event, ev.teams[0].id)).toHaveLength(20);
-    const stillReserve = reserves(gen.event).filter((a) => a.locked).map((a) => a.member_id).sort();
-    expect(stillReserve).toEqual(importedReserves);
+    expect(starters(gen.event, team2)).toHaveLength(20);
     // Importing again replaces only Team 2 and leaves Team 1 alone.
     const again = applyLineupImport(gen.event, parsed.records, members, {}, ctx);
-    expect(again.plan.replaced).toBe(20 + teamReserves(gen.event, ev.teams[1].id).length);
     expect(starters(again.event, ev.teams[0].id)).toHaveLength(20);
-    expect(starters(again.event, ev.teams[1].id).map((a) => a.member_id).sort()).toEqual(importedStarters);
+    expect(starters(again.event, team2).map((a) => a.member_id).sort()).toEqual(importedStarters);
   });
 });

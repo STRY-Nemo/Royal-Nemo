@@ -291,9 +291,14 @@ export interface ImportOptions {
   expectedRevision?: number;
   /** Where the rows came from (file name); kept in lock reasons and audit. */
   source?: string;
+  /** Pin the imported players with locks (default: leave them editable). */
+  lock?: boolean;
 }
 
-/** Applies a team screen import: availability, locked starters, locked substitutes, and (if unset) the game timezone. */
+/**
+ * Applies a team screen import: availability, starters, substitutes, and (if unset) the game timezone.
+ * The lineup is written unlocked so leaders can keep changing it up to the match; pass `lock: true` to pin it.
+ */
 export function applyLineupImport(
   event: CanyonEvent,
   records: LineupRecord[],
@@ -316,16 +321,15 @@ export function applyLineupImport(
   const imported = new Set([...plan.starters, ...plan.reserves].map((m) => m.id));
   const kept = event.assignments.filter((a) => a.team_id !== team.id && !imported.has(a.member_id));
   const label = `In-game ${team.name} lineup${opts.source ? ` (${opts.source})` : ''}`;
+  const lock = opts.lock === true;
   const mk = (m: Member, role: Assignment['role']): Assignment => ({
     event_id: event.id,
     member_id: m.id,
     team_id: team.id as TeamId,
     role,
-    locked: true,
-    lock_reason: label,
-    locked_by: ctx.actor === 'system' ? undefined : ctx.actor,
-    locked_at: ctx.now,
-    reason: role === 'starter' ? `Starter on the in-game ${team.name} screen` : `Substitute on the in-game ${team.name} screen`,
+    locked: lock,
+    ...(lock ? { lock_reason: label, locked_by: ctx.actor === 'system' ? undefined : ctx.actor, locked_at: ctx.now } : {}),
+    reason: `${role === 'starter' ? 'Starter' : 'Substitute'} on the in-game ${team.name} screen${opts.source ? ` (${opts.source})` : ''}`,
     revision: rev,
   });
   const assignments = [...kept, ...plan.starters.map((m) => mk(m, 'starter')), ...plan.reserves.map((m) => mk(m, 'reserve'))];

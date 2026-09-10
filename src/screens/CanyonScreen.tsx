@@ -338,7 +338,7 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
 
       {isLeader && event.status !== 'finalized' && event.status !== 'canceled' && (
         <StickyActions>
-          <button type="button" className="btn secondary" onClick={() => (eligible === 0 ? setNeedAvailability(true) : everythingLocked ? setAllLocked(true) : hasStarters ? generate() : setConfirmGenerate(true))} disabled={busy}>
+          <button type="button" className="btn secondary" onClick={() => (eligible === 0 ? setNeedAvailability(true) : everythingLocked ? setAllLocked(true) : setConfirmGenerate(true))} disabled={busy}>
             {generating ? <OrbitSpinner label="Computing" /> : hasStarters ? 'Regenerate' : 'Generate suggestions'}
           </button>
           <button type="button" className="btn primary" onClick={() => router.navigate(`/canyon/review/${event.id}`)} disabled={!hasStarters}>
@@ -369,27 +369,35 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
 
       <ConfirmSheet
         open={allLocked}
-        title="This week is set from the game screen"
-        confirmLabel="Unlock all and regenerate"
-        danger
+        title="Every starter is locked"
+        confirmLabel="Unlock all, keep lineup"
         onCancel={() => setAllLocked(false)}
         onConfirm={() => {
           setAllLocked(false);
-          void unlockAndRegenerate();
+          const r = actions.unlockAll(event.id);
+          if (r.ok) toast({ kind: 'ok', text: `${r.count ?? 0} lock${r.count === 1 ? '' : 's'} removed · lineup kept, you can move players now`, action: { label: 'Undo', onClick: () => actions.undoAssignments(event.id) } });
         }}
       >
         <p className="small muted">
-          {lockedStarters} of {capacity} starters are locked (imported from the in-game team screen or locked by a leader), so suggestions have nothing they are allowed to change. This week's starters and substitutes already count towards next week's fairness.
+          {lockedStarters} of {capacity} starters are locked, so neither suggestions nor moves can change them. Unlocking keeps everyone where they are and lets you move, swap or regenerate. This week's starters and substitutes already count towards next week's fairness.
         </p>
+        <button type="button" className="btn secondary block" onClick={() => { setAllLocked(false); void unlockAndRegenerate(); }}>
+          Unlock all and regenerate
+        </button>
         {nextWeek && (
           <button type="button" className="btn secondary block" onClick={() => { setAllLocked(false); router.navigate(`/canyon/${nextWeek.id}`); }}>
             Plan next week ({nextWeek.date}) instead
           </button>
         )}
-        <p className="faint">Unlocking removes every lock on this week and re-ranks everyone by fairness. You can undo from the toast.</p>
+        <p className="faint">Both options can be undone from the toast.</p>
       </ConfirmSheet>
 
-      <ConfirmSheet open={confirmGenerate} title="Generate suggestions?" confirmLabel="Generate" onCancel={() => setConfirmGenerate(false)} onConfirm={() => { setConfirmGenerate(false); void generate(); }}>
+      <ConfirmSheet open={confirmGenerate} title={hasStarters ? 'Regenerate the lineup?' : 'Generate suggestions?'} confirmLabel={hasStarters ? 'Regenerate' : 'Generate'} onCancel={() => setConfirmGenerate(false)} onConfirm={() => { setConfirmGenerate(false); void generate(); }}>
+        {hasStarters && (
+          <p className="small">
+            This replaces the current lineup{event.assignments.some((a) => /in-game/.test(a.reason ?? '')) ? ', including the one imported from the game screen' : ''}. Locked players stay where they are. You can undo from the toast.
+          </p>
+        )}
         <p className="small muted">
           Ranks {eligible} available player{eligible === 1 ? '' : 's'} by fewest recent plays (last week's imported or published lineup counts), most weeks waited while available, longest since last played, then a saved tie-break. Fills both times jointly. Locks are kept.
         </p>

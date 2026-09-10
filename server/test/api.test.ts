@@ -190,7 +190,7 @@ describe('STRY API', () => {
     expect(state.body.events).toHaveLength(2);
   });
 
-  it('imports an in-game team screen into the next draft: leaders only, validated, locked', async () => {
+  it('imports an in-game team screen into the next draft: leaders only, validated, editable', async () => {
     const state = await api<{ events: { id: string; date: string; status: string; revision: number; timezone: string | null; teams: { id: string }[] }[] }>('GET', '/state', undefined, leaderToken);
     const next = state.body.events.find((e) => e.status === 'draft')!;
     const row = (username: string, extra: Record<string, unknown>) => ({ username, team: 2, starter: false, substitute: false, ready: false, declined: false, other_team: null, event_date: next.date, ...extra });
@@ -215,7 +215,7 @@ describe('STRY API', () => {
     expect(ok.body.event.timezone).toBe(next.timezone);
     const team2 = next.teams[1].id;
     expect(ok.body.event.assignments.filter((a) => a.role === 'starter' && a.team_id === team2)).toHaveLength(2);
-    expect(ok.body.event.assignments.every((a) => a.locked && a.lock_reason === 'In-game Team 2 lineup (Team2.xlsx)')).toBe(true);
+    expect(ok.body.event.assignments.every((a) => !a.locked)).toBe(true);
     expect(ok.body.event.availability[memberId].choice).toBe('team2');
     expect(ok.body.event.availability['stry-024'].choice).toBe('team1');
   });
