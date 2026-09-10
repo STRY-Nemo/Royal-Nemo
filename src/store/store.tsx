@@ -23,6 +23,7 @@ import { createSuggestion, setSuggestionStatus, toggleVote } from '../engine/sug
 import { APOCALYPSE_TIME_ZONE, deviceTimeZone, nextFriday, todayInZone } from '../engine/recurrence';
 import { useFeedback, type SaveState } from '../motion';
 import { ApiClient, ApiError, apiBaseUrl, type ApiAccount, type ApiState } from '../api/client';
+import { guestEnabled } from '../ui/guest';
 
 export const STORAGE_KEY = 'stry-alliance-demo-v1';
 export const API_CACHE_KEY = 'stry-alliance-api-cache-v1';
@@ -208,7 +209,8 @@ type RemoteEvent = (api: ApiClient, before: CanyonEvent) => Promise<{ event: Can
 type RemoteOrg = (api: ApiClient, before: OrganizationState) => Promise<{ organization: OrganizationState }>;
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const base = useMemo(() => apiBaseUrl(), []);
+  // A guest tour runs the app in demo mode (sample data, local only) even when an API is configured.
+  const base = useMemo(() => (guestEnabled() ? null : apiBaseUrl()), []);
   const mode: StoreMode = base ? 'api' : 'demo';
   const api = useMemo(() => (base ? new ApiClient(base) : null), [base]);
   const device = useMemo(loadDeviceSettings, []);

@@ -1,6 +1,7 @@
 import { roamingBearEnabled, setRoamingBearEnabled } from '../ui/RoamingBear';
 import { THEMES, useTheme } from '../ui/theme';
 import { useSfxSetting } from '../ui/sfx';
+import { exitGuest, guestEnabled, guestLink, guestMessage } from '../ui/guest';
 import { ThemeSheet } from '../ui/ThemeSheet';
 import { useState } from 'react';
 import type { MotionPreference } from '../domain/types';
@@ -26,6 +27,19 @@ export function SettingsScreen() {
   const [pwNext, setPwNext] = useState('');
   const effective = useEffectiveMotion(state.settings.motion);
   const tz = state.settings.timezone ?? '';
+
+  const shareGuest = async () => {
+    const text = guestMessage();
+    try {
+      if (navigator.share) await navigator.share({ title: 'STRY alliance app', text, url: guestLink() });
+      else {
+        await navigator.clipboard.writeText(text);
+        toast({ kind: 'ok', text: 'Guest tour link copied' });
+      }
+    } catch {
+      toast({ kind: 'info', text: guestLink() });
+    }
+  };
 
   const exportJson = async () => {
     let json: string;
@@ -163,6 +177,28 @@ export function SettingsScreen() {
             <p className="faint">Your device is in {deviceTimeZone()}. The event timezone is set per event on the schedule screen; this is only the default for new weeks{mode === 'api' ? ' and is shared with the whole alliance' : ''}.</p>
           </div>
         </div>
+
+        {guestEnabled() ? (
+          <div className="card">
+            <h3>Guest tour</h3>
+            <p className="muted small">You are exploring with sample data. Nothing here is saved or shared with the alliance.</p>
+            <button type="button" className="btn secondary block" onClick={exitGuest}>
+              Exit tour and sign in
+            </button>
+          </div>
+        ) : (
+          mode === 'api' &&
+          isLeader && (
+            <div className="card">
+              <h3>Show the app to others</h3>
+              <p className="muted small">A guest tour link opens every screen with sample data and no account. Real alliance data stays private.</p>
+              <div className="mono small wrap" style={{ wordBreak: 'break-all' }}>{guestLink()}</div>
+              <button type="button" className="btn secondary block" onClick={() => void shareGuest()}>
+                Share guest tour link
+              </button>
+            </div>
+          )
+        )}
 
         <div className="card">
           <h3>Theme</h3>

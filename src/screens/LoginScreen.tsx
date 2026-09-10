@@ -4,6 +4,7 @@ import { normalizeName } from '../engine/organization';
 import { OrbitSpinner, useSingleFlight } from '../motion';
 import { useStore } from '../store/store';
 import { SearchInput } from '../ui/common';
+import { enterGuest } from '../ui/guest';
 import { joinCodeFromLocation, suggestUsername } from '../ui/join';
 
 type Tab = 'signin' | 'register';
@@ -201,6 +202,15 @@ export function LoginScreen() {
       <p className="faint" style={{ textAlign: 'center' }}>
         Shared alliance data. Sessions stay signed in on this device for 90 days.
       </p>
+      {!joinCode && (
+        <div className="card">
+          <h3>Just looking?</h3>
+          <p className="muted small">Take the guest tour: every screen with sample data and the leader view, no account needed. Nothing you do is saved or shared.</p>
+          <button type="button" className="btn secondary block" onClick={enterGuest}>
+            Explore as a guest
+          </button>
+        </div>
+      )}
     </main>
   );
 }

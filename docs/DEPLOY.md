@@ -46,6 +46,9 @@ If the code is refused: the Worker only receives the secret when the **Deploy AP
 ### 7. Invite the alliance
 **Settings → Alliance accounts & join link → Create the alliance join link**, then **Share join link** (the phone's share sheet opens with a ready-made message). One link serves everyone: it opens the app on a join form where a member picks their in-game name, gets a suggested username, chooses a PIN and taps **Join the alliance**. The link allows 200 sign-ups over 90 days; every invite code doubles as a link (`…/#/join/CODE`) and can be revoked from the same screen. For your leadership team, **Create the leader join link** on the same screen: pick how many leaders can use it, share it privately, and revoke it once they are in. Leaders can verify member links, change roles, reset a forgotten PIN, or disable accounts there too. A roster name can only be claimed once: a second sign-up as the same player is refused and told to sign in or ask a leader.
 
+### 8. Show it off
+Settings → **Show the app to others** → **Share guest tour link** (`…/#/guest`). Guests get every screen with sample data and the leader view, on their own phone only; nothing they do reaches the alliance data.
+
 ## Everyday operation
 
 - Pushing changes to the app branch rebuilds the site automatically. Pushing changes under `server/` or the engine redeploys the API (the deploy workflow runs its own tests first).
