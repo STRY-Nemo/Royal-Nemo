@@ -1,5 +1,6 @@
 import { roamingBearEnabled, setRoamingBearEnabled } from '../ui/RoamingBear';
 import { THEMES, useTheme } from '../ui/theme';
+import { useSfxSetting } from '../ui/sfx';
 import { ThemeSheet } from '../ui/ThemeSheet';
 import { useState } from 'react';
 import type { MotionPreference } from '../domain/types';
@@ -17,6 +18,7 @@ export function SettingsScreen() {
   const [roaming, setRoaming] = useState(roamingBearEnabled);
   const [themeOpen, setThemeOpen] = useState(false);
   const theme = useTheme();
+  const [sfx, setSfx] = useSfxSetting();
   const [resetOpen, setResetOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -191,6 +193,13 @@ export function SettingsScreen() {
             <span>
               Roaming bear
               <span className="faint" style={{ display: 'block' }}>The STRY Bear wanders along the bottom of every screen. Tap it to feed.</span>
+            </span>
+          </label>
+          <label className="card-row" style={{ minHeight: 44 }}>
+            <input type="checkbox" checked={sfx} onChange={(e) => setSfx(e.target.checked)} style={{ width: 22, height: 22 }} />
+            <span>
+              Bear sound effects
+              <span className="faint" style={{ display: 'block' }}>Some reactions make a noise (yes, that one). Off keeps the bear silent on this phone.</span>
             </span>
           </label>
         </div>

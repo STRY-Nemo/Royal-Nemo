@@ -3,6 +3,7 @@ import type { MascotState } from '../domain/types';
 import { cooldownRemaining, DAILY_FEED_CAP, FEED_COOLDOWN_MS, feedsToday, nextStage, stageFor, stageProgress, type Stage } from '../engine/mascot';
 import { haptic, useFeedback } from '../motion';
 import { pickReaction, REACTION_MS } from './bearReactions';
+import { playSfx } from './sfx';
 import { useStore } from '../store/store';
 
 /** Bear artwork: public/bear/stage-NN.webp (96 px thumbs for small sizes); a drawn placeholder if a file is missing. */
@@ -58,6 +59,7 @@ interface Particle {
   id: number;
   x: number;
   emoji: string;
+  cls?: string;
 }
 
 const FOOD = ['🍯', '🐟', '🫐', '🍖', '🥕'];
@@ -101,10 +103,11 @@ export function BearFeeder({ mascot, size = 180, compact }: { mascot: MascotStat
     window.setTimeout(() => setParticles((p) => p.filter((q) => q.id !== id)), 900);
     // A different little reaction every tap: jump, wiggle, spin… plus floating emoji.
     const r = pickReaction();
+    if (r.sound) playSfx(r.sound);
     setReaction(null);
     window.requestAnimationFrame(() => setReaction(`react-${r.anim}`));
     window.setTimeout(() => setReaction((cur) => (cur === `react-${r.anim}` ? null : cur)), REACTION_MS);
-    const batch = r.emojis.map((emoji, i) => ({ id: id * 10 + i, x: 25 + Math.random() * 50, emoji }));
+    const batch = r.emojis.map((emoji, i) => ({ id: id * 10 + i, x: 25 + Math.random() * 50, emoji, cls: r.emojiClass }));
     setEmojis((e) => [...e, ...batch]);
     window.setTimeout(() => setEmojis((e) => e.filter((q) => !batch.some((b) => b.id === q.id))), 1000);
     if (res.evolved && res.stage) {
@@ -130,7 +133,7 @@ export function BearFeeder({ mascot, size = 180, compact }: { mascot: MascotStat
       >
         <BearSprite stage={stage} size={size} bounce={bounce && !reaction} className={reaction ?? undefined} />
         {emojis.map((p, i) => (
-          <span key={p.id} className="bear-emoji" style={{ left: `${p.x}%`, animationDelay: `${i * 90}ms` }} aria-hidden="true">
+          <span key={p.id} className={`bear-emoji${p.cls ? ` ${p.cls}` : ''}`} style={{ left: `${p.x}%`, animationDelay: `${i * 90}ms` }} aria-hidden="true">
             {p.emoji}
           </span>
         ))}

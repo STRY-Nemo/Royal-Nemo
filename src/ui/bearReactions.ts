@@ -1,11 +1,15 @@
 /** Random reactions for a fed bear: a little animation plus a floating emoji. */
 export interface BearReaction {
   /** CSS class suffix on .bear-sprite (see app.css "Bear reactions"). */
-  anim: 'jump' | 'wiggle' | 'spin' | 'squish' | 'clap' | 'dance' | 'nod' | 'flip';
+  anim: 'jump' | 'wiggle' | 'spin' | 'squish' | 'clap' | 'dance' | 'nod' | 'flip' | 'toot';
   /** One to three emoji that float up. */
   emojis: string[];
   /** Short speech-bubble text. */
   quip: string;
+  /** Optional sound effect (see sfx.ts). */
+  sound?: 'fart';
+  /** Extra class for the floating emoji (e.g. 'drift' sinks sideways instead of rising). */
+  emojiClass?: string;
 }
 
 const REACTIONS: BearReaction[] = [
@@ -25,6 +29,8 @@ const REACTIONS: BearReaction[] = [
   { anim: 'nod', emojis: ['🛡️'], quip: 'For STRY!' },
   { anim: 'dance', emojis: ['🔥'], quip: 'On fire!' },
   { anim: 'spin', emojis: ['🌈'], quip: 'Dizzy!' },
+  { anim: 'toot', emojis: ['💨'], quip: 'Oops… excuse me!', sound: 'fart', emojiClass: 'drift' },
+  { anim: 'toot', emojis: ['💨', '🙈'], quip: 'Pardon me!', sound: 'fart', emojiClass: 'drift' },
 ];
 
 let last = -1;
