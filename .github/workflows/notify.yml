@@ -1,0 +1,36 @@
+name: Notify Ryan
+# Sends a message to the repository owner through GitHub's own notifications:
+# the ideas agent dispatches this workflow, the job comments on a pinned
+# "Notifications" issue as github-actions[bot] and @mentions the owner, and
+# GitHub emails (and pushes via the GitHub mobile app) the mention.
+
+on:
+  workflow_dispatch:
+    inputs:
+      message:
+        description: Message to deliver (plain text, up to a few lines)
+        required: true
+        type: string
+
+permissions:
+  issues: write
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment on the notifications issue with an @mention
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MESSAGE: ${{ inputs.message }}
+          OWNER_LOGIN: ryanrhernandez-design
+        run: |
+          repo="$GITHUB_REPOSITORY"
+          n=$(gh issue list -R "$repo" --state open --search "Notifications for Ryan in:title" --json number --jq '.[0].number')
+          if [ -z "$n" ]; then
+            url=$(gh issue create -R "$repo" --title "📣 Notifications for Ryan" --body "Messages from the ideas agent land here as comments. Keep this issue open; GitHub notifies you of each mention.")
+            n="${url##*/}"
+          fi
+          printf '@%s %s\n' "$OWNER_LOGIN" "$MESSAGE" > body.md
+          gh issue comment "$n" -R "$repo" --body-file body.md
+          echo "Posted to issue #$n"
