@@ -367,6 +367,39 @@ describe('STRY API', () => {
     expect((await api<{ roster: { id: string; taken: boolean }[] }>('GET', '/roster')).body.roster.find((m) => m.id === free.id)!.taken).toBe(false);
   });
 
+  it('copies last week\'s availability into the next draft and unlocks a whole week', async () => {
+    const state = await api<{ events: { id: string; date: string; status: string; availability: Record<string, unknown>; teams: { id: string }[] }[]; members: { id: string }[] }>('GET', '/state', undefined, leaderToken);
+    const from = [...state.body.events].sort((a, b) => Object.keys(b.availability).length - Object.keys(a.availability).length)[0];
+    expect(Object.keys(from.availability).length).toBeGreaterThan(0);
+    await api('POST', '/events/upcoming', { weeks: 4 }, leaderToken);
+    const after = await api<{ events: { id: string; date: string; status: string; availability: Record<string, unknown>; teams: { id: string }[] }[] }>('GET', '/state', undefined, leaderToken);
+    const next = after.body.events.filter((e) => e.date > from.date && e.status === 'draft').sort((a, b) => (a.date < b.date ? -1 : 1))[0];
+    expect(next).toBeDefined();
+    expect((await api('POST', `/events/${next.id}/availability/carry`, {}, memberToken)).status).toBe(403);
+    const carry = await api<{ count: number; event: { availability: Record<string, unknown> } }>('POST', `/events/${next.id}/availability/carry`, {}, leaderToken);
+    expect(carry.status).toBe(200);
+    expect(carry.body.count).toBeGreaterThan(0);
+    expect(Object.keys(carry.body.event.availability).length).toBeGreaterThanOrEqual(carry.body.count);
+    // Copying again changes nothing (everyone who could be copied already has an answer).
+    expect((await api<{ count: number }>('POST', `/events/${next.id}/availability/carry`, {}, leaderToken)).body.count).toBe(0);
+    // Unlock-all: clear whatever an earlier import locked, then a second call finds nothing → 422.
+    const clear = await api('POST', `/events/${next.id}/unlock-all`, {}, leaderToken);
+    expect([200, 422]).toContain(clear.status);
+    expect((await api('POST', `/events/${next.id}/unlock-all`, {}, leaderToken)).status).toBe(422);
+    expect((await api('POST', `/events/${next.id}/unlock-all`, {}, memberToken)).status).toBe(403);
+    const someone = Object.keys(carry.body.event.availability)[0];
+    const lock = await api<{ event: { revision: number } }>('POST', `/events/${next.id}/lock`, { member_id: someone, team_id: next.teams[0].id, reason: 'anchor' }, leaderToken);
+    if (lock.status !== 200) {
+      // The copied answer may not allow team 1; set it explicitly and lock again.
+      await api('POST', `/events/${next.id}/availability`, { member_id: someone, choice: 'either' }, leaderToken);
+      expect((await api('POST', `/events/${next.id}/lock`, { member_id: someone, team_id: next.teams[0].id, reason: 'anchor' }, leaderToken)).status).toBe(200);
+    }
+    const unlocked = await api<{ count: number; event: { assignments: { locked: boolean }[] } }>('POST', `/events/${next.id}/unlock-all`, {}, leaderToken);
+    expect(unlocked.status).toBe(200);
+    expect(unlocked.body.count).toBe(1);
+    expect(unlocked.body.event.assignments.some((a) => a.locked)).toBe(false);
+  });
+
   it('manages accounts: last leader cannot demote themselves; disabled accounts lose sessions', async () => {
     const list = await api<{ accounts: { id: string; username: string }[] }>('GET', '/accounts', undefined, leaderToken);
     expect(list.body.accounts.map((a) => a.username).sort()).toEqual(['appins', 'joiner', 'latecomer', 'lowrank', 'ryan']);

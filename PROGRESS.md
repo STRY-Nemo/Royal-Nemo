@@ -22,10 +22,11 @@ Short handoff so another coding agent can resume without the original conversati
 - **Weeks ahead**: `ensureUpcomingDrafts` (max 4 Fridays), `POST /events/upcoming`, Canyon "Upcoming weeks" card, Home list with per-week availability status, "Back to this week" when viewing a future draft.
 - **Separate benches**: substitutes belong to one team (`teamReserves`, `waitingList`, move target `reserve:<teamId>`).
 - **Ideas** (`src/engine/suggestions.ts`, `src/screens/IdeasScreen.tsx`, `server/migrations/0002_suggestions.sql`, routes under `/suggestions`): members post (5 open max, 80/1000 char limits) and vote; leaders set status + reply; `GET /suggestions/export` for the sync workflow (header `x-sync-token`, 404 without the `SUGGESTIONS_SYNC_TOKEN` secret). `.github/workflows/suggestions-sync.yml` runs every 6 h and mirrors ideas into GitHub issues (`idea` label, one per suggestion, plus a rolling digest issue) for agent analysis.
+- **Rotation fixes**: `unlockAll` (`POST /events/:id/unlock-all`), `carryOverAvailability` + `previousEventWithAvailability` (`POST /events/:id/availability/carry`), Canyon screen sheets for a fully locked week and for copying last week's answers. Tests in `rotation.test.ts`.
 - **Leader join link**: `AccountsScreen` card creating a `leader` invite with N uses (2–50) over 7 days, share text `leaderJoinMessage`, revoke; `LoginScreen` reads `role` from `/invites/:code/check` to say "invited as a leader".
 - **Join hardening**: one account per roster member (`memberClaimedBy` in `server/src/index.ts`, checked on register, self-link and leader relink; `GET /roster` returns `taken` so the join picker greys claimed names). Leader **Reset PIN** (`POST /accounts/:id/password`, clears that account's sessions; sheet in `AccountsScreen`). The ideas sync workflow stores `SUGGESTIONS_SYNC_TOKEN` on the Worker itself when the API rejects it, so no manual redeploy.
 - **Themes and glass cards** (`src/ui/theme.ts`, `src/ui/ThemeSheet.tsx`, `[data-theme]` palettes in `tokens.css`): per-device choice in localStorage `stry-theme`, applied before first paint in `main.tsx`; `Backdrop` loads `art/themes/<id>.jpg` and falls back to `art/app-background.jpg`. Cards are 52% card colour + blur so the background shows. The ten delivered STRY wallpapers are in `public/art/themes/` (JPG, 200–340 KB each) with a palette each in `tokens.css`. Tab bar grid is 5 columns (the Ideas tab was wrapping off-screen at 4).
-- Tests: 61 unit (+ real-file parsing and import scenarios, suggestions), 17 API integration.
+- Tests: 65 unit (+ real-file parsing and import scenarios, suggestions, rotation), 18 API integration.
 
 ## Hosting
 
@@ -57,7 +58,7 @@ Open Settings (gear icon) → choose a member and the Leader role. Canyon → Ev
 ## Design decisions worth knowing
 
 - **Engine is pure.** `src/engine/*` never imports React or the store. Lifecycle functions take an event, return a new event plus audit entries, and throw `LifecycleError` with a stable `code`. The store (`src/store/store.tsx`) is a thin wrapper that adds role checks, undo stacks and toasts. Milestone 4 should call the same functions server-side.
-- **History is derived, not incremented.** `computeHistory` reads finalized events and unique attendance records; finalizing twice or correcting an outcome cannot double count.
+- **History is derived, not incremented.** `computeHistory` reads finalized events and unique attendance records; finalizing twice or correcting an outcome cannot double count. Since 2026-09-10 earlier weeks that have a lineup but are not finalized count **provisionally** (`countsTowardsHistory`, `provisional_count`, option `before` = the week being planned); `suggest` passes `before: event.date` so a week never sees itself or later drafts. This replaces the earlier "publish does not create plays" rule.
 - **Revision numbers** exist on events and on the organization board. Every mutating action passes the expected revision and fails with `stale_revision` ("Reload to compare") if it differs. On the server this becomes a compare-and-set.
 - **Team ids** are `${eventId}:team1` / `:team2`; availability `team1|team2|either|unavailable` maps to teams by index in `allowedTeamIds`.
 - **Undo** uses inverse edits (organization) or assignment snapshots (lineup) with revision validation, so it never silently overwrites another leader.

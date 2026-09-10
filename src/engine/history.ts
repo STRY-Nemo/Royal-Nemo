@@ -19,17 +19,31 @@ export interface MemberHistory {
   unknown_count: number;
   no_show_count: number;
   withdrew_count: number;
-  /** True while fewer finalized events than the window size exist for the member. */
+  /** Events in the window counted from a lineup that is not finalized yet (imported or published). */
+  provisional_count: number;
+  /** True while fewer events than the window size exist for the member. */
   history_incomplete: boolean;
   /** Date since which the member has been waiting (last play, or tracking start). */
   waiting_since: string | null;
 }
 
-/** Starters in the last published revision of an event. */
+/** Starters in the last published revision of an event (falls back to the working lineup). */
 export function finalStarters(event: CanyonEvent): Assignment[] {
   const last = event.published_revisions[event.published_revisions.length - 1];
-  const source = last ? last.assignments : [];
+  const source = last ? last.assignments : event.assignments;
   return source.filter((a) => a.role === 'starter');
+}
+
+/**
+ * An event counts towards history when it is finalized, or when it already has a
+ * lineup (imported from the game screen, generated or published) and is not
+ * canceled. The second kind is provisional: starters count as plays and
+ * substitutes as waits until attendance is confirmed and the event finalized.
+ */
+export function countsTowardsHistory(event: CanyonEvent): boolean {
+  if (event.status === 'finalized') return true;
+  if (event.status === 'canceled') return false;
+  return finalStarters(event).length > 0;
 }
 
 function wasExplicitlyAvailable(event: CanyonEvent, memberId: MemberId): boolean {
@@ -38,22 +52,25 @@ function wasExplicitlyAvailable(event: CanyonEvent, memberId: MemberId): boolean
 }
 
 /**
- * Derives per-member Canyon history from finalized events only.
+ * Derives per-member Canyon history from finalized events, plus provisional
+ * records from earlier events that have a lineup but are not finalized yet
+ * (so next week's suggestions already know who started this week).
  *
  * Counts are always derived from unique records, never incremented, so
  * finalizing twice or correcting an outcome recalculates cleanly.
+ * `before` limits history to events dated strictly earlier (the week being planned).
  */
 export function computeHistory(
   events: CanyonEvent[],
   members: Member[],
-  options: { windowSize?: number } = {},
+  options: { windowSize?: number; before?: string } = {},
 ): Record<MemberId, MemberHistory> {
   const windowSize = options.windowSize ?? DEFAULT_WINDOW_SIZE;
   // Dedupe by id (last occurrence wins) so callers can pass overlapping lists safely.
   const unique = new Map<string, CanyonEvent>();
   for (const e of events) unique.set(e.id, e);
   const finalized = [...unique.values()]
-    .filter((e) => e.status === 'finalized')
+    .filter((e) => countsTowardsHistory(e) && (!options.before || e.date < options.before))
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id < b.id ? -1 : 1));
 
   const result: Record<MemberId, MemberHistory> = {};
@@ -73,6 +90,12 @@ export function computeHistory(
       if (outcome === 'no_show') return 'no_show';
       if (outcome === 'withdrew') return 'withdrew';
       const starter = finalStarters(event).some((a) => a.member_id === member.id);
+      if (event.status !== 'finalized') {
+        // Provisional: the lineup stands in for attendance until the match is confirmed.
+        if (starter) return 'played';
+        const onBench = event.assignments.some((a) => a.member_id === member.id && a.role === 'reserve');
+        return onBench || wasExplicitlyAvailable(event, member.id) ? 'bench' : 'none';
+      }
       if (starter && (outcome === null || outcome === 'unknown')) return 'unknown';
       if (wasExplicitlyAvailable(event, member.id) && !starter) return 'bench';
       if (outcome === 'unknown') return 'unknown';
@@ -94,8 +117,10 @@ export function computeHistory(
     let unknown = 0;
     let noShow = 0;
     let withdrew = 0;
+    let provisional = 0;
     for (const event of windowEvents) {
       const c = classify(event);
+      if (event.status !== 'finalized' && (c === 'played' || c === 'bench')) provisional++;
       if (c === 'played') played++;
       else if (c === 'bench') benches++;
       else if (c === 'unknown') unknown++;
@@ -114,6 +139,7 @@ export function computeHistory(
       unknown_count: unknown,
       no_show_count: noShow,
       withdrew_count: withdrew,
+      provisional_count: provisional,
       history_incomplete: windowEvents.length < windowSize,
       waiting_since: lastPlayed ?? member.tracking_start,
     };
@@ -134,6 +160,7 @@ export function emptyHistory(member: Member): MemberHistory {
     unknown_count: 0,
     no_show_count: 0,
     withdrew_count: 0,
+    provisional_count: 0,
     history_incomplete: true,
     waiting_since: member.tracking_start,
   };

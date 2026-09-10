@@ -3,7 +3,7 @@ import { useRouter } from '../store/router';
 import { fmtPower, useStore } from '../store/store';
 import { DemoBanner, EmptyState, EventTimes, Header, StatusBadge, StickyActions } from '../ui/common';
 import { CalendarIcon, ChevronRight, HistoryIcon, UndoIcon } from '../ui/icons';
-import { publishBlockers, starters, teamAveragePower, teamReserves, waitingList } from '../engine/lifecycle';
+import { previousEventWithAvailability, publishBlockers, starters, teamAveragePower, teamReserves, waitingList } from '../engine/lifecycle';
 import { ConfirmSheet, OrbitSpinner, useFeedback, useSingleFlight } from '../motion';
 import { BUNDLED_IMPORTS } from '../data/bundledImports';
 import { Art } from '../ui/Art';
@@ -15,6 +15,7 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
   const event = eventId ? eventById(eventId) : currentEvent;
   const [confirmGenerate, setConfirmGenerate] = useState(false);
   const [needAvailability, setNeedAvailability] = useState(false);
+  const [allLocked, setAllLocked] = useState(false);
   const [generating, setGenerating] = useState(false);
 
   const [generate, busy] = useSingleFlight(async () => {
@@ -25,11 +26,30 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
     const res = actions.generate(event.id);
     setGenerating(false);
     if (res.ok) {
-      toast({ kind: 'ok', text: 'Suggestions generated', action: { label: 'Undo', onClick: () => actions.undoAssignments(event.id) } });
+      const kept = event.assignments.filter((a) => a.role === 'starter' && a.locked).length;
+      toast({ kind: 'ok', text: kept ? `Suggestions generated · ${kept} locked starter${kept === 1 ? '' : 's'} kept` : 'Suggestions generated', action: { label: 'Undo', onClick: () => actions.undoAssignments(event.id) } });
       announce('Suggestions generated. Review the lineup.');
       router.navigate(`/canyon/review/${event.id}`);
     }
   });
+
+  const copyLastWeek = async () => {
+    if (!event) return;
+    const r = actions.carryOverAvailability(event.id);
+    if (r.ok) {
+      toast({ kind: 'ok', text: `${r.count ?? 0} answer${r.count === 1 ? '' : 's'} copied from last week · members can still change theirs`, action: { label: 'Undo', onClick: () => actions.undoAssignments(event.id) } });
+      announce(`${r.count ?? 0} availability answers copied.`);
+    }
+  };
+
+  const unlockAndRegenerate = async () => {
+    if (!event) return;
+    const r = actions.unlockAll(event.id);
+    if (r.ok) {
+      toast({ kind: 'ok', text: `${r.count ?? 0} lock${r.count === 1 ? '' : 's'} removed` });
+      await generate();
+    }
+  };
 
   const responses = useMemo(() => {
     if (!event) return { total: 0, team1: 0, team2: 0, either: 0, unavailable: 0 };
@@ -76,6 +96,11 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
   const blockers = publishBlockers(event);
   const eligible = responses.total - responses.unavailable;
   const hasStarters = event.assignments.some((a) => a.role === 'starter');
+  const capacity = event.teams.reduce((sum, t) => sum + t.capacity, 0);
+  const lockedStarters = event.assignments.filter((a) => a.role === 'starter' && a.locked).length;
+  const everythingLocked = lockedStarters >= capacity;
+  const previousWithAnswers = previousEventWithAvailability(event, state.events);
+  const nextWeek = state.events.filter((e) => e.date > event.date && (e.status === 'draft' || e.status === 'published')).sort((a, b) => (a.date < b.date ? -1 : 1))[0] ?? null;
   const reserveCount = waitingList(event).length;
   // Bundled team screen files for this date whose team has no starters yet.
   const pendingImports = BUNDLED_IMPORTS.filter((b) => b.event_date === event.date && event.teams[b.team - 1] && starters(event, event.teams[b.team - 1].id).length === 0);
@@ -213,6 +238,11 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
               <span>Suggestions need availability first. Ask members to set theirs, or record it for them below (you can mark everyone as Either in one tap to try the rotation).</span>
             </div>
           )}
+          {isLeader && responses.total === 0 && previousWithAnswers && event.status !== 'finalized' && event.status !== 'canceled' && (
+            <button type="button" className="btn secondary block" onClick={() => void copyLastWeek()}>
+              Copy answers from {previousWithAnswers.date}
+            </button>
+          )}
           {isLeader && (
             <button type="button" className="btn secondary block" onClick={() => router.navigate(`/canyon/collect/${event.id}`)}>
               Collect availability (1st / 2nd / can't per time)
@@ -308,7 +338,7 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
 
       {isLeader && event.status !== 'finalized' && event.status !== 'canceled' && (
         <StickyActions>
-          <button type="button" className="btn secondary" onClick={() => (eligible === 0 ? setNeedAvailability(true) : hasStarters ? generate() : setConfirmGenerate(true))} disabled={busy}>
+          <button type="button" className="btn secondary" onClick={() => (eligible === 0 ? setNeedAvailability(true) : everythingLocked ? setAllLocked(true) : hasStarters ? generate() : setConfirmGenerate(true))} disabled={busy}>
             {generating ? <OrbitSpinner label="Computing" /> : hasStarters ? 'Regenerate' : 'Generate suggestions'}
           </button>
           <button type="button" className="btn primary" onClick={() => router.navigate(`/canyon/review/${event.id}`)} disabled={!hasStarters}>
@@ -330,11 +360,38 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
         <p className="small muted">
           {responses.total === 0 ? 'No member has responded for this Friday, so there is nobody to place.' : `${responses.total} responded but all are unavailable.`} No response means unknown, not available. Members can set their own availability from Home, or you can record it for them, including everyone at once.
         </p>
+        {previousWithAnswers && responses.total === 0 && (
+          <button type="button" className="btn secondary block" onClick={() => { setNeedAvailability(false); void copyLastWeek(); }}>
+            Copy answers from {previousWithAnswers.date} instead
+          </button>
+        )}
+      </ConfirmSheet>
+
+      <ConfirmSheet
+        open={allLocked}
+        title="This week is set from the game screen"
+        confirmLabel="Unlock all and regenerate"
+        danger
+        onCancel={() => setAllLocked(false)}
+        onConfirm={() => {
+          setAllLocked(false);
+          void unlockAndRegenerate();
+        }}
+      >
+        <p className="small muted">
+          {lockedStarters} of {capacity} starters are locked (imported from the in-game team screen or locked by a leader), so suggestions have nothing they are allowed to change. This week's starters and substitutes already count towards next week's fairness.
+        </p>
+        {nextWeek && (
+          <button type="button" className="btn secondary block" onClick={() => { setAllLocked(false); router.navigate(`/canyon/${nextWeek.id}`); }}>
+            Plan next week ({nextWeek.date}) instead
+          </button>
+        )}
+        <p className="faint">Unlocking removes every lock on this week and re-ranks everyone by fairness. You can undo from the toast.</p>
       </ConfirmSheet>
 
       <ConfirmSheet open={confirmGenerate} title="Generate suggestions?" confirmLabel="Generate" onCancel={() => setConfirmGenerate(false)} onConfirm={() => { setConfirmGenerate(false); void generate(); }}>
         <p className="small muted">
-          Ranks {eligible} available player{eligible === 1 ? '' : 's'} by fewest recent plays, most weeks waited while available, longest since last played, then a saved tie-break. Fills both times jointly. Locks are kept.
+          Ranks {eligible} available player{eligible === 1 ? '' : 's'} by fewest recent plays (last week's imported or published lineup counts), most weeks waited while available, longest since last played, then a saved tie-break. Fills both times jointly. Locks are kept.
         </p>
       </ConfirmSheet>
     </>

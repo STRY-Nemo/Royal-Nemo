@@ -179,7 +179,8 @@ export function currentLocks(event: CanyonEvent): LockRequest[] {
 }
 
 export function suggest(event: CanyonEvent, members: Member[], allEvents: CanyonEvent[]): SuggestResult {
-  const history = computeHistory(allEvents.filter((e) => e.id !== event.id), members);
+  // Only earlier weeks count: this week's own lineup and later drafts never influence it.
+  const history = computeHistory(allEvents.filter((e) => e.id !== event.id), members, { before: event.date });
   return generateSuggestions({ event, members, history, locks: currentLocks(event) });
 }
 
@@ -295,6 +296,51 @@ export function unlockMember(event: CanyonEvent, memberId: MemberId, ctx: Contex
     event: { ...event, assignments: replaceAssignment(event.assignments, next), revision: event.revision + 1 },
     audit: [audit(ctx, event.id, 'assignment.unlock', existing, next)],
   };
+}
+
+/** Removes every lock (starters and substitutes) so Generate can reshuffle the whole week; assignments stay until regenerated. */
+export function unlockAll(event: CanyonEvent, ctx: Context, expectedRevision?: number): Result & { count: number } {
+  assertEditable(event);
+  assertRevision(event, expectedRevision);
+  const locked = event.assignments.filter((a) => a.locked);
+  if (locked.length === 0) throw new LifecycleError('not_locked', 'Nothing is locked.');
+  const assignments = event.assignments.map((a) => (a.locked ? { ...a, locked: false, lock_reason: undefined, locked_by: undefined, locked_at: undefined, reason: 'Unlocked by leader; kept until regenerated', revision: event.revision + 1 } : a));
+  return {
+    event: { ...event, assignments, revision: event.revision + 1 },
+    audit: [audit(ctx, event.id, 'assignment.unlock_all', locked.map((a) => a.member_id), null)],
+    count: locked.length,
+  };
+}
+
+/** The most recent earlier event that has availability answers, or null. */
+export function previousEventWithAvailability(event: CanyonEvent, allEvents: CanyonEvent[]): CanyonEvent | null {
+  return (
+    allEvents
+      .filter((e) => e.id !== event.id && e.date < event.date && e.status !== 'canceled' && Object.keys(e.availability).length > 0)
+      .sort((a, b) => (a.date < b.date ? 1 : -1))[0] ?? null
+  );
+}
+
+/**
+ * Copies availability answers from an earlier week for members who have not
+ * answered this week yet, as a starting point leaders can refine. Members who
+ * were unavailable last week are copied too, so they are not silently assumed ready.
+ */
+export function carryOverAvailability(event: CanyonEvent, from: CanyonEvent, members: Member[], ctx: Context, recordedBy: MemberId | 'self'): Result & { count: number } {
+  assertEditable(event);
+  let next = event;
+  const entries: AuditEntry[] = [];
+  let count = 0;
+  for (const m of members) {
+    if (!m.active || next.availability[m.id]) continue;
+    const prev = from.availability[m.id];
+    if (!prev) continue;
+    const r = setAvailability(next, m.id, prev.choice, ctx, recordedBy, prev.slots);
+    next = r.event;
+    entries.push(...r.audit);
+    count++;
+  }
+  return { event: next, audit: entries, count };
 }
 
 /** Moves a member to a team's starters if there is room, to a team's substitutes, or to the waiting list. */

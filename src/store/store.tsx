@@ -154,6 +154,10 @@ export interface StoreValue {
     setSession: (session: Session) => void;
     setAvailability: (eventId: string, memberId: MemberId, choice: AvailabilityChoice, slots?: SlotPriorities) => ActionResult;
     fillMissingAvailability: (eventId: string, choice: AvailabilityChoice) => ActionResult & { count?: number };
+    /** Copies last week's answers for members who have not answered this week. */
+    carryOverAvailability: (eventId: string) => ActionResult & { count?: number };
+    /** Removes every lock on the event so Generate can reshuffle it. */
+    unlockAll: (eventId: string) => ActionResult & { count?: number };
     generate: (eventId: string) => ActionResult;
     importLineup: (eventId: string, records: LineupRecord[], source?: string) => ActionResult;
     lock: (eventId: string, memberId: MemberId, teamId: TeamId, reason: string) => ActionResult;
@@ -573,6 +577,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           },
           undefined,
           (a) => a.fillAvailability(eventId, choice),
+        );
+        return res.ok ? { ok: true, count } : res;
+      },
+      carryOverAvailability: (eventId) => {
+        const denied = requireLeader();
+        if (denied) return denied;
+        const recorder = stateRef.current.session.member_id ?? 'leader-demo';
+        let count = 0;
+        const res = runEvent(
+          eventId,
+          (e) => {
+            const from = L.previousEventWithAvailability(e, stateRef.current.events);
+            if (!from) throw new L.LifecycleError('no_previous', 'No earlier week has availability answers to copy.');
+            const r = L.carryOverAvailability(e, from, stateRef.current.members, ctx(), recorder);
+            count = r.count;
+            return r;
+          },
+          { pushUndo: 'Copy availability' },
+          (a) => a.carryOverAvailability(eventId),
+        );
+        return res.ok ? { ok: true, count } : res;
+      },
+      unlockAll: (eventId) => {
+        let count = 0;
+        const res = runEvent(
+          eventId,
+          (e) => {
+            const r = L.unlockAll(e, ctx(), e.revision);
+            count = r.count;
+            return r;
+          },
+          { pushUndo: 'Unlock all' },
+          (a, before) => a.unlockAll(eventId, before.revision),
         );
         return res.ok ? { ok: true, count } : res;
       },

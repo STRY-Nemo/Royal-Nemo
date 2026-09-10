@@ -146,7 +146,7 @@ describe('generateSuggestions', () => {
   it('ranks by fewer plays, then more benches, then longest since last play, then seeded lottery', () => {
     const e = withAvailability(draft(), (_, i) => (i < 4 ? 'either' : null));
     const [a, b, c, d] = members;
-    const base = { eligible_benches: 0, last_played_at: null, lifetime_played: 0, lifetime_benches: 0, events_in_window: 8, unknown_count: 0, no_show_count: 0, withdrew_count: 0, history_incomplete: false, waiting_since: null };
+    const base = { eligible_benches: 0, last_played_at: null, lifetime_played: 0, lifetime_benches: 0, events_in_window: 8, unknown_count: 0, no_show_count: 0, withdrew_count: 0, provisional_count: 0, history_incomplete: false, waiting_since: null };
     const history = {
       [a.id]: { ...base, member_id: a.id, played_count: 2 },
       [b.id]: { ...base, member_id: b.id, played_count: 1, eligible_benches: 1, last_played_at: '2026-08-28' },
@@ -184,12 +184,17 @@ describe('rotation over five weeks', () => {
 });
 
 describe('lifecycle invariants', () => {
-  it('publish does not create plays; finalizing twice does not double count; corrections recalculate', () => {
+  it('a published lineup counts provisionally until finalized; finalizing twice does not double count; corrections recalculate', () => {
     let e = withAvailability(draft(), () => 'either');
     e = applySuggestions(e, members, [], ctx).event;
     e = publishEvent(e, ctx).event;
-    expect(computeHistory([e], members)[members[0].id].lifetime_played).toBe(0);
     const first = starters(e, team1(e))[0].member_id;
+    // Provisional: the published starters already count as plays for the following weeks…
+    const provisional = computeHistory([e], members)[first];
+    expect(provisional.played_count).toBe(1);
+    expect(provisional.provisional_count).toBe(1);
+    // …but the week itself never sees its own lineup, and a canceled week counts nothing.
+    expect(computeHistory([e], members, { before: e.date })[first].played_count).toBe(0);
     e = recordAttendance(e, first, 'played', ctx).event;
     e = finalizeEvent(e, ctx).event;
     const again = finalizeEvent(e, ctx);

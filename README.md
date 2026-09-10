@@ -46,7 +46,7 @@ The repository was empty apart from a README, so a small maintained stack was ch
 | --- | --- |
 | `src/domain/types.ts` | Shared data model: Member, CanyonEvent, Team, Availability, Assignment, Attendance, Responsibility, audit entries |
 | `src/engine/suggest.ts` | Deterministic rotation: lexicographic fairness ranking, persisted seeded lottery, min-cost max-flow over both team times, flexible-player power balancing, per-candidate explanations |
-| `src/engine/history.ts` | Rolling 8-finalized-event window derived from unique attendance records (never counters) |
+| `src/engine/history.ts` | Rolling 8-week window derived from unique attendance records (never counters); earlier weeks with a lineup but no final attendance count provisionally |
 | `src/engine/lifecycle.ts` | Drafts, availability, locks, swaps, moves, publish revisions, confirmations, attendance, idempotent finalization, cancellation, schedule edits, next-week drafts |
 | `src/engine/organization.ts` | Responsibility slot edits, moves, atomic swaps, undo inverses, task management, source-name mapping suggestions |
 | `src/engine/recurrence.ts` | Friday derivation, IANA timezone wall-clock conversion (DST-safe), Apocalypse Time (game clock, `Etc/GMT+2`), device-local display helpers |
@@ -68,7 +68,8 @@ The repository was empty apart from a README, so a small maintained stack was ch
 ## Rotation rules implemented
 
 - Eligible = active member with an explicit availability for that team's time. No response means unknown, not available. One team per member per week.
-- Rank: fewest plays in the last 8 finalized events, then most weeks benched while available, then longest since last played (never recorded first), then a persisted seeded lottery. The seed is stored on the event so tapping Generate twice never re-rolls ties.
+- Rank: fewest plays in the last 8 weeks, then most weeks benched while available, then longest since last played (never recorded first), then a persisted seeded lottery. The seed is stored on the event so tapping Generate twice never re-rolls ties. Only earlier weeks count: a week that already has a lineup (imported from the game screen, generated or published) counts provisionally, starters as plays and substitutes or ready players as waits, until attendance is confirmed and the week finalized, so next week's suggestions rotate this week's starters out without waiting for the match. A week never sees its own lineup, and later drafts never influence it.
+- When every starter slot is locked (a fully imported week), Regenerate explains that there is nothing it may change and offers "Plan next week" or "Unlock all and regenerate". A new week with no answers offers "Copy answers from <last week>" so planning can start from last week's readiness; members can still change theirs.
 - Assignment fills both times jointly with min-cost max-flow (max filled slots first, then the fairest set). Flexible "either" players are never greedily stranded.
 - Arena power only balances which team a selected flexible player joins. It is never admission ranking.
 - Locks require a reason, are audited, and never bypass capacity, uniqueness or availability. Conflicting locks block generation with actionable errors.
