@@ -1,3 +1,4 @@
+import { exitGuest, guestEnabled } from './guest';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { CanyonEvent, EventStatus, Member, MemberId, Team } from '../domain/types';
 import { deviceTimeZone, formatInZone, isApocalypseTime, isValidTimeZone, timeZoneLabel, zonedWallTimeToUtc, zoneAbbreviation } from '../engine/recurrence';
@@ -134,6 +135,19 @@ export function DemoBanner() {
       );
     }
     return null;
+  }
+  if (guestEnabled()) {
+    return (
+      <div className="demo-banner" role="note">
+        <span aria-hidden="true">👋</span>
+        <span className="grow">
+          <strong>Guest tour.</strong> Sample data, leader view. Tap anything; nothing is saved or shared.
+        </span>
+        <button type="button" className="btn ghost small" onClick={exitGuest}>
+          Exit tour
+        </button>
+      </div>
+    );
   }
   return (
     <div className="demo-banner" role="note">

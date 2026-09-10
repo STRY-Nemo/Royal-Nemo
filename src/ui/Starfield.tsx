@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { useEffectiveMotion } from '../motion';
 import { useStore } from '../store/store';
+import { DEFAULT_THEME, themeBackground, useTheme } from './theme';
 
 /** Optional full-screen scene from public/art/app-background.jpg, dimmed so cards stay readable. */
 function Backdrop() {
-  const [missing, setMissing] = useState(false);
-  if (missing) return null;
-  return <img src={`${import.meta.env.BASE_URL}art/app-background.jpg`} alt="" className="app-backdrop" aria-hidden="true" draggable={false} onError={() => setMissing(true)} />;
+  const theme = useTheme();
+  // Missing theme artwork falls back to the original sky; if that is missing too, nothing renders.
+  const [failed, setFailed] = useState<string[]>([]);
+  const wanted = themeBackground(theme);
+  const fallback = themeBackground(DEFAULT_THEME);
+  const src = failed.includes(wanted) ? fallback : wanted;
+  if (failed.includes(src)) return null;
+  return <img key={src} src={src} alt="" className="app-backdrop" aria-hidden="true" draggable={false} onError={() => setFailed((f) => [...f, src])} />;
 }
 
 /** Slow celestial starfield behind the app. Static under reduced motion, hidden when motion is off. */

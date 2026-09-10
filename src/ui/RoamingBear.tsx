@@ -4,10 +4,11 @@ import { haptic, useEffectiveMotion, useFeedback } from '../motion';
 import { useRouter } from '../store/router';
 import { useStore } from '../store/store';
 import { BearSprite } from './Bear';
+import { pickReaction, REACTION_MS } from './bearReactions';
+import { playSfx } from './sfx';
 
 const KEY = 'stry-roaming-bear';
 const SIZE = 72;
-const QUIPS = ['Yum!', 'More?', 'Rawr!', 'Thanks!', 'Mmm honey', 'Strong!', 'Nom nom'];
 
 export function roamingBearEnabled(): boolean {
   try {
@@ -42,6 +43,8 @@ export function RoamingBear() {
   const [walking, setWalking] = useState(false);
   const [bounce, setBounce] = useState(false);
   const [quip, setQuip] = useState<string | null>(null);
+  const [reaction, setReaction] = useState<string | null>(null);
+  const [emojis, setEmojis] = useState<{ id: number; x: number; emoji: string; cls?: string }[]>([]);
   const [lift, setLift] = useState(0);
   const target = useRef(0.7);
   const pos = useRef(0.7);
@@ -106,8 +109,17 @@ export function RoamingBear() {
     haptic(state.settings.haptics, res.evolved ? [20, 40, 60] : 8);
     setBounce(true);
     window.setTimeout(() => setBounce(false), 450);
-    setQuip(res.evolved && res.stage ? `Evolved: ${res.stage.name}!` : `+1 ${QUIPS[Math.floor(Math.random() * QUIPS.length)]}`);
+    const r = pickReaction();
+    if (r.sound) playSfx(r.sound);
+    setQuip(res.evolved && res.stage ? `Evolved: ${res.stage.name}!` : `+1 ${r.quip}`);
     window.setTimeout(() => setQuip(null), 1100);
+    setReaction(null);
+    window.requestAnimationFrame(() => setReaction(`react-${r.anim}`));
+    window.setTimeout(() => setReaction((cur) => (cur === `react-${r.anim}` ? null : cur)), REACTION_MS);
+    const stamp = Date.now();
+    const batch = r.emojis.map((emoji, i) => ({ id: stamp + i, x: 30 + Math.random() * 40, emoji, cls: r.emojiClass }));
+    setEmojis((e) => [...e, ...batch]);
+    window.setTimeout(() => setEmojis((e) => e.filter((q) => !batch.some((b) => b.id === q.id))), 1000);
     if (res.evolved) burst();
     // Excited bear runs somewhere new.
     target.current = Math.random();
@@ -125,8 +137,13 @@ export function RoamingBear() {
       title="Tap to feed the STRY Bear"
     >
       <span className="roaming-bear-inner" style={{ transform: dir < 0 ? 'scaleX(-1)' : undefined }}>
-        <BearSprite stage={stage} size={SIZE} bounce={bounce} />
+        <BearSprite stage={stage} size={SIZE} bounce={bounce && !reaction} className={reaction ?? undefined} />
       </span>
+      {emojis.map((p, i) => (
+        <span key={p.id} className={`bear-emoji${p.cls ? ` ${p.cls}` : ''}`} style={{ left: `${p.x}%`, animationDelay: `${i * 90}ms` }} aria-hidden="true">
+          {p.emoji}
+        </span>
+      ))}
       {quip && <span className="roaming-quip">{quip}</span>}
       <span className="roaming-count">{mascot.feeds}</span>
     </button>

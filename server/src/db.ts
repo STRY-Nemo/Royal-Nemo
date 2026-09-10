@@ -133,13 +133,15 @@ interface SuggestionRow {
   body: string;
   status: Suggestion['status'];
   votes: string;
+  activity: string | null;
   leader_reply: string | null;
   created_at: string;
   updated_at: string;
 }
 
 function rowToSuggestion(r: SuggestionRow): Suggestion {
-  return { ...r, votes: JSON.parse(r.votes || '[]') as string[] };
+  const { activity, ...rest } = r;
+  return { ...rest, votes: JSON.parse(r.votes || '[]') as string[], activity: JSON.parse(activity || '[]') as Suggestion['activity'] };
 }
 
 export async function loadSuggestions(env: Env): Promise<Suggestion[]> {
@@ -155,9 +157,9 @@ export async function loadSuggestion(env: Env, id: string): Promise<Suggestion> 
 
 export async function saveSuggestion(env: Env, s: Suggestion): Promise<void> {
   await env.DB.prepare(
-    'INSERT INTO suggestions (id, account_id, member_id, author_name, title, body, status, votes, leader_reply, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET title = excluded.title, body = excluded.body, status = excluded.status, votes = excluded.votes, leader_reply = excluded.leader_reply, updated_at = excluded.updated_at',
+    'INSERT INTO suggestions (id, account_id, member_id, author_name, title, body, status, votes, leader_reply, activity, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET title = excluded.title, body = excluded.body, status = excluded.status, votes = excluded.votes, leader_reply = excluded.leader_reply, activity = excluded.activity, updated_at = excluded.updated_at',
   )
-    .bind(s.id, s.account_id, s.member_id, s.author_name, s.title, s.body, s.status, JSON.stringify(s.votes), s.leader_reply, s.created_at, s.updated_at)
+    .bind(s.id, s.account_id, s.member_id, s.author_name, s.title, s.body, s.status, JSON.stringify(s.votes), s.leader_reply, JSON.stringify(s.activity ?? []), s.created_at, s.updated_at)
     .run();
 }
 

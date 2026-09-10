@@ -44,7 +44,10 @@ Open the app (https://stry-nemo.github.io/Royal-Nemo/), tap **Create account**, 
 If the code is refused: the Worker only receives the secret when the **Deploy API to Cloudflare** workflow runs, so after changing `OWNER_SETUP_CODE` in GitHub re-run that workflow (Actions → Deploy API to Cloudflare → Run workflow). The comparison ignores capitalisation and surrounding spaces.
 
 ### 7. Invite the alliance
-**Settings → Alliance accounts & join link → Create the alliance join link**, then **Share join link** (the phone's share sheet opens with a ready-made message). One link serves everyone: it opens the app on a join form where a member picks their in-game name, gets a suggested username, chooses a PIN and taps **Join the alliance**. The link allows 200 sign-ups over 90 days; every invite code doubles as a link (`…/#/join/CODE`) and can be revoked from the same screen. Leaders can verify member links, change roles, reset a forgotten PIN, or disable accounts there too. A roster name can only be claimed once: a second sign-up as the same player is refused and told to sign in or ask a leader.
+**Settings → Alliance accounts & join link → Create the alliance join link**, then **Share join link** (the phone's share sheet opens with a ready-made message). One link serves everyone: it opens the app on a join form where a member picks their in-game name, gets a suggested username, chooses a PIN and taps **Join the alliance**. The link allows 200 sign-ups over 90 days; every invite code doubles as a link (`…/#/join/CODE`) and can be revoked from the same screen. For your leadership team, **Create the leader join link** on the same screen: pick how many leaders can use it, share it privately, and revoke it once they are in. Leaders can verify member links, change roles, reset a forgotten PIN, or disable accounts there too. A roster name can only be claimed once: a second sign-up as the same player is refused and told to sign in or ask a leader.
+
+### 8. Show it off
+Settings → **Show the app to others** → **Share guest tour link** (`…/#/guest`). Guests get every screen with sample data and the leader view, on their own phone only; nothing they do reaches the alliance data.
 
 ## Everyday operation
 

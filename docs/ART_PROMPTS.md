@@ -48,3 +48,17 @@ Used at the top of a screen as a wide strip with rounded corners.
 ## Full-screen background
 
 - `app-background.jpg` — portrait 1080×1920 (or 9:16), JPEG, dark. Rendered behind every screen at 55% opacity with a soft fade toward the bottom; cards blur what is behind them. Keep the top third the most detailed (sky, moon, star) and the lower two-thirds dark and quiet so lists stay readable.
+
+## Theme backgrounds (portrait JPG, `public/art/themes/<id>.jpg`)
+
+The Theme button on Home (and Settings → Theme) lets each person pick a background and matching colours. The ten "STRY Mobile Wallpapers" are in place (941×1672, JPG ~300 KB each): `rose-nebula`, `jedi-sanctuary`, `sith-eclipse`, `leviathan-depths`, `solar-phoenix`, `frost-crown`, `neon-ronin`, `emerald-dream`, `astral-dunes`, `event-horizon`, plus the original `app-background.jpg` as Canyon Night.
+
+To add another theme: save a portrait JPG (9:16 to 9:19.5, under ~450 KB) as `public/art/themes/<id>.jpg`, add a row to `THEMES` in `src/ui/theme.ts` (id, label, blurb, two swatch colours) and a `[data-theme='<id>']` block in `src/styles/tokens.css` with its colours (background, card, raised, border, primary, focus). Keep the top third of the image quieter, since headers sit there, and avoid pure white areas because cards are see-through.
+
+## Sound effects (`public/sfx/`)
+
+| File | Used by |
+| --- | --- |
+| `sfx/fart.mp3` | The bear's "toot" reaction (from Nemo's Flappy Adventure). Until the file exists a synthesized wet toot plays. Keep it under 100 KB, mono, about half a second. |
+
+Settings → Motion has a "Bear sound effects" switch (per phone).

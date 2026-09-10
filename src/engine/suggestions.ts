@@ -2,7 +2,7 @@
  * Suggestions / feature requests. Pure validation and edits shared by the
  * client (demo mode, optimistic updates) and the server (authoritative).
  */
-import type { Suggestion, SuggestionStatus } from '../domain/types';
+import type { Suggestion, SuggestionActivity, SuggestionStatus } from '../domain/types';
 import { LifecycleError } from './lifecycle';
 
 export const SUGGESTION_STATUSES: SuggestionStatus[] = ['new', 'planned', 'done', 'declined'];
@@ -24,7 +24,8 @@ export function createSuggestion(existing: Suggestion[], input: { id: string; ac
   const { title, body } = validateSuggestionText(input.title, input.body);
   const open = existing.filter((s) => s.account_id === input.account_id && (s.status === 'new' || s.status === 'planned')).length;
   if (open >= OPEN_PER_PERSON) throw new LifecycleError('too_many', `You already have ${OPEN_PER_PERSON} open ideas. Wait for a leader to review them.`);
-  return { id: input.id, account_id: input.account_id, member_id: input.member_id, author_name: input.author_name, title, body, status: 'new', votes: [], leader_reply: null, created_at: input.now, updated_at: input.now };
+  const created: SuggestionActivity = { at: input.now, by: input.author_name, by_account: input.account_id, kind: 'created' };
+  return { id: input.id, account_id: input.account_id, member_id: input.member_id, author_name: input.author_name, title, body, status: 'new', votes: [], leader_reply: null, activity: [created], created_at: input.now, updated_at: input.now };
 }
 
 export function toggleVote(s: Suggestion, voter: string, now: string): Suggestion {
@@ -32,10 +33,20 @@ export function toggleVote(s: Suggestion, voter: string, now: string): Suggestio
   return { ...s, votes, updated_at: now };
 }
 
-export function setSuggestionStatus(s: Suggestion, status: SuggestionStatus, reply: string | null, now: string): Suggestion {
+/** Leader triage. `by` is recorded in the idea's activity so everyone can see who set the status or replied. */
+export function setSuggestionStatus(s: Suggestion, status: SuggestionStatus, reply: string | null, now: string, by: { id: string; name: string } = { id: 'leader', name: 'A leader' }): Suggestion {
   if (!SUGGESTION_STATUSES.includes(status)) throw new LifecycleError('bad_status', 'Unknown status.');
   const r = reply === null ? s.leader_reply : reply.trim().slice(0, BODY_MAX) || null;
-  return { ...s, status, leader_reply: r, updated_at: now };
+  const activity = [...(s.activity ?? [])];
+  if (status !== s.status) activity.push({ at: now, by: by.name, by_account: by.id, kind: 'status', status });
+  if (r !== s.leader_reply && r) activity.push({ at: now, by: by.name, by_account: by.id, kind: 'reply', reply: r });
+  return { ...s, status, leader_reply: r, activity, updated_at: now };
+}
+
+/** Who last replied to an idea, or null when the reply predates activity tracking. */
+export function lastReplier(s: Suggestion): SuggestionActivity | null {
+  const replies = (s.activity ?? []).filter((a) => a.kind === 'reply');
+  return replies[replies.length - 1] ?? null;
 }
 
 /** Open first, then most votes, then newest. */

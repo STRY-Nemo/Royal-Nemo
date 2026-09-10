@@ -208,8 +208,20 @@ export interface Suggestion {
   /** Account ids that upvoted. */
   votes: string[];
   leader_reply: string | null;
+  /** Who did what, oldest first: posting, status changes and replies. */
+  activity?: SuggestionActivity[];
   created_at: string;
   updated_at: string;
+}
+
+export interface SuggestionActivity {
+  at: string;
+  /** Display name of the person (in-game name when linked, else username). */
+  by: string;
+  by_account: string;
+  kind: 'created' | 'status' | 'reply';
+  status?: SuggestionStatus;
+  reply?: string;
 }
 
 export type MotionPreference = 'system' | 'full' | 'reduced' | 'off';

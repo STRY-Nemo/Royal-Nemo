@@ -190,7 +190,7 @@ describe('STRY API', () => {
     expect(state.body.events).toHaveLength(2);
   });
 
-  it('imports an in-game team screen into the next draft: leaders only, validated, locked', async () => {
+  it('imports an in-game team screen into the next draft: leaders only, validated, editable', async () => {
     const state = await api<{ events: { id: string; date: string; status: string; revision: number; timezone: string | null; teams: { id: string }[] }[] }>('GET', '/state', undefined, leaderToken);
     const next = state.body.events.find((e) => e.status === 'draft')!;
     const row = (username: string, extra: Record<string, unknown>) => ({ username, team: 2, starter: false, substitute: false, ready: false, declined: false, other_team: null, event_date: next.date, ...extra });
@@ -215,7 +215,7 @@ describe('STRY API', () => {
     expect(ok.body.event.timezone).toBe(next.timezone);
     const team2 = next.teams[1].id;
     expect(ok.body.event.assignments.filter((a) => a.role === 'starter' && a.team_id === team2)).toHaveLength(2);
-    expect(ok.body.event.assignments.every((a) => a.locked && a.lock_reason === 'In-game Team 2 lineup (Team2.xlsx)')).toBe(true);
+    expect(ok.body.event.assignments.every((a) => !a.locked)).toBe(true);
     expect(ok.body.event.availability[memberId].choice).toBe('team2');
     expect(ok.body.event.availability['stry-024'].choice).toBe('team1');
   });
@@ -286,8 +286,14 @@ describe('STRY API', () => {
     expect(vote.body.suggestion.votes).toHaveLength(1);
     expect((await api<{ suggestion: { votes: string[] } }>('POST', `/suggestions/${id}/vote`, undefined, leaderToken)).body.suggestion.votes).toHaveLength(0);
     expect((await api('POST', `/suggestions/${id}/status`, { status: 'planned', reply: 'Next week' }, memberToken)).status).toBe(403);
-    const triaged = await api<{ suggestion: { status: string; leader_reply: string } }>('POST', `/suggestions/${id}/status`, { status: 'planned', reply: 'Next week' }, leaderToken);
+    const triaged = await api<{ suggestion: { status: string; leader_reply: string; activity: { kind: string; by: string; reply?: string }[] } }>('POST', `/suggestions/${id}/status`, { status: 'planned', reply: 'Next week' }, leaderToken);
     expect(triaged.body.suggestion).toMatchObject({ status: 'planned', leader_reply: 'Next week' });
+    // The activity trail says who set the status and who replied (the leader's in-game name).
+    expect(triaged.body.suggestion.activity.map((a) => a.kind)).toEqual(['created', 'status', 'reply']);
+    const meNow = await api<{ account: { member_id: string | null; username: string } }>('GET', '/me', undefined, leaderToken);
+    const leaderState = await api<{ members: { id: string; username: string }[] }>('GET', '/state', undefined, leaderToken);
+    const expectedName = leaderState.body.members.find((m) => m.id === meNow.body.account.member_id)?.username ?? meNow.body.account.username;
+    expect(triaged.body.suggestion.activity[2]).toMatchObject({ by: expectedName, reply: 'Next week' });
     const state = await api<{ suggestions: { id: string }[] }>('GET', '/state', undefined, memberToken);
     expect(state.body.suggestions.some((s) => s.id === id)).toBe(true);
     expect((await api('GET', '/suggestions/export')).status).toBe(404);
@@ -365,6 +371,39 @@ describe('STRY API', () => {
     expect((await api('POST', `/accounts/${reg.body.account.id}`, { disabled: true }, leaderToken)).status).toBe(200);
     // A disabled account no longer holds the claim.
     expect((await api<{ roster: { id: string; taken: boolean }[] }>('GET', '/roster')).body.roster.find((m) => m.id === free.id)!.taken).toBe(false);
+  });
+
+  it('copies last week\'s availability into the next draft and unlocks a whole week', async () => {
+    const state = await api<{ events: { id: string; date: string; status: string; availability: Record<string, unknown>; teams: { id: string }[] }[]; members: { id: string }[] }>('GET', '/state', undefined, leaderToken);
+    const from = [...state.body.events].sort((a, b) => Object.keys(b.availability).length - Object.keys(a.availability).length)[0];
+    expect(Object.keys(from.availability).length).toBeGreaterThan(0);
+    await api('POST', '/events/upcoming', { weeks: 4 }, leaderToken);
+    const after = await api<{ events: { id: string; date: string; status: string; availability: Record<string, unknown>; teams: { id: string }[] }[] }>('GET', '/state', undefined, leaderToken);
+    const next = after.body.events.filter((e) => e.date > from.date && e.status === 'draft').sort((a, b) => (a.date < b.date ? -1 : 1))[0];
+    expect(next).toBeDefined();
+    expect((await api('POST', `/events/${next.id}/availability/carry`, {}, memberToken)).status).toBe(403);
+    const carry = await api<{ count: number; event: { availability: Record<string, unknown> } }>('POST', `/events/${next.id}/availability/carry`, {}, leaderToken);
+    expect(carry.status).toBe(200);
+    expect(carry.body.count).toBeGreaterThan(0);
+    expect(Object.keys(carry.body.event.availability).length).toBeGreaterThanOrEqual(carry.body.count);
+    // Copying again changes nothing (everyone who could be copied already has an answer).
+    expect((await api<{ count: number }>('POST', `/events/${next.id}/availability/carry`, {}, leaderToken)).body.count).toBe(0);
+    // Unlock-all: clear whatever an earlier import locked, then a second call finds nothing → 422.
+    const clear = await api('POST', `/events/${next.id}/unlock-all`, {}, leaderToken);
+    expect([200, 422]).toContain(clear.status);
+    expect((await api('POST', `/events/${next.id}/unlock-all`, {}, leaderToken)).status).toBe(422);
+    expect((await api('POST', `/events/${next.id}/unlock-all`, {}, memberToken)).status).toBe(403);
+    const someone = Object.keys(carry.body.event.availability)[0];
+    const lock = await api<{ event: { revision: number } }>('POST', `/events/${next.id}/lock`, { member_id: someone, team_id: next.teams[0].id, reason: 'anchor' }, leaderToken);
+    if (lock.status !== 200) {
+      // The copied answer may not allow team 1; set it explicitly and lock again.
+      await api('POST', `/events/${next.id}/availability`, { member_id: someone, choice: 'either' }, leaderToken);
+      expect((await api('POST', `/events/${next.id}/lock`, { member_id: someone, team_id: next.teams[0].id, reason: 'anchor' }, leaderToken)).status).toBe(200);
+    }
+    const unlocked = await api<{ count: number; event: { assignments: { locked: boolean }[] } }>('POST', `/events/${next.id}/unlock-all`, {}, leaderToken);
+    expect(unlocked.status).toBe(200);
+    expect(unlocked.body.count).toBe(1);
+    expect(unlocked.body.event.assignments.some((a) => a.locked)).toBe(false);
   });
 
   it('manages accounts: last leader cannot demote themselves; disabled accounts lose sessions', async () => {

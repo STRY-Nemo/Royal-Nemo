@@ -169,7 +169,7 @@ function reliabilityNote(h: MemberHistory): string | null {
 }
 
 function historyPhrase(h: MemberHistory): string {
-  const plays = `${h.played_count} play${h.played_count === 1 ? '' : 's'} in last ${h.events_in_window} finalized`;
+  const plays = `${h.played_count} play${h.played_count === 1 ? '' : 's'} in last ${h.events_in_window} week${h.events_in_window === 1 ? '' : 's'}${h.provisional_count ? ` (${h.provisional_count} from ${h.provisional_count === 1 ? 'a lineup' : 'lineups'} not finalized yet)` : ''}`;
   const bench = h.eligible_benches ? `, benched ${h.eligible_benches}× while available` : '';
   const last = h.last_played_at ? `, last played ${h.last_played_at}` : ', never recorded';
   const incomplete = h.history_incomplete ? ' · history incomplete' : '';
@@ -433,7 +433,7 @@ export function generateSuggestions(input: SuggestInput): SuggestResult {
   }
   const incomplete = views.filter((v) => v.history.history_incomplete).length;
   if (incomplete > 0) {
-    warnings.push(`${incomplete} candidate${incomplete === 1 ? ' has' : 's have'} incomplete Canyon history (fewer than 8 finalized events tracked).`);
+    warnings.push(`${incomplete} candidate${incomplete === 1 ? ' has' : 's have'} incomplete Canyon history (fewer than 8 weeks tracked).`);
   }
 
   return {
