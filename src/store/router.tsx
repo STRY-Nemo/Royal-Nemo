@@ -22,6 +22,16 @@ function parse(hash: string): Route {
   return { path: '/' + segments.join('/') + (queryPart ? `?${queryPart}` : ''), segments, query: new URLSearchParams(queryPart), tab };
 }
 
+/**
+ * Whether a route lives inside its tab. Pages such as the den (`/bear`) and
+ * Settings are reached from Home but are not part of it, so the Home tab must
+ * not "remember" them: tapping Home always returns to the overview.
+ */
+export function belongsToTab(route: Route): boolean {
+  const first = route.segments[0];
+  return route.tab === 'home' ? first === undefined || first === 'home' : first === route.tab;
+}
+
 interface RouterValue {
   route: Route;
   navigate: (path: string, opts?: { replace?: boolean }) => void;
@@ -42,7 +52,7 @@ export function RouterProvider({ children }: { children: ReactNode }) {
       scrollPositions.current.set(route.path, window.scrollY);
       const next = parse(window.location.hash);
       setRoute(next);
-      lastPerTab.current[next.tab] = next.path;
+      if (belongsToTab(next)) lastPerTab.current[next.tab] = next.path;
       requestAnimationFrame(() => {
         const y = scrollPositions.current.get(next.path) ?? 0;
         window.scrollTo({ top: y, behavior: 'auto' });
@@ -80,9 +90,11 @@ export function RouterProvider({ children }: { children: ReactNode }) {
 
   const switchTab = useCallback(
     (tab: Tab) => {
-      navigate(lastPerTab.current[tab] ?? `/${tab}`);
+      // Tapping the tab you are already on goes to its root, like native phone apps.
+      if (route.tab === tab) navigate(`/${tab}`);
+      else navigate(lastPerTab.current[tab] ?? `/${tab}`);
     },
-    [navigate],
+    [navigate, route.tab],
   );
 
   const value = useMemo(() => ({ route, navigate, back, switchTab }), [route, navigate, back, switchTab]);

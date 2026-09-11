@@ -81,3 +81,8 @@ Open Settings (gear icon) → choose a member and the Leader role. Canyon → Ev
 - Availability for team-time changes is cleared (as spec requires) but members are not notified; there is no reminder automation by design.
 - The Members list origin filter is cohort provenance only, per spec; it never excludes anyone from selection.
 - Haptics are optional and only vibrate where `navigator.vibrate` exists.
+
+## 2026-09-11 — Home tab fix
+
+- Bug reported by a member: after opening the den from Home and then switching tabs, the Home tab reopened the den instead of the overview. Cause: the router filed the den (`/bear`) and Settings under the Home tab's "last page" memory.
+- Fix in `src/store/router.tsx`: a tab only remembers pages that live inside it (`belongsToTab`), so Home always returns to the overview; tapping the tab you are already on goes to its root. Tests in `src/store/router.test.tsx`.
