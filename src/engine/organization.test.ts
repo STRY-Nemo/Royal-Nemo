@@ -25,12 +25,21 @@ describe('organization seed', () => {
 });
 
 describe('slot editing', () => {
-  it('sets, clears, uses TBD, and rejects duplicate members in one task', () => {
+  it('sets, clears, uses TBD, and moves a member who already holds another slot in the task', () => {
     let org = loadSeedOrganization();
     const canyon = org.responsibilities.find((r) => r.title === 'Canyon')!;
     org = setSlot(org, canyon.id, 3, { kind: 'member', member_id: 'stry-003' }, ctx).state;
     expect(slotDisplay(org.responsibilities.find((r) => r.id === canyon.id)!.slots[2], byId)).toBe('Appins');
-    expect(() => setSlot(org, canyon.id, 4, { kind: 'member', member_id: 'stry-003' }, ctx)).toThrow(LifecycleError);
+    // Assigning the same member to another slot of the same task moves them: the old slot is cleared.
+    const moved = setSlot(org, canyon.id, 4, { kind: 'member', member_id: 'stry-003' }, ctx);
+    const task = moved.state.responsibilities.find((r) => r.id === canyon.id)!;
+    expect(task.slots[3].member_id).toBe('stry-003');
+    expect(task.slots[2].member_id).toBeNull();
+    expect(moved.displaced).toEqual([{ responsibility_id: canyon.id, position: 3, value: { kind: 'empty' } }]);
+    // Undo restores both slots.
+    const restored = applySlotEdits(moved.state, moved.inverse, ctx).state.responsibilities.find((r) => r.id === canyon.id)!;
+    expect(restored.slots[2].member_id).toBe('stry-003');
+    expect(restored.slots[3].member_id).toBeNull();
     org = setSlot(org, canyon.id, 4, { kind: 'placeholder', label: 'TBD' }, ctx).state;
     expect(org.responsibilities.find((r) => r.id === canyon.id)!.slots[3].placeholder).toBe('TBD');
     const cleared = setSlot(org, canyon.id, 1, { kind: 'empty' }, ctx);
@@ -38,6 +47,17 @@ describe('slot editing', () => {
     // Undo restores the source label.
     const undone = applySlotEdits(cleared.state, cleared.inverse, ctx, cleared.state.revision).state;
     expect(undone.responsibilities.find((r) => r.id === canyon.id)!.slots[0].source_name).toBe('Apparition');
+  });
+
+  it('moves a source label within a task but lets placeholders repeat', () => {
+    let org = loadSeedOrganization();
+    const gw = org.responsibilities[0]; // Appins, Rouge, Paju, Paju-style source labels in slots 1-4
+    const moved = setSlot(org, gw.id, 4, { kind: 'source', label: 'Appins' }, ctx);
+    expect(moved.state.responsibilities[0].slots.map((s) => s.source_name)).toEqual([null, 'Rouge', 'Paju', 'Appins']);
+    expect(moved.displaced).toHaveLength(1);
+    org = setSlot(moved.state, gw.id, 1, { kind: 'placeholder', label: 'TBD' }, ctx).state;
+    org = setSlot(org, gw.id, 2, { kind: 'placeholder', label: 'TBD' }, ctx).state;
+    expect(org.responsibilities[0].slots.map((s) => s.placeholder)).toEqual(['TBD', 'TBD', null, null]);
   });
 
   it('allows the same member across different tasks', () => {

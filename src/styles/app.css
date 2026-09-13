@@ -1142,6 +1142,57 @@ p {
 .slot.dragging-source {
   opacity: 0.4;
 }
+/* Tron trace: a light cycle runs twice around the slot border after a change. */
+@property --tron-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+.slot.tron {
+  border-color: color-mix(in srgb, var(--cyan) 45%, var(--border));
+  box-shadow: 0 0 16px color-mix(in srgb, var(--cyan) 35%, transparent), inset 0 0 14px color-mix(in srgb, var(--cyan) 14%, transparent);
+  animation: tron-glow var(--tron-duration, 1400ms) ease-out 1;
+}
+.slot.tron::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: calc(var(--radius) + 3px);
+  padding: 3px;
+  pointer-events: none;
+  background: conic-gradient(from var(--tron-angle), transparent 0deg, transparent 150deg, color-mix(in srgb, var(--cyan) 25%, transparent) 230deg, color-mix(in srgb, var(--cyan) 80%, transparent) 320deg, var(--cyan) 345deg, #ffffff 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  filter: drop-shadow(0 0 4px var(--cyan));
+  animation: tron-trace calc(var(--tron-duration, 1400ms) / 2) linear 2;
+}
+@keyframes tron-trace {
+  from {
+    --tron-angle: 0deg;
+  }
+  to {
+    --tron-angle: 360deg;
+  }
+}
+@keyframes tron-glow {
+  0%,
+  85% {
+    opacity: 1;
+  }
+  100% {
+    box-shadow: none;
+  }
+}
+[data-motion='reduced'] .slot.tron::after {
+  animation: none;
+  background: var(--cyan);
+  opacity: 0.6;
+}
+[data-motion='reduced'] .slot.tron {
+  animation: none;
+}
 .drag-ghost {
   position: fixed;
   z-index: 70;

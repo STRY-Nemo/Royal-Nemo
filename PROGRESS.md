@@ -86,3 +86,10 @@ Open Settings (gear icon) → choose a member and the Leader role. Canyon → Ev
 
 - Bug reported by a member: after opening the den from Home and then switching tabs, the Home tab reopened the den instead of the overview. Cause: the router filed the den (`/bear`) and Settings under the Home tab's "last page" memory.
 - Fix in `src/store/router.tsx`: a tab only remembers pages that live inside it (`belongsToTab`), so Home always returns to the overview; tapping the tab you are already on goes to its root. Tests in `src/store/router.test.tsx`.
+
+## 2026-09-13 — Organize page polish
+
+- Bottom sheets no longer lose the scroll position: the page body is pinned at its offset while a sheet is open and restored on close (`lockBodyScroll` in `src/motion/index.tsx`), so editing a slot deep in the list keeps you there.
+- Changed slots get a "tron" border trace (`.slot.tron` in `app.css`, 1.4 s light cycle around the border), replacing the short pulse.
+- Slot edits move a person instead of rejecting a duplicate: assigning a member (or unmapped source label) to a slot in a task where they already hold another slot clears the old slot in the same change (`applySlotEdits` → `displaced`). Undo restores both. The picker shows "moves here from …" and the toast says which slot was cleared. Placeholders such as TBD may still repeat.
+- Server test for the next event date is now relative to the seeded event instead of a hardcoded Friday.

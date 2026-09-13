@@ -62,6 +62,8 @@ export interface OrgResult {
   audit: AuditEntry[];
   /** Inverse edits that restore the previous slot values (for Undo). */
   inverse: SlotEdit[];
+  /** Slots cleared because the member placed by this edit already held another slot in the same task. */
+  displaced?: SlotEdit[];
 }
 
 export interface SlotEdit {
@@ -87,12 +89,21 @@ function assertNoDuplicate(task: Responsibility): void {
   }
 }
 
-/** Applies one or more slot edits atomically with revision validation. */
+/**
+ * Applies one or more slot edits atomically with revision validation.
+ *
+ * A member (or unmapped source label) can hold only one slot per task. When an edit
+ * places one into a task where they already hold a different slot, that old slot is cleared as part
+ * of the same change (the edited slot wins) and reported in `displaced`, so a
+ * leader can move someone from Assigned 3 to Lead in a single tap. Undo restores
+ * the displaced slot too.
+ */
 export function applySlotEdits(state: OrganizationState, edits: SlotEdit[], ctx: Context, expectedRevision?: number): OrgResult {
   assertRevision(state, expectedRevision);
   const inverse: SlotEdit[] = [];
   const responsibilities = state.responsibilities.map((r) => ({ ...r, slots: r.slots.map((s) => ({ ...s })) }));
   const beforeSnapshot: SlotEdit[] = [];
+  const editedKeys = new Set(edits.map((e) => `${e.responsibility_id}|${e.position}`));
   for (const edit of edits) {
     const task = responsibilities.find((r) => r.id === edit.responsibility_id);
     if (!task) throw new LifecycleError('not_found', 'Task not found.');
@@ -102,11 +113,26 @@ export function applySlotEdits(state: OrganizationState, edits: SlotEdit[], ctx:
     beforeSnapshot.push({ responsibility_id: task.id, position: edit.position, value: before });
     task.slots[idx] = applyValue(task.slots[idx], edit.value);
   }
+  const displaced: SlotEdit[] = [];
+  for (const edit of edits) {
+    // Members and source labels each name one person; placeholders such as TBD may repeat.
+    if (edit.value.kind !== 'member' && edit.value.kind !== 'source') continue;
+    const task = responsibilities.find((r) => r.id === edit.responsibility_id)!;
+    for (let i = 0; i < task.slots.length; i++) {
+      const s = task.slots[i];
+      if (s.position === edit.position || !isSameValue(slotValue(s), edit.value)) continue;
+      if (editedKeys.has(`${task.id}|${s.position}`)) continue; // a slot set in this same batch wins
+      beforeSnapshot.push({ responsibility_id: task.id, position: s.position, value: slotValue(s) });
+      displaced.push({ responsibility_id: task.id, position: s.position, value: { kind: 'empty' } });
+      task.slots[i] = applyValue(s, { kind: 'empty' });
+    }
+  }
   for (const task of responsibilities) assertNoDuplicate(task);
   // Inverse restores in reverse order.
   for (let i = beforeSnapshot.length - 1; i >= 0; i--) inverse.push(beforeSnapshot[i]);
   const next: OrganizationState = { ...state, responsibilities, revision: state.revision + 1 };
-  return { state: next, inverse, audit: [audit(ctx, 'organization.slots', beforeSnapshot, edits)] };
+  const applied = displaced.length ? [...edits, ...displaced] : edits;
+  return { state: next, inverse, displaced, audit: [audit(ctx, 'organization.slots', beforeSnapshot, applied)] };
 }
 
 export function setSlot(state: OrganizationState, responsibilityId: ResponsibilityId, position: ResponsibilitySlot['position'], value: SlotValue, ctx: Context, expectedRevision?: number): OrgResult {
