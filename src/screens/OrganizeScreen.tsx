@@ -2,7 +2,7 @@ import { Art } from '../ui/Art';
 import { OrgSummary } from '../ui/OrgSummary';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { Responsibility, ResponsibilitySlot } from '../domain/types';
-import { slotDisplay, slotValue, type SlotValue } from '../engine/organization';
+import { isSameValue, slotDisplay, slotValue, type SlotValue } from '../engine/organization';
 import { PLACEHOLDER_NAMES } from '../data/seed';
 import { BottomSheet, ConfirmSheet, useFeedback, useFlash } from '../motion';
 import { useRouter } from '../store/router';
@@ -14,6 +14,8 @@ import { useLongPressDrag } from '../ui/useLongPressDrag';
 import { normalizeName } from '../engine/organization';
 
 type Filter = 'all' | 'mine' | 'unassigned';
+/** How long the tron border trace runs on a changed slot (matches --tron-duration in app.css). */
+const TRON_MS = 1400;
 type SlotRef = { taskId: string; position: ResponsibilitySlot['position'] };
 type DragPayload = SlotRef & { label: string };
 
@@ -41,7 +43,7 @@ export function OrganizeScreen() {
   const [taskMenu, setTaskMenu] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
-  const [flashing, flash] = useFlash();
+  const [flashing, flash] = useFlash(TRON_MS);
   const returnFocus = useRef<HTMLElement | null>(null);
 
   const tasks = useMemo(() => {
@@ -66,8 +68,7 @@ export function OrganizeScreen() {
       const source = findSlot(payload);
       const task = state.organization.responsibilities.find((r) => r.id === target.taskId);
       if (!source || !task) return false;
-      const v = slotValue(source);
-      if (v.kind === 'member' && target.taskId !== payload.taskId && task.slots.some((s) => s.member_id === v.member_id)) return false;
+      // A member already holding another slot in the target task simply moves: the engine clears the old slot.
       return true;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -78,10 +79,13 @@ export function OrganizeScreen() {
     const target = findSlot(to);
     if (!target) return;
     if (slotValue(target).kind === 'empty') {
+      const src = findSlot(from);
+      const displacedFrom = src ? otherSlotWith(to, slotValue(src)) : undefined;
       const res = actions.moveSlot(from.taskId, from.position, to.taskId, to.position);
       if (res.ok) {
         flash(refKey(to));
-        toast({ kind: 'ok', text: 'Moved', action: { label: 'Undo', onClick: () => actions.undoOrganization() } });
+        if (displacedFrom) flash(refKey({ taskId: to.taskId, position: displacedFrom.position }));
+        toast({ kind: 'ok', text: displacedFrom ? `Moved · cleared ${displacedFrom.label}` : 'Moved', action: { label: 'Undo', onClick: () => actions.undoOrganization() } });
         announce('Assignment moved.');
       }
     } else {
@@ -106,10 +110,12 @@ export function OrganizeScreen() {
     for (const name of state.organization.dropdown_names) {
       const isPlaceholder = PLACEHOLDER_NAMES.includes(name);
       const mapped = state.organization.name_mapping[name];
+      const elsewhere = isPlaceholder ? undefined : otherSlotWith(ref, mapped ? { kind: 'member', member_id: mapped } : { kind: 'source', label: name });
+      const base = isPlaceholder ? 'Placeholder, not a member' : mapped ? `Mapped to ${membersById.get(mapped)?.username}` : 'Source label · not yet mapped to a member';
       opts.push({
         key: `${isPlaceholder ? 'ph' : 'src'}:${name}`,
         label: name,
-        hint: isPlaceholder ? 'Placeholder, not a member' : mapped ? `Mapped to ${membersById.get(mapped)?.username}` : 'Source label · not yet mapped to a member',
+        hint: elsewhere ? `${base} · moves here from ${elsewhere.label}` : base,
         selected: (current.kind === 'placeholder' || current.kind === 'source') && current.label === name,
       });
     }
@@ -127,22 +133,31 @@ export function OrganizeScreen() {
       value = { kind: 'member', member_id: option.key };
       setRecent((r) => [option.key, ...r.filter((x) => x !== option.key)].slice(0, 8));
     }
+    const displacedFrom = otherSlotWith(ref, value);
     const res = actions.setSlot(ref.taskId, ref.position, value);
     if (res.ok) {
       flash(refKey(ref));
-      toast({ kind: 'ok', text: `Saved ${findTask(ref.taskId)?.slots.find((s) => s.position === ref.position)?.label}`, action: { label: 'Undo', onClick: () => actions.undoOrganization() } });
-      announce(`Saved: ${option.label}`);
+      if (displacedFrom) flash(refKey({ taskId: ref.taskId, position: displacedFrom.position }));
+      const label = findTask(ref.taskId)?.slots.find((s) => s.position === ref.position)?.label;
+      const text = displacedFrom ? `Saved ${label} · moved from ${displacedFrom.label}` : `Saved ${label}`;
+      toast({ kind: 'ok', text, action: { label: 'Undo', onClick: () => actions.undoOrganization() } });
+      announce(displacedFrom ? `Saved: ${option.label}, moved from ${displacedFrom.label}.` : `Saved: ${option.label}`);
       setEditing(null);
     }
   };
 
+  /** The other slot in the same task already holding this person (member or source label), if any. */
+  const otherSlotWith = (ref: SlotRef, value: SlotValue): ResponsibilitySlot | undefined =>
+    value.kind === 'member' || value.kind === 'source' ? findTask(ref.taskId)?.slots.find((s) => s.position !== ref.position && isSameValue(slotValue(s), value)) : undefined;
+
   const findTask = (id: string) => state.organization.responsibilities.find((r) => r.id === id);
 
-  const disabledForSlot = (ref: SlotRef): Map<string, string> => {
+  /** Hint shown in the picker for members who already hold another slot in this task: picking them moves them. */
+  const moveHintForSlot = (ref: SlotRef): Map<string, string> => {
     const task = findTask(ref.taskId);
     const out = new Map<string, string>();
     task?.slots.forEach((s) => {
-      if (s.member_id && s.position !== ref.position) out.set(s.member_id, `already ${s.label} here`);
+      if (s.member_id && s.position !== ref.position) out.set(s.member_id, `moves here from ${s.label}`);
     });
     return out;
   };
@@ -286,7 +301,7 @@ export function OrganizeScreen() {
               : []),
             ...pickerOptions(editing),
           ]}
-          disabledMembers={disabledForSlot(editing)}
+          extraHint={(m) => moveHintForSlot(editing).get(m.id)}
           recent={recent}
           selectedMemberId={editingSlot.member_id}
           onPick={(o) => {
@@ -469,7 +484,7 @@ function TaskCard({ task, index, expanded, onToggle, editable, onSlotTap, gripPr
             const over = drag?.overTarget === key;
             const invalidOver = drag?.overTarget === `invalid:${key}`;
             const isTapSource = tapMode && tapMode.source.taskId === task.id && tapMode.source.position === s.position;
-            const cls = ['slot', s.position === 1 ? 'lead' : '', dropOk ? 'drop-target' : '', over ? 'drop-over' : '', invalidOver || (drag && !isSource && !dropOk) ? 'drop-invalid' : '', isSource ? 'dragging-source' : '', flashing.has(key) ? 'pulse chip' : ''].filter(Boolean).join(' ');
+            const cls = ['slot', s.position === 1 ? 'lead' : '', dropOk ? 'drop-target' : '', over ? 'drop-over' : '', invalidOver || (drag && !isSource && !dropOk) ? 'drop-invalid' : '', isSource ? 'dragging-source' : '', flashing.has(key) ? 'tron' : ''].filter(Boolean).join(' ');
             return (
               <div key={s.position} className={cls} data-slot-key={key} style={{ padding: 0 }}>
                 <button

@@ -73,6 +73,7 @@ describe('STRY API', () => {
   let leaderToken = '';
   let memberToken = '';
   let eventId = '';
+  let eventDate = '';
   let lowToken = '';
   const memberId = 'stry-003'; // Appins
 
@@ -103,6 +104,7 @@ describe('STRY API', () => {
     expect(state.body.events).toHaveLength(1);
     expect(state.body.events[0].status).toBe('draft');
     eventId = state.body.events[0].id;
+    eventDate = state.body.events[0].date;
   });
 
   it('lets leaders create invites and members register with them', async () => {
@@ -183,7 +185,10 @@ describe('STRY API', () => {
     const fin = await api<{ event: { status: string }; next_event: { date: string; status: string } }>('POST', `/events/${eventId}/finalize`, {}, leaderToken);
     expect(fin.status).toBe(200);
     expect(fin.body.event.status).toBe('finalized');
-    expect(fin.body.next_event.date).toBe('2026-09-18');
+    // The next event is the Friday one week after the finalized one, whatever today's date is.
+    const following = new Date(`${eventDate}T00:00:00Z`);
+    following.setUTCDate(following.getUTCDate() + 7);
+    expect(fin.body.next_event.date).toBe(following.toISOString().slice(0, 10));
     const fin2 = await api<{ event: { status: string } }>('POST', `/events/${eventId}/finalize`, {}, leaderToken);
     expect(fin2.status).toBe(200);
     const state = await api<{ events: { id: string }[] }>('GET', '/state', undefined, leaderToken);
@@ -326,11 +331,19 @@ describe('STRY API', () => {
     expect(edit.status).toBe(200);
     expect(edit.body.organization.responsibilities[0].slots[3].member_id).toBe('stry-010');
     expect(edit.body.inverse).toHaveLength(1);
-    const dup = await api('POST', '/organization/slots', { expected_revision: edit.body.organization.revision, edits: [{ responsibility_id: gw.id, position: 3, value: { kind: 'member', member_id: 'stry-010' } }] }, leaderToken);
-    expect(dup.status).toBe(422);
+    // Placing the same member in another slot of the task moves them: the old slot is cleared, and the inverse restores both.
+    const dup = await api<{ organization: { revision: number; responsibilities: { slots: { member_id: string | null }[] }[] }; inverse: unknown[] }>('POST', '/organization/slots', { expected_revision: edit.body.organization.revision, edits: [{ responsibility_id: gw.id, position: 3, value: { kind: 'member', member_id: 'stry-010' } }] }, leaderToken);
+    expect(dup.status).toBe(200);
+    expect(dup.body.organization.responsibilities[0].slots[2].member_id).toBe('stry-010');
+    expect(dup.body.organization.responsibilities[0].slots[3].member_id).toBeNull();
+    expect(dup.body.inverse).toHaveLength(2);
     const stale = await api('POST', '/organization/slots', { expected_revision: org.revision, edits: edit.body.inverse }, leaderToken);
     expect(stale.status).toBe(409);
-    const undo = await api<{ organization: { responsibilities: { slots: { member_id: string | null }[] }[] } }>('POST', '/organization/slots', { expected_revision: edit.body.organization.revision, edits: edit.body.inverse }, leaderToken);
+    const undoDup = await api<{ organization: { revision: number; responsibilities: { slots: { member_id: string | null }[] }[] } }>('POST', '/organization/slots', { expected_revision: dup.body.organization.revision, edits: dup.body.inverse }, leaderToken);
+    expect(undoDup.status).toBe(200);
+    expect(undoDup.body.organization.responsibilities[0].slots[3].member_id).toBe('stry-010');
+    expect(undoDup.body.organization.responsibilities[0].slots[2].member_id).toBeNull();
+    const undo = await api<{ organization: { responsibilities: { slots: { member_id: string | null }[] }[] } }>('POST', '/organization/slots', { expected_revision: undoDup.body.organization.revision, edits: edit.body.inverse }, leaderToken);
     expect(undo.status).toBe(200);
     expect(undo.body.organization.responsibilities[0].slots[3].member_id).toBeNull();
     expect((await api('POST', '/organization/slots', { edits: [] }, memberToken)).status).toBe(403);

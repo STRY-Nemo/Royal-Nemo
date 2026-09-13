@@ -211,6 +211,32 @@ interface SheetProps {
   returnFocusTo?: HTMLElement | null;
 }
 
+/**
+ * Freezes the page behind a sheet without losing where the reader had scrolled to.
+ * `overflow: hidden` alone lets iOS Safari jump the document back to the top, so the
+ * body is pinned at its current offset and the exact position is restored on unlock.
+ */
+function lockBodyScroll(): () => void {
+  const body = document.body;
+  const y = window.scrollY;
+  const prev = { position: body.style.position, top: body.style.top, left: body.style.left, right: body.style.right, width: body.style.width, overflow: body.style.overflow };
+  body.style.position = 'fixed';
+  body.style.top = `-${y}px`;
+  body.style.left = '0';
+  body.style.right = '0';
+  body.style.width = '100%';
+  body.style.overflow = 'hidden';
+  return () => {
+    body.style.position = prev.position;
+    body.style.top = prev.top;
+    body.style.left = prev.left;
+    body.style.right = prev.right;
+    body.style.width = prev.width;
+    body.style.overflow = prev.overflow;
+    window.scrollTo({ top: y, behavior: 'auto' });
+  };
+}
+
 export function BottomSheet({ open, onClose, title, children, footer, returnFocusTo }: SheetProps) {
   const [mounted, setMounted] = useState(open);
   const [closing, setClosing] = useState(false);
@@ -234,7 +260,7 @@ export function BottomSheet({ open, onClose, title, children, footer, returnFocu
         setMounted(false);
         setClosing(false);
         const target = returnFocusTo ?? previousFocus.current;
-        target?.focus?.();
+        target?.focus?.({ preventScroll: true });
       }, duration);
       return () => window.clearTimeout(t);
     }
@@ -267,11 +293,10 @@ export function BottomSheet({ open, onClose, title, children, footer, returnFocu
       }
     };
     document.addEventListener('keydown', onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlock = lockBodyScroll();
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prevOverflow;
+      unlock();
     };
   }, [mounted, closing]);
 
@@ -332,19 +357,28 @@ export function getMotionMs(token: string): number {
   return raw.endsWith('ms') ? n : n * 1000;
 }
 
-/** Runs a one-shot CSS class (e.g. pulse/highlight) on a keyed element. */
-export function useFlash(): [Set<string>, (key: string) => void] {
+/**
+ * Runs a one-shot CSS class (e.g. pulse/highlight) on a keyed element.
+ * `durationMs` overrides the default lock-motion length for longer effects such as the tron trace.
+ */
+export function useFlash(durationMs?: number): [Set<string>, (key: string) => void] {
   const [keys, setKeys] = useState<Set<string>>(new Set());
-  const flash = useCallback((key: string) => {
-    setKeys((s) => new Set(s).add(key));
-    window.setTimeout(() => {
-      setKeys((s) => {
-        const n = new Set(s);
-        n.delete(key);
-        return n;
-      });
-    }, Math.max(getMotionMs('--m-lock'), 50) + 50);
-  }, []);
+  const flash = useCallback(
+    (key: string) => {
+      setKeys((s) => new Set(s).add(key));
+      window.setTimeout(
+        () => {
+          setKeys((s) => {
+            const n = new Set(s);
+            n.delete(key);
+            return n;
+          });
+        },
+        durationMs ?? Math.max(getMotionMs('--m-lock'), 50) + 50,
+      );
+    },
+    [durationMs],
+  );
   return [keys, flash];
 }
 
