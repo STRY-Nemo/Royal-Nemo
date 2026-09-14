@@ -95,6 +95,24 @@ export function ensureNextWeekDraft(
 /** How far ahead leaders can open weekly drafts. */
 export const MAX_WEEKS_AHEAD = 4;
 
+function isOpen(e: CanyonEvent): boolean {
+  return e.status === 'draft' || e.status === 'published';
+}
+
+/**
+ * The week the app treats as "this week": the earliest open (draft or published)
+ * event on or after `today`. A Friday stays current through that day; from the
+ * Saturday on, the next Friday takes over even if last week was never finalized.
+ */
+export function currentEventFor(events: CanyonEvent[], today: string): CanyonEvent | null {
+  return events.filter((e) => isOpen(e) && e.date >= today).sort((a, b) => (a.date < b.date ? -1 : 1))[0] ?? null;
+}
+
+/** Open events whose Friday has passed without being finalized or canceled (still need attendance and finalizing). */
+export function pastOpenEvents(events: CanyonEvent[], today: string): CanyonEvent[] {
+  return events.filter((e) => isOpen(e) && e.date < today).sort((a, b) => (a.date < b.date ? 1 : -1));
+}
+
 /**
  * Makes sure a draft exists for each of the next `weeks` Fridays counted from
  * `fromDate` (a Friday counts as its own week). Existing events of any status

@@ -3,13 +3,13 @@ import { useRouter } from '../store/router';
 import { fmtPower, useStore } from '../store/store';
 import { DemoBanner, EmptyState, EventTimes, Header, StatusBadge, StickyActions } from '../ui/common';
 import { CalendarIcon, ChevronRight, HistoryIcon, UndoIcon } from '../ui/icons';
-import { previousEventWithAvailability, publishBlockers, starters, teamAveragePower, teamReserves, waitingList } from '../engine/lifecycle';
+import { pastOpenEvents, previousEventWithAvailability, publishBlockers, starters, teamAveragePower, teamReserves, waitingList } from '../engine/lifecycle';
 import { ConfirmSheet, OrbitSpinner, useFeedback, useSingleFlight } from '../motion';
 import { BUNDLED_IMPORTS } from '../data/bundledImports';
 import { Art } from '../ui/Art';
 
 export function CanyonScreen({ eventId }: { eventId?: string }) {
-  const { state, currentEvent, eventById, isLeader, actions, canUndoAssignments, me } = useStore();
+  const { state, currentEvent, today, eventById, isLeader, actions, canUndoAssignments, me } = useStore();
   const router = useRouter();
   const { toast, announce } = useFeedback();
   const event = eventId ? eventById(eventId) : currentEvent;
@@ -107,6 +107,9 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
   const otherOpen = state.events.filter((e) => e.id !== event.id && (e.status === 'draft' || e.status === 'published')).sort((a, b) => (a.date < b.date ? -1 : 1));
   const openCount = state.events.filter((e) => e.status === 'draft' || e.status === 'published').length;
   const isCurrent = currentEvent?.id === event.id;
+  const isPast = event.date < today;
+  // Earlier Fridays that were never finalized: still need attendance and a wrap-up.
+  const pastOpen = pastOpenEvents(state.events, today).filter((e) => e.id !== event.id);
 
   return (
     <>
@@ -117,7 +120,7 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
         <div className="card-row" style={{ alignItems: 'flex-start' }}>
           <div className="grow">
             <h1>Canyon Clash</h1>
-            <p className="muted small">{isCurrent ? 'This week · every Friday · two teams of 20' : `Week of ${event.date} · planning ahead`}</p>
+            <p className="muted small">{isCurrent ? 'This week · every Friday · two teams of 20' : isPast ? `Week of ${event.date} · past week, not wrapped up yet` : `Week of ${event.date} · planning ahead`}</p>
           </div>
           <StatusBadge status={event.status} />
         </div>
@@ -138,6 +141,18 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
           </div>
           <EventTimes event={event} />
         </button>
+
+        {isCurrent && isLeader && pastOpen.length > 0 && (
+          <div className="callout warn" role="status">
+            <span aria-hidden="true">📋</span>
+            <span className="grow">
+              {pastOpen.length === 1 ? `Last week (${pastOpen[0].date}) was never finalized.` : `${pastOpen.length} earlier weeks were never finalized.`} Record attendance and finalize so history stays right; the rotation already counts that lineup.
+            </span>
+            <button type="button" className="btn ghost small" onClick={() => router.navigate(pastOpen[0].status === 'published' ? `/canyon/attendance/${pastOpen[0].id}` : `/canyon/${pastOpen[0].id}`)}>
+              Wrap up
+            </button>
+          </div>
+        )}
 
         {(!event.timezone || !event.date_confirmed) && (
           <div className="callout warn">

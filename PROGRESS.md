@@ -93,3 +93,9 @@ Open Settings (gear icon) → choose a member and the Leader role. Canyon → Ev
 - Changed slots get a "tron" border trace (`.slot.tron` in `app.css`, 1.4 s light cycle around the border), replacing the short pulse.
 - Slot edits move a person instead of rejecting a duplicate: assigning a member (or unmapped source label) to a slot in a task where they already hold another slot clears the old slot in the same change (`applySlotEdits` → `displaced`). Undo restores both. The picker shows "moves here from …" and the toast says which slot was cleared. Placeholders such as TBD may still repeat.
 - Server test for the next event date is now relative to the seeded event instead of a hardcoded Friday.
+
+## 2026-09-14 — Week rolls over on its own
+
+- "This week" is now the earliest open event on or after today in the alliance timezone (`currentEventFor`), so from Saturday the next Friday is current even when last week was never finalized. Earlier open Fridays are `pastOpenEvents`.
+- The API creates the coming Friday's draft on `GET /state` when it is missing (idempotent); demo mode derives it locally. Nobody has to finalize or "plan next week" for the date to advance.
+- Canyon page: leaders see a "Last week (date) was never finalized" callout with a Wrap up link on the current week; a past week's page says "past week, not wrapped up yet". Home's Upcoming list skips past weeks.
