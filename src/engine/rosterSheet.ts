@@ -5,6 +5,7 @@
  */
 import type { AvailabilityChoice, CanyonEvent, Member, MemberId, TrackingEntry, TrackingEntryInput, TrackingJoined, TrackingReady } from '../domain/types';
 import { describeAvailability } from './suggest';
+import type { LineupRecord, TeamNumber } from './lineupImport';
 
 export type SheetSection = 'team1_starters' | 'team1_subs' | 'team2_starters' | 'team2_subs' | 'declined' | 'ready' | 'no_response';
 
@@ -176,6 +177,40 @@ export function planSheetImport(event: CanyonEvent, members: Member[], rows: Bun
     if (sheetTeam && appTeam !== sheetTeam) mismatches.push({ member: m, sheet: sheetTeam, app: appTeam ?? 'not placed' });
   }
   return { entries, unmatched, mismatches, votesFilled };
+}
+
+/**
+ * The sheet's Starter / Sub columns as lineup import records, one list per team,
+ * so the same rules as the in-game screen import apply (capacity, one team per
+ * member, availability adjusted to match). REMOVED rows are skipped; a "Team 1?"
+ * placement counts as Team 1.
+ */
+export function sheetLineupRecords(rows: BundledSheetRow[], eventDate: string): { team1: LineupRecord[]; team2: LineupRecord[] } {
+  const out = { team1: [] as LineupRecord[], team2: [] as LineupRecord[] };
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (row.flag === 'removed') continue;
+    const teamOf = (label: string | undefined): TeamNumber | null => (label && /Team 1/.test(label) ? 1 : label && /Team 2/.test(label) ? 2 : null);
+    const starterTeam = teamOf(row.starter);
+    const subTeam = starterTeam ? null : teamOf(row.sub);
+    const team = starterTeam ?? subTeam;
+    if (!team) continue;
+    const key = normalize(row.username);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const record: LineupRecord = {
+      username: row.username,
+      team,
+      starter: !!starterTeam,
+      substitute: !!subTeam,
+      ready: row.ready === 'ready',
+      declined: row.ready === 'declined',
+      other_team: null,
+      event_date: eventDate,
+    };
+    (team === 1 ? out.team1 : out.team2).push(record);
+  }
+  return out;
 }
 
 function normalize(s: string): string {

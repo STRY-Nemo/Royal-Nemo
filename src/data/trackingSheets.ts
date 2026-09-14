@@ -188,6 +188,7 @@ export const BUNDLED_SHEETS: BundledSheet[] = [
                 "joined": "yes",
                 "ready": "ready",
                 "flag": "added",
+                "starter": "Team 1",
                 "note": "Added to Team 1 late"
           },
           {

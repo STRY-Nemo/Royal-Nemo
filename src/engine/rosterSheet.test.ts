@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { loadSeedMembers } from '../data/seed';
 import { BUNDLED_SHEETS } from '../data/trackingSheets';
 import { applyTrackingEntries, createDraftEvent, setAvailability } from './lifecycle';
-import { planSheetImport, sheetCounts, sheetRows, sheetText } from './rosterSheet';
+import { planSheetImport, sheetCounts, sheetLineupRecords, sheetRows, sheetText } from './rosterSheet';
+import { applyLineupImport } from './lineupImport';
 import { APOCALYPSE_TIME_ZONE } from './recurrence';
 
 const ctx = { actor: 'stry-001', now: '2026-09-12T10:00:00.000Z' } as const;
@@ -51,5 +52,27 @@ describe('roster sheet', () => {
     expect(rows.find((r) => r.member.username === 'RosolinoFriddi')?.joined).toBe('other_alliance');
     expect(rows.find((r) => r.member.username === 'Rrrrrrrrrd')?.flag).toBe('removed');
     expect(rows.find((r) => r.member.username === 'Galihad')?.votedLabel).toBe('23:00');
+  });
+
+  it('places the sheet\'s starters and substitutes on both teams through the lineup import', () => {
+    const sheet = BUNDLED_SHEETS.find((b) => b.event_date === '2026-09-11')!;
+    const week = createDraftEvent({ series_id: 'canyon-friday', date: '2026-09-18', timezone: APOCALYPSE_TIME_ZONE, team_times: { team1: '18:00', team2: '23:00' } });
+    const records = sheetLineupRecords(sheet.rows, week.date);
+    expect(records.team1.filter((r) => r.starter)).toHaveLength(20); // 19 listed + crumbum271 added, Rrrrrrrrrd removed
+    expect(records.team1.filter((r) => r.substitute)).toHaveLength(11);
+    expect(records.team2.filter((r) => r.starter)).toHaveLength(20);
+    expect(records.team2.filter((r) => r.substitute)).toHaveLength(9);
+    let event = applyTrackingEntries(week, planSheetImport(week, members, sheet.rows).entries, ctx).event;
+    event = applyLineupImport(event, records.team1, members, {}, ctx, { source: 'sheet' }).event;
+    event = applyLineupImport(event, records.team2, members, {}, ctx, { source: 'sheet' }).event;
+    const rows = sheetRows(event, members);
+    const counts = sheetCounts(rows);
+    expect(counts.team1_starters).toBe(20);
+    expect(counts.team2_starters).toBe(20);
+    expect(counts.team1_subs).toBe(11);
+    expect(counts.team2_subs).toBe(9);
+    expect(rows.find((r) => r.member.username === 'crumbum271')?.starter).toBe('Team 1');
+    expect(rows.find((r) => r.member.username === 'Rrrrrrrrrd')?.starter).toBeNull();
+    expect(rows.find((r) => r.member.username === 'Captain Cake')?.starter).toBe('Team 2');
   });
 });
