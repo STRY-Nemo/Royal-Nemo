@@ -1,0 +1,33 @@
+name: Canyon wrap-up reminder
+# Every Saturday, after both Friday team times have finished, remind the leader
+# to record attendance and finalize the week. Delivered the same way as the ideas
+# agent's notifications: a comment on the pinned "Notifications for Ryan" issue,
+# which GitHub emails and pushes to the mobile app.
+
+on:
+  schedule:
+    - cron: '0 14 * * 6' # Saturday 14:00 UTC (12:00 Apocalypse Time)
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment on the notifications issue with an @mention
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER_LOGIN: ryanrhernandez-design
+        run: |
+          repo="$GITHUB_REPOSITORY"
+          n=$(gh issue list -R "$repo" --state open --search "Notifications for Ryan in:title" --json number --jq '.[0].number')
+          if [ -z "$n" ]; then
+            url=$(gh issue create -R "$repo" --title "📣 Notifications for Ryan" --body "Messages from the app's agents land here as comments. Keep this issue open; GitHub notifies you of each mention.")
+            n="${url##*/}"
+          fi
+          friday=$(date -u -d 'last friday' +%Y-%m-%d)
+          printf '@%s Canyon Clash wrap-up for Friday %s: record attendance and tap Finalize so the rotation history stays right. If it is already finalized, ignore this. https://stry-nemo.github.io/Royal-Nemo/#/canyon\n' "$OWNER_LOGIN" "$friday" > body.md
+          gh issue comment "$n" -R "$repo" --body-file body.md
+          echo "Posted to issue #$n"

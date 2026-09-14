@@ -5,7 +5,8 @@ import { exitGuest, guestEnabled, guestLink, guestMessage } from '../ui/guest';
 import { ThemeSheet } from '../ui/ThemeSheet';
 import { useState } from 'react';
 import type { MotionPreference } from '../domain/types';
-import { COMMON_TIME_ZONES, deviceTimeZone, isValidTimeZone, timeZoneLabel } from '../engine/recurrence';
+import { deviceTimeZone, isValidTimeZone } from '../engine/recurrence';
+import { TimeZoneChoice } from '../ui/TimeZoneChoice';
 import { BottomSheet, ConfirmSheet, SaveIndicator, useEffectiveMotion, useFeedback } from '../motion';
 import { useRouter } from '../store/router';
 import { STORAGE_KEY, useStore } from '../store/store';
@@ -27,6 +28,8 @@ export function SettingsScreen() {
   const [pwNext, setPwNext] = useState('');
   const effective = useEffectiveMotion(state.settings.motion);
   const tz = state.settings.timezone ?? '';
+  const [tzDraft, setTzDraft] = useState(tz);
+  const [customTz, setCustomTz] = useState('');
 
   const shareGuest = async () => {
     const text = guestMessage();
@@ -141,40 +144,24 @@ export function SettingsScreen() {
           <h3>Timezone</h3>
           <div className="field">
             <label htmlFor="settings-tz">Default event timezone</label>
-            <select
+            <TimeZoneChoice
               id="settings-tz"
-              className="select"
-              value={COMMON_TIME_ZONES.includes(tz) || tz === '' ? tz : '__custom'}
+              value={tzDraft}
+              customValue={customTz}
               disabled={mode === 'api' && !isLeader}
-              onChange={(e) => {
-                const v = e.target.value;
+              onChange={(v) => {
+                setTzDraft(v);
                 if (v === '__custom') return;
                 actions.updateSettings({ timezone: v || null });
               }}
-            >
-              <option value="">Not set</option>
-              {COMMON_TIME_ZONES.map((z) => (
-                <option key={z} value={z}>
-                  {timeZoneLabel(z)}
-                  {z === deviceTimeZone() ? ' (this device)' : ''}
-                </option>
-              ))}
-              {!COMMON_TIME_ZONES.includes(tz) && tz && <option value="__custom">{tz}</option>}
-            </select>
-            <input
-              className="input"
-              placeholder="Or type an IANA name, e.g. Europe/Warsaw"
-              defaultValue={COMMON_TIME_ZONES.includes(tz) ? '' : tz}
-              disabled={mode === 'api' && !isLeader}
-              onBlur={(e) => {
-                const v = e.target.value.trim();
-                if (!v) return;
-                if (isValidTimeZone(v)) actions.updateSettings({ timezone: v });
-                else toast({ kind: 'error', text: `Unknown timezone: ${v}` });
+              onCustomChange={(v) => {
+                setCustomTz(v);
+                const name = v.trim();
+                if (name && isValidTimeZone(name)) actions.updateSettings({ timezone: name });
               }}
-              aria-label="Custom timezone"
             />
-            <p className="faint">Your device is in {deviceTimeZone()}. The event timezone is set per event on the schedule screen; this is only the default for new weeks{mode === 'api' ? ' and is shared with the whole alliance' : ''}.</p>
+            {customTz.trim() && !isValidTimeZone(customTz.trim()) && <p className="small" style={{ color: 'var(--danger)' }}>Unknown timezone name.</p>}
+            <p className="faint">Your device is in {deviceTimeZone()}. Each week's event has its own timezone on the schedule screen; this is only the default for new weeks{mode === 'api' ? ' and is shared with the whole alliance' : ''}.</p>
           </div>
         </div>
 

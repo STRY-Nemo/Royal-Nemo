@@ -169,11 +169,23 @@ function reliabilityNote(h: MemberHistory): string | null {
 }
 
 function historyPhrase(h: MemberHistory): string {
-  const plays = `${h.played_count} play${h.played_count === 1 ? '' : 's'} in last ${h.events_in_window} week${h.events_in_window === 1 ? '' : 's'}${h.provisional_count ? ` (${h.provisional_count} from ${h.provisional_count === 1 ? 'a lineup' : 'lineups'} not finalized yet)` : ''}`;
+  if (h.events_in_window === 0) return 'no tracked weeks yet';
+  const plays = `${h.played_count} play${h.played_count === 1 ? '' : 's'} in the last ${h.events_in_window} week${h.events_in_window === 1 ? '' : 's'}${h.provisional_count ? ` (${h.provisional_count} from ${h.provisional_count === 1 ? 'a lineup' : 'lineups'} not finalized yet)` : ''}`;
   const bench = h.eligible_benches ? `, benched ${h.eligible_benches}× while available` : '';
   const last = h.last_played_at ? `, last played ${h.last_played_at}` : ', never recorded';
   const incomplete = h.history_incomplete ? ' · history incomplete' : '';
   return `${plays}${bench}${last}${incomplete}`;
+}
+
+/**
+ * Splits an engine reason into the short lead ("Fewer recent plays than waiting players")
+ * and, when present, the time-preference note ("first choice Team 1"). The full text stays
+ * available for the tap-to-expand detail.
+ */
+export function summarizeReason(reason: string): { lead: string; preference: string | null } {
+  const parts = reason.split(' · ');
+  const preference = parts.slice(1).find((p) => /choice|flexible|Leader lock/i.test(p)) ?? null;
+  return { lead: parts[0] ?? reason, preference };
 }
 
 /**
