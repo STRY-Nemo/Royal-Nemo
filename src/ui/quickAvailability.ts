@@ -26,3 +26,20 @@ export function quickFromSlots(slots: SlotPriorities | null): QuickKey | null {
   if (t2) return 'team2';
   return 'none';
 }
+
+export type Preference = 'team1' | 'team2' | 'none';
+
+/** Which time an "either" answer puts first, from its saved priorities. */
+export function preferenceFromSlots(slots: SlotPriorities | null): Preference {
+  if (!slots || slots.team1 === 0 || slots.team2 === 0) return 'none';
+  if (slots.team1 === 1 && slots.team2 === 2) return 'team1';
+  if (slots.team2 === 1 && slots.team1 === 2) return 'team2';
+  return 'none';
+}
+
+/** Slots for an "either" answer with the given preference; `undefined` means no priorities (plain either). */
+export function slotsForPreference(pref: Preference): SlotPriorities | undefined {
+  if (pref === 'team1') return { team1: 1, team2: 2 };
+  if (pref === 'team2') return { team1: 2, team2: 1 };
+  return undefined;
+}
