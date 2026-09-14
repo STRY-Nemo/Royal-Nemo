@@ -99,3 +99,14 @@ Open Settings (gear icon) → choose a member and the Leader role. Canyon → Ev
 - "This week" is now the earliest open event on or after today in the alliance timezone (`currentEventFor`), so from Saturday the next Friday is current even when last week was never finalized. Earlier open Fridays are `pastOpenEvents`.
 - The API creates the coming Friday's draft on `GET /state` when it is missing (idempotent); demo mode derives it locally. Nobody has to finalize or "plan next week" for the date to advance.
 - Canyon page: leaders see a "Last week (date) was never finalized" callout with a Wrap up link on the current week; a past week's page says "past week, not wrapped up yet". Home's Upcoming list skips past weeks.
+
+## 2026-09-14 — Usability pass (from a phone walkthrough)
+
+- Review: each pick shows a one-line reason plus its time preference; tap a row for the full explanation. "Incomplete history" badges and the matching warning stay hidden until at least one week has been tracked. History shown in the app counts only weeks that have already happened (`computeHistory(..., { before: today })`), so a draft lineup no longer reads as "last played".
+- Canyon: one-tap "Confirm date" callout for leaders (sets game time if no timezone yet); the duplicate "Date to confirm" chip is gone from that page. "Copy lineup for chat" shares or copies both teams, substitutes and the waiting list (`src/ui/lineupText.ts`).
+- Availability: quick answers (Either / 18:00 / 23:00 / Can't) on the leader collect screen with a per-row "1st / 2nd choice…" expander, and on the member's Home "My week" card. "Either" saves the plain choice because the engine reserves equal priorities for the detailed picker.
+- Home: install-to-home-screen hint (dismissable, Chrome prompt when available), Canyon first, compact bear row, "My week" card with the published assignment and a confirm button, stale arena power nudge after 14 days, dismissable link hint for leaders. Demo banner is dismissable once per session.
+- Toasts sit above sticky action bars (`--sticky-height` published by `StickyActions`). The roaming bear parks half-tucked at the right edge and only wanders for a few seconds after a tap.
+- Members list: dense rows, sticky search, per-row "updated <date>" in warn colour when power is older than two weeks.
+- Timezone pickers (Settings, Schedule) are two big choices, Game time or My device, with Other for the full list. Schedule page no longer mentions the package date.
+- `.github/workflows/wrapup-reminder.yml`: Saturday reminder to record attendance and finalize, posted to the Notifications issue.

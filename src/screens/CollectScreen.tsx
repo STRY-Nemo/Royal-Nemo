@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { SlotPriorities } from '../domain/types';
+import type { AvailabilityChoice, SlotPriorities } from '../domain/types';
 import { choiceFromSlots, describeAvailability } from '../engine/suggest';
 import { ConfirmSheet, useFeedback } from '../motion';
 import { useRouter } from '../store/router';
@@ -8,6 +8,7 @@ import { useUiState } from '../store/ui';
 import { Avatar, EmptyState, EventTimes, Header, SearchInput, StatusBadge, matchesSearch } from '../ui/common';
 import { ShareIcon } from '../ui/icons';
 import { currentSlots, SlotPicker } from '../ui/SlotPicker';
+import { quickFromSlots, quickOptions } from '../ui/quickAvailability';
 
 type Filter = 'all' | 'missing' | 'answered';
 
@@ -20,6 +21,7 @@ export function CollectScreen({ eventId }: { eventId?: string }) {
   const [query, setQuery] = useUiState(`collect.query.${event?.id ?? ''}`, '');
   const [filter, setFilter] = useUiState<Filter>(`collect.filter.${event?.id ?? ''}`, 'all');
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [detailFor, setDetailFor] = useState<string | null>(null);
 
   const members = useMemo(() => state.members.filter((m) => m.active).sort((a, b) => a.username.localeCompare(b.username)), [state.members]);
 
@@ -55,9 +57,9 @@ export function CollectScreen({ eventId }: { eventId?: string }) {
     return filter === 'all' || (filter === 'missing' ? !has : has);
   });
 
-  const save = (memberId: string, username: string, slots: SlotPriorities) => {
-    const res = actions.setAvailability(event.id, memberId, choiceFromSlots(slots), slots);
-    if (res.ok) announce(`${username}: ${describeAvailability({ choice: choiceFromSlots(slots), slots }, event.teams)}`);
+  const save = (memberId: string, username: string, choice: AvailabilityChoice, slots?: SlotPriorities) => {
+    const res = actions.setAvailability(event.id, memberId, choice, slots);
+    if (res.ok) announce(`${username}: ${describeAvailability({ choice, slots }, event.teams)}`);
   };
 
   const share = async () => {
@@ -95,7 +97,7 @@ export function CollectScreen({ eventId }: { eventId?: string }) {
               <span className="label">missing</span>
             </div>
           </div>
-          <p className="faint">Tap 1st / 2nd / ✕ for each time. Saved instantly and attributed to you{me ? ` (${me.username})` : ''}; members can still change their own answer. Use the share icon to ask everyone to fill it in themselves.</p>
+          <p className="faint">One tap per member: Either, one time only, or Can't. Open "1st / 2nd" on a row to record a preference. Saved instantly and attributed to you{me ? ` (${me.username})` : ''}; members can still change their own answer. Use the share icon to ask everyone to fill it in themselves.</p>
           {!locked && missing > 0 && (
             <button type="button" className="btn ghost block" onClick={() => setBulkOpen(true)}>
               Mark the {missing} without an answer as "either time"
@@ -125,7 +127,17 @@ export function CollectScreen({ eventId }: { eventId?: string }) {
                     <div className="small" style={{ color: av ? 'var(--ok)' : 'var(--warn)' }}>{av ? describeAvailability(av, event.teams) : 'No answer yet'}</div>
                   </div>
                 </div>
-                <SlotPicker compact teams={event.teams} value={currentSlots(av)} disabled={locked} onChange={(slots) => save(m.id, m.username, slots)} />
+                <div className="quick-avail" role="group" aria-label={`${m.username} availability`}>
+                  {quickOptions(event.teams).map((o) => (
+                    <button key={o.key} type="button" className={o.key} aria-pressed={quickFromSlots(currentSlots(av)) === o.key} disabled={locked} onClick={() => save(m.id, m.username, o.choice, o.slots)}>
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+                <button type="button" className="detail-toggle" aria-expanded={detailFor === m.id} onClick={() => setDetailFor(detailFor === m.id ? null : m.id)}>
+                  {detailFor === m.id ? 'Hide 1st / 2nd' : '1st / 2nd choice…'}
+                </button>
+                {detailFor === m.id && <SlotPicker compact teams={event.teams} value={currentSlots(av)} disabled={locked} onChange={(slots) => save(m.id, m.username, choiceFromSlots(slots), slots)} />}
               </div>
             );
           })}

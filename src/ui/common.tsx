@@ -1,5 +1,5 @@
 import { exitGuest, guestEnabled } from './guest';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { CanyonEvent, EventStatus, Member, MemberId, Team } from '../domain/types';
 import { deviceTimeZone, formatInZone, isApocalypseTime, isValidTimeZone, timeZoneLabel, zonedWallTimeToUtc, zoneAbbreviation } from '../engine/recurrence';
 import { normalizeName } from '../engine/organization';
@@ -66,10 +66,26 @@ export function TabBar() {
   );
 }
 
+/** Bottom action bar. Publishes its height as --sticky-height so toasts and the bear stay above it. */
 export function StickyActions({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const root = document.documentElement;
+    const update = () => root.style.setProperty('--sticky-height', `${el?.getBoundingClientRect().height ?? 0}px`);
+    update();
+    const ro = typeof ResizeObserver !== 'undefined' && el ? new ResizeObserver(update) : null;
+    if (ro && el) ro.observe(el);
+    return () => {
+      ro?.disconnect();
+      root.style.setProperty('--sticky-height', '0px');
+    };
+  }, []);
   return (
     <div className="sticky-actions">
-      <div className="sticky-actions-inner">{children}</div>
+      <div ref={ref} className="sticky-actions-inner">
+        {children}
+      </div>
     </div>
   );
 }
@@ -149,18 +165,44 @@ export function DemoBanner() {
       </div>
     );
   }
+  return <DemoModeStrip restored={restored} />;
+}
+
+const DEMO_DISMISS_KEY = 'stry-demo-banner';
+
+/** Demo-mode notice: full text until dismissed once per session, then nothing. */
+function DemoModeStrip({ restored }: { restored: boolean }) {
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return sessionStorage.getItem(DEMO_DISMISS_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  if (dismissed) return null;
+  const dismiss = () => {
+    try {
+      sessionStorage.setItem(DEMO_DISMISS_KEY, '1');
+    } catch {
+      /* ignore */
+    }
+    setDismissed(true);
+  };
   return (
     <div className="demo-banner" role="note">
       <span aria-hidden="true">⚠️</span>
-      <span>
-        <strong>Demo mode.</strong> Data is stored only in this browser{restored ? ' (restored from local storage)' : ''}. Nothing is shared with other members until the app is connected to the alliance server.
+      <span className="grow">
+        <strong>Demo mode.</strong> Data stays in this browser{restored ? ' (restored)' : ''}; nothing is shared until the app is connected to the alliance server.
       </span>
+      <button type="button" className="icon-btn" aria-label="Dismiss demo notice" onClick={dismiss}>
+        ✕
+      </button>
     </div>
   );
 }
 
 /** Event date and team times shown in the event timezone and the device timezone. */
-export function EventTimes({ event, compact }: { event: CanyonEvent; compact?: boolean }) {
+export function EventTimes({ event, compact, dateChip = true }: { event: CanyonEvent; compact?: boolean; dateChip?: boolean }) {
   const device = deviceTimeZone();
   const tz = event.timezone && isValidTimeZone(event.timezone) ? event.timezone : null;
   const dateLabel = useMemo(() => {
@@ -171,7 +213,7 @@ export function EventTimes({ event, compact }: { event: CanyonEvent; compact?: b
     <div className="stat" style={{ gap: 4 }}>
       <div style={{ fontWeight: 600 }} className="wrap">
         {dateLabel}
-        {!event.date_confirmed && <span className="badge draft" style={{ marginLeft: 8 }}>Date to confirm</span>}
+        {dateChip && !event.date_confirmed && <span className="badge draft" style={{ marginLeft: 8 }}>Date to confirm</span>}
       </div>
       {tz ? (
         <div className="small muted wrap">

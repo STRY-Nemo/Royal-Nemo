@@ -9,7 +9,7 @@ import { ChevronRight } from '../ui/icons';
 type Sort = 'power' | 'name' | 'plays' | 'waiting';
 
 export function MembersScreen() {
-  const { state, history } = useStore();
+  const { state, history, today } = useStore();
   const router = useRouter();
   const [query, setQuery] = useUiState('members.query', '');
   const [sort, setSort] = useUiState<Sort>('members.sort', 'power');
@@ -26,7 +26,12 @@ export function MembersScreen() {
   }, [state.members, query, sort, origin, history]);
 
   const origins = useMemo(() => Array.from(new Set(state.members.map((m) => m.origin_alliance))).sort(), [state.members]);
-  const powerDate = state.members[0]?.power_as_of;
+  const stale = (iso: string) => {
+    const [y1, m1, d1] = iso.split('-').map(Number);
+    const [y2, m2, d2] = today.split('-').map(Number);
+    return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86_400_000) > 14;
+  };
+  const staleCount = state.members.filter((m) => m.active && stale(m.power_as_of)).length;
 
   return (
     <>
@@ -37,10 +42,12 @@ export function MembersScreen() {
           <Art name="members-banner" alt="" className="art-banner" />
           <h1>Members</h1>
           <p className="muted small">
-            {state.members.length} members · arena power as of {powerDate}
+            {state.members.length} members{staleCount ? ` · ${staleCount} with arena power older than two weeks` : ' · arena power up to date'}
           </p>
         </div>
-        <SearchInput value={query} onChange={setQuery} placeholder="Search by name" />
+        <div className="sticky-search">
+          <SearchInput value={query} onChange={setQuery} placeholder="Search by name" />
+        </div>
         <div className="filter-row" aria-label="Sort">
           {(
             [
@@ -66,11 +73,12 @@ export function MembersScreen() {
           ))}
         </div>
         {list.length === 0 && <EmptyState title="No members match" />}
-        <div className="list" role="list">
-          {list.map((m, i) => {
+        <div className="list dense" role="list">
+          {list.map((m) => {
             const h = history[m.id];
+            const old = stale(m.power_as_of);
             return (
-              <button key={m.id} type="button" className="row" role="listitem" style={{ ['--i' as string]: Math.min(i, 12) }} onClick={() => router.navigate(`/members/${m.id}`)}>
+              <button key={m.id} type="button" className="row" role="listitem" onClick={() => router.navigate(`/members/${m.id}`)}>
                 <Avatar name={m.username} />
                 <div className="main">
                   <div className="name wrap">
@@ -79,10 +87,11 @@ export function MembersScreen() {
                   </div>
                   <div className="meta">
                     <span className="mono">{fmtPower(m.arena_power_m)}</span>
-                    <span>
-                      {m.rank} · L{m.level} · {m.origin_alliance}
+                    <span className={old ? 'stale' : undefined} title={`Arena power updated ${m.power_as_of}`}>
+                      {old ? `updated ${m.power_as_of}` : m.rank}
                     </span>
-                    <span>{h?.last_played_at ? `Last ${h.last_played_at}` : 'Never recorded'}</span>
+                    {!old && <span>L{m.level} · {m.origin_alliance}</span>}
+                    {h?.last_played_at && <span>Last {h.last_played_at}</span>}
                   </div>
                 </div>
                 <ChevronRight className="chevron" />

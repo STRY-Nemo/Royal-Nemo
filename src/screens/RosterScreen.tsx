@@ -86,7 +86,7 @@ export function RosterScreen({ eventId }: { eventId?: string }) {
             <div className="wrap">
               <strong>Why:</strong> {a.reason}
             </div>
-            {h?.history_incomplete && <div className="faint">History incomplete since tracking start {m.tracking_start}.</div>}
+            {h?.history_incomplete && h.events_in_window > 0 && <div className="faint">History incomplete since tracking start {m.tracking_start}.</div>}
             {event.availability[m.id] && <div className="faint">Available: {describeAvailability(event.availability[m.id], event.teams)}</div>}
           </div>
         )}

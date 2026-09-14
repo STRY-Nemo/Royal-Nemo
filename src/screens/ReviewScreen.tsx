@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import type { TeamId } from '../domain/types';
 import { publishBlockers, starters, suggest, teamAveragePower, teamReserves, waitingList } from '../engine/lifecycle';
+import { summarizeReason } from '../engine/suggest';
+import { lineupText, shareOrCopy } from '../ui/lineupText';
 import { ConfirmSheet, useFeedback, useSingleFlight } from '../motion';
 import { useRouter } from '../store/router';
 import { fmtPower, useStore } from '../store/store';
@@ -15,6 +17,7 @@ export function ReviewScreen({ eventId }: { eventId?: string }) {
   const event = eventId ? eventById(eventId) : currentEvent;
   const [view, setView] = useUiState<TeamId | 'waiting'>(`review.view.${event?.id ?? ''}`, event?.teams[0]?.id ?? 'waiting');
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const analysis = useMemo(() => (event ? suggest(event, state.members, state.events) : null), [event, state.members, state.events]);
 
@@ -45,39 +48,15 @@ export function ReviewScreen({ eventId }: { eventId?: string }) {
   const waiting = waitingList(event);
   const shownStarters = view === 'waiting' ? [] : starters(event, view);
   const shownSubs = view === 'waiting' ? [] : teamReserves(event, view);
-  const incomplete = event.assignments.filter((a) => history[a.member_id]?.history_incomplete).length;
+  // Until at least one week has been tracked, everyone's history is "incomplete" and saying so 40 times helps nobody.
+  const trackingStarted = Object.values(history).some((h) => h.events_in_window > 0);
+  const incomplete = trackingStarted ? event.assignments.filter((a) => history[a.member_id]?.history_incomplete).length : 0;
   const alreadyPublished = event.status === 'published';
   const changedSincePublish = alreadyPublished && JSON.stringify(event.assignments.map((a) => [a.member_id, a.team_id, a.role]).sort()) !== JSON.stringify((event.published_revisions.at(-1)?.assignments ?? []).map((a) => [a.member_id, a.team_id, a.role]).sort());
 
-  const shareText = () => {
-    const lines: string[] = [`Canyon Clash ${event.date}${event.timezone ? ` (${event.timezone})` : ''} — revision ${event.revision}`];
-    for (const t of event.teams) {
-      lines.push('', `${t.name} ${t.local_time}:`);
-      starters(event, t.id).forEach((a, i) => lines.push(`${i + 1}. ${membersById.get(a.member_id)?.username ?? a.member_id}${a.locked ? ' (lock)' : ''}`));
-      const subs = teamReserves(event, t.id);
-      if (subs.length) {
-        lines.push(`${t.name} substitutes:`);
-        subs.forEach((a) => lines.push(`- ${membersById.get(a.member_id)?.username ?? a.member_id}`));
-      }
-    }
-    if (waiting.length) {
-      lines.push('', 'Waiting list:');
-      waiting.forEach((a) => lines.push(`- ${membersById.get(a.member_id)?.username ?? a.member_id}`));
-    }
-    return lines.join('\n');
-  };
-
   const share = async () => {
-    const text = shareText();
-    try {
-      if (navigator.share) await navigator.share({ title: `Canyon Clash ${event.date}`, text });
-      else {
-        await navigator.clipboard.writeText(text);
-        toast({ kind: 'ok', text: 'Lineup copied as text' });
-      }
-    } catch {
-      /* user canceled share */
-    }
+    const result = await shareOrCopy(`Canyon Clash ${event.date}`, lineupText(event, membersById));
+    if (result === 'copied') toast({ kind: 'ok', text: 'Lineup copied as text' });
   };
 
   return (
@@ -107,13 +86,15 @@ export function ReviewScreen({ eventId }: { eventId?: string }) {
               <span className="label">waiting</span>
             </div>
           </div>
-          {analysis?.warnings.map((w) => (
-            <div key={w} className="callout warn small">
-              <span aria-hidden="true">ⓘ</span>
-              <span>{w}</span>
-            </div>
-          ))}
-          <div className="faint">{incomplete > 0 ? `Tracking started ${state.members[0]?.tracking_start}. ` : ''}Arena power totals inform balance only and do not promise outcomes.</div>
+          {analysis?.warnings
+            .filter((w) => trackingStarted || !/incomplete Canyon history/.test(w))
+            .map((w) => (
+              <div key={w} className="callout warn small">
+                <span aria-hidden="true">ⓘ</span>
+                <span>{w}</span>
+              </div>
+            ))}
+          <div className="faint">{incomplete > 0 ? `Tracking started ${state.members[0]?.tracking_start}. ` : ''}Arena power totals inform balance only and do not promise outcomes. Tap a player for the full reason.</div>
         </div>
 
         {blockers.length > 0 && (
@@ -159,8 +140,18 @@ export function ReviewScreen({ eventId }: { eventId?: string }) {
             const m = membersById.get(a.member_id);
             if (!m) return null;
             const h = history[m.id];
+            const { lead, preference } = summarizeReason(a.reason);
+            const open = expandedId === m.id;
             return (
-              <div key={m.id} className={`row${a.locked ? ' locked' : ''}`} role="listitem" style={{ ['--i' as string]: i, alignItems: 'flex-start' }}>
+              <button
+                key={m.id}
+                type="button"
+                className={`row${a.locked ? ' locked' : ''}`}
+                role="listitem"
+                style={{ ['--i' as string]: i, alignItems: 'flex-start', textAlign: 'left' }}
+                aria-expanded={open}
+                onClick={() => setExpandedId(open ? null : m.id)}
+              >
                 <span className="index">{isSub ? `S${String(subIndex + 1).padStart(2, '0')}` : String(i + 1).padStart(2, '0')}</span>
                 <Avatar name={m.username} />
                 <div className="main">
@@ -175,11 +166,13 @@ export function ReviewScreen({ eventId }: { eventId?: string }) {
                   <div className="meta">
                     {isSub && <span className="badge draft">Substitute</span>}
                     <span className="mono">{fmtPower(m.arena_power_m)}</span>
-                    {h?.history_incomplete && <span style={{ color: 'var(--warn)' }}>incomplete history</span>}
+                    <span>{lead}</span>
+                    {preference && <span className="muted">{preference}</span>}
+                    {trackingStarted && h?.history_incomplete && <span style={{ color: 'var(--warn)' }}>incomplete history</span>}
                   </div>
-                  <div className="small muted wrap">{a.reason}</div>
+                  {open && <div className="small muted wrap">{a.reason}</div>}
                 </div>
-              </div>
+              </button>
             );
           })}
           {view === 'waiting' && waiting.length === 0 && <EmptyState title="Nobody is waiting">Every available player is on a team or its bench.</EmptyState>}

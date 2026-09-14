@@ -50,7 +50,7 @@ describe('rotation across weeks', () => {
     expect(nextStarters.filter((id) => thisWeekStarters.has(id))).toHaveLength(0);
     const explained = res.candidates.find((c) => c.member_id === members[0].id)!;
     expect(explained.decision).toBe('waiting');
-    expect(explained.reason).toMatch(/1 play in last 1 week \(1 from a lineup not finalized yet\)/);
+    expect(explained.reason).toMatch(/1 play in the last 1 week \(1 from a lineup not finalized yet\)/);
   });
 
   it('copies last week\'s answers only for members who have not answered, keeping "can\'t" answers', () => {

@@ -369,7 +369,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (res.created.length) commit((s) => ({ ...s, events: [...s.events, ...res.created] }));
   }, [api, currentEvent, today, commit]);
   const finalizedEvents = useMemo(() => state.events.filter((e) => e.status === 'finalized').sort((a, b) => (a.date < b.date ? 1 : -1)), [state.events]);
-  const history = useMemo(() => computeHistory(state.events, state.members), [state.events, state.members]);
+  // Shown history counts weeks that have already happened; the engine adds this week's own view when it plans.
+  const history = useMemo(() => computeHistory(state.events, state.members, { before: today }), [state.events, state.members, today]);
 
   const ctx = useCallback((): L.Context => {
     const acct = accountRef.current;

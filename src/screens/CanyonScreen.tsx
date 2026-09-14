@@ -7,9 +7,16 @@ import { pastOpenEvents, previousEventWithAvailability, publishBlockers, starter
 import { ConfirmSheet, OrbitSpinner, useFeedback, useSingleFlight } from '../motion';
 import { BUNDLED_IMPORTS } from '../data/bundledImports';
 import { Art } from '../ui/Art';
+import { lineupText, shareOrCopy } from '../ui/lineupText';
+import { APOCALYPSE_TIME_ZONE } from '../engine/recurrence';
+
+function weekLabel(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
 
 export function CanyonScreen({ eventId }: { eventId?: string }) {
-  const { state, currentEvent, today, eventById, isLeader, actions, canUndoAssignments, me } = useStore();
+  const { state, currentEvent, today, eventById, isLeader, actions, canUndoAssignments, me, membersById } = useStore();
   const router = useRouter();
   const { toast, announce } = useFeedback();
   const event = eventId ? eventById(eventId) : currentEvent;
@@ -39,6 +46,23 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
     if (r.ok) {
       toast({ kind: 'ok', text: `${r.count ?? 0} answer${r.count === 1 ? '' : 's'} copied from last week · members can still change theirs`, action: { label: 'Undo', onClick: () => actions.undoAssignments(event.id) } });
       announce(`${r.count ?? 0} availability answers copied.`);
+    }
+  };
+
+  const copyForChat = async () => {
+    if (!event) return;
+    const result = await shareOrCopy(`Canyon Clash ${event.date}`, lineupText(event, membersById));
+    if (result === 'copied') toast({ kind: 'ok', text: 'Lineup copied. Paste it in the alliance chat.' });
+  };
+
+  const confirmDate = () => {
+    if (!event) return;
+    const timezone = event.timezone ?? state.settings.timezone ?? APOCALYPSE_TIME_ZONE;
+    const res = actions.updateSchedule(event.id, { timezone, date_confirmed: true });
+    if (res.ok) {
+      if (!state.settings.timezone) actions.updateSettings({ timezone });
+      toast({ kind: 'ok', text: `Confirmed ${weekLabel(event.date)}` });
+      announce('Event date confirmed.');
     }
   };
 
@@ -139,7 +163,7 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
             </span>
             <ChevronRight className="chevron" />
           </div>
-          <EventTimes event={event} />
+          <EventTimes event={event} dateChip={false} />
         </button>
 
         {isCurrent && isLeader && pastOpen.length > 0 && (
@@ -154,12 +178,19 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
           </div>
         )}
 
-        {(!event.timezone || !event.date_confirmed) && (
-          <div className="callout warn">
+        {(!event.timezone || !event.date_confirmed) && event.status !== 'finalized' && event.status !== 'canceled' && (
+          <div className="callout warn" role="status">
             <span aria-hidden="true">⏱</span>
-            <span>
-              {!event.timezone ? 'Set the event timezone' : 'Confirm the event date'} before publishing. Times are 18:00 and 23:00 in the event timezone.
+            <span className="grow">
+              {isLeader
+                ? `${weekLabel(event.date)} is not confirmed yet. One tap confirms the date${event.timezone ? '' : ' in game time'}; change it on the schedule page if the week is different.`
+                : `The leaders have not confirmed ${weekLabel(event.date)} yet.`}
             </span>
+            {isLeader && (
+              <button type="button" className="btn primary small" style={{ flex: 'none', whiteSpace: 'nowrap' }} onClick={confirmDate}>
+                Confirm date
+              </button>
+            )}
           </div>
         )}
 
@@ -212,6 +243,12 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
             </button>
           );
         })}
+
+        {hasStarters && (
+          <button type="button" className="btn secondary block" onClick={() => void copyForChat()}>
+            Copy lineup for chat
+          </button>
+        )}
 
         <div className="card">
           <div className="card-row">

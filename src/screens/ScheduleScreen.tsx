@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { COMMON_TIME_ZONES, deviceTimeZone, isValidTimeZone, nextFriday, timeZoneLabel, weekday } from '../engine/recurrence';
+import { APOCALYPSE_TIME_ZONE, isValidTimeZone, nextFriday, weekday } from '../engine/recurrence';
+import { TimeZoneChoice } from '../ui/TimeZoneChoice';
 import { ConfirmSheet, useFeedback } from '../motion';
 import { useRouter } from '../store/router';
 import { useStore } from '../store/store';
@@ -11,7 +12,7 @@ export function ScheduleScreen({ eventId }: { eventId?: string }) {
   const { toast } = useFeedback();
   const event = eventId ? eventById(eventId) : currentEvent;
   const [date, setDate] = useState(event?.date ?? '');
-  const [tz, setTz] = useState(event?.timezone ?? state.settings.timezone ?? '');
+  const [tz, setTz] = useState(event?.timezone ?? state.settings.timezone ?? APOCALYPSE_TIME_ZONE);
   const [customTz, setCustomTz] = useState('');
   const [t1, setT1] = useState(event?.teams[0]?.local_time ?? '18:00');
   const [t2, setT2] = useState(event?.teams[1]?.local_time ?? '23:00');
@@ -77,7 +78,7 @@ export function ScheduleScreen({ eventId }: { eventId?: string }) {
                 Not a Friday. Next Friday would be {nextFriday(date, true)}.
               </p>
             )}
-            <p className="faint">Derived as the next Friday after the package date (September 9, 2026). Friday means Friday in the event timezone.</p>
+            <p className="faint">Canyon Clash is always on a Friday in the event timezone. The next week is created automatically.</p>
           </div>
           <label className="card-row" style={{ minHeight: 44 }}>
             <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} disabled={readOnly} style={{ width: 22, height: 22 }} />
@@ -88,26 +89,13 @@ export function ScheduleScreen({ eventId }: { eventId?: string }) {
         <div className="card">
           <div className="field">
             <label htmlFor="ev-tz">Event timezone</label>
-            <select id="ev-tz" className="select" value={tz} onChange={(e) => setTz(e.target.value)} disabled={readOnly}>
-              <option value="">Not set</option>
-              {!COMMON_TIME_ZONES.includes(deviceTimeZone()) && <option value={deviceTimeZone()}>{deviceTimeZone()} (this device)</option>}
-              {COMMON_TIME_ZONES.map((z) => (
-                <option key={z} value={z}>
-                  {timeZoneLabel(z)}
-                  {z === deviceTimeZone() ? ' (this device)' : ''}
-                </option>
-              ))}
-              <option value="__custom">Other IANA name…</option>
-            </select>
-            {tz === '__custom' && (
-              <input className="input" placeholder="e.g. Europe/Warsaw" value={customTz} onChange={(e) => setCustomTz(e.target.value)} aria-label="Custom timezone" disabled={readOnly} />
-            )}
+            <TimeZoneChoice id="ev-tz" value={tz} customValue={customTz} onChange={setTz} onCustomChange={setCustomTz} disabled={readOnly} />
             {effectiveTz && !tzValid && (
               <p className="small" style={{ color: 'var(--danger)' }}>
                 Unknown timezone name.
               </p>
             )}
-            <p className="faint">Required before publishing. Apocalypse Time is the game clock: 00:00 AT is 7 pm US Pacific. Members see their device-local conversion automatically.</p>
+            <p className="faint">Required before publishing. Game time is the Apocalypse clock (00:00 AT is 7 pm US Pacific). Members see their own local conversion automatically.</p>
           </div>
         </div>
 
