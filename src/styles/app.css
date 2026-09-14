@@ -1444,6 +1444,77 @@ p {
   min-height: 28px;
 }
 
+/* Roster sheet: the leaders' tracking columns as chips under each name. */
+.sheet-heading {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  padding: 10px 4px 2px;
+}
+.sheet-row {
+  text-align: left;
+  align-items: flex-start;
+}
+.sheet-cells {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.sheet-cells .cell {
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: var(--raised);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.sheet-cells .cell.joined.yes,
+.sheet-cells .cell.joined.mvp,
+.sheet-cells .cell.ready.ready {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 55%, transparent);
+}
+.sheet-cells .cell.joined.mvp {
+  font-weight: 700;
+}
+.sheet-cells .cell.joined.other_alliance {
+  color: var(--cyan);
+}
+.sheet-cells .cell.joined.no,
+.sheet-cells .cell.ready.declined,
+.sheet-cells .cell.voted.unavailable {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+}
+.sheet-cells .cell.ready.offline,
+.sheet-cells .cell.voted.none {
+  color: var(--warn);
+}
+.sheet-cells .cell.team {
+  color: var(--text);
+  font-weight: 600;
+}
+.quick-avail.five {
+  grid-template-columns: repeat(5, 1fr);
+}
+.quick-avail.three {
+  grid-template-columns: repeat(3, 1fr);
+}
+.quick-avail.five button {
+  font-size: 12px;
+  padding: 6px 2px;
+}
+.label-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
 /* Dense member rows and a search box that stays put while scrolling. */
 .list.dense .row {
   padding: 8px 10px;

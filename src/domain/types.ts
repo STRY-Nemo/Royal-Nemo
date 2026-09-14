@@ -142,6 +142,34 @@ export interface CanyonEvent {
   finalized_by: MemberId | null;
   /** Free-form note shown on the overview (e.g. why a time was changed). */
   note?: string;
+  /** Per-member tracking columns from the leaders' roster sheet (Joined? / Ready? / notes). */
+  tracking?: Record<MemberId, TrackingEntry>;
+}
+
+/** "Joined?" column: did the player actually join the in-game team. */
+export type TrackingJoined = 'yes' | 'mvp' | 'other_alliance' | 'no';
+/** "Ready?" column: the player's stated readiness for the week. */
+export type TrackingReady = 'ready' | 'declined' | 'offline';
+
+export interface TrackingEntry {
+  joined?: TrackingJoined;
+  ready?: TrackingReady;
+  /** Roster-sheet markers: removed from a team, or added late. */
+  flag?: 'removed' | 'added';
+  note?: string;
+  updated_at: string;
+  by: MemberId | 'system';
+}
+
+/** One row of a roster sheet being imported: tracking columns plus the vote, matched to a member. */
+export interface TrackingEntryInput {
+  member_id: MemberId;
+  joined?: TrackingJoined | null;
+  ready?: TrackingReady | null;
+  flag?: 'removed' | 'added' | null;
+  note?: string | null;
+  /** Vote from the sheet; only applied when the member has no answer yet. */
+  voted?: AvailabilityChoice | null;
 }
 
 export interface ResponsibilitySlot {

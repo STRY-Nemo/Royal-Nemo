@@ -4,7 +4,7 @@
  */
 import type { MoveTarget } from '../engine/lifecycle';
 import type { LineupRecord } from '../engine/lineupImport';
-import type { AttendanceOutcome, AvailabilityChoice, CanyonEvent, MascotState, Member, MemberId, OrganizationState, Settings, SlotPriorities, Suggestion, SuggestionStatus, TeamId } from '../domain/types';
+import type { AttendanceOutcome, AvailabilityChoice, CanyonEvent, MascotState, Member, MemberId, OrganizationState, Settings, SlotPriorities, Suggestion, SuggestionStatus, TeamId, TrackingEntryInput } from '../domain/types';
 import type { SlotEdit } from '../engine/organization';
 
 export const TOKEN_KEY = 'stry-api-token';
@@ -176,6 +176,9 @@ export class ApiClient {
   }
   publish(eventId: string, expected_revision: number) {
     return this.ev(eventId, 'publish', { expected_revision });
+  }
+  tracking(eventId: string, entries: TrackingEntryInput[]) {
+    return this.ev(eventId, 'tracking', { entries });
   }
   confirm(eventId: string, memberId: MemberId | null) {
     return this.ev(eventId, 'confirm', memberId ? { member_id: memberId } : {});

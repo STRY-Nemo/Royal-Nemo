@@ -312,6 +312,16 @@ export function CanyonScreen({ eventId }: { eventId?: string }) {
           )}
         </div>
 
+        <button type="button" className="card interactive" onClick={() => router.navigate(`/canyon/sheet/${event.id}`)}>
+          <div className="card-row">
+            <div className="grow">
+              <h3>Roster sheet</h3>
+              <p className="muted small">Joined? · Voted · Ready? · Starter · Sub for every member, the way the leaders track it.</p>
+            </div>
+            <ChevronRight className="chevron" />
+          </div>
+        </button>
+
         <button type="button" className="card interactive" onClick={() => router.navigate(`/canyon/roster/${event.id}?team=reserve`)}>
           <div className="card-row">
             <div className="grow">

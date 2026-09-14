@@ -111,3 +111,10 @@ Open Settings (gear icon) → choose a member and the Leader role. Canyon → Ev
 - Timezone pickers (Settings, Schedule) are two big choices, Game time or My device, with Other for the full list. Schedule page no longer mentions the package date.
 - `.github/workflows/wrapup-reminder.yml`: Saturday reminder to record attendance and finalize, posted to the Notifications issue.
 - My week and the collect screen: choosing Either reveals a "Prefer" row (18:00 first / 23:00 first / No preference) that saves the 1st/2nd priorities the rotation honours (`src/ui/QuickAvailability.tsx`). The separate 1st/2nd expander on the collect screen is gone.
+
+## 2026-09-14 — Roster sheet (leaders' tracking columns)
+
+- New per-event tracking columns from the leaders' spreadsheet: **Joined?** (Yes / MVP / Played elsewhere / No), **Ready?** (Ready / Declined / Offline), a REMOVED / ADDED marker and a note (`TrackingEntry` on `CanyonEvent.tracking`, optional so old events need no migration). Voted, Starter and Sub are derived from availability and the lineup (`src/engine/rosterSheet.ts`).
+- Roster sheet page at `#/canyon/sheet/<event>` (Canyon → Roster sheet): every active member grouped like the spreadsheet (Team 1 starters, Team 1 substitutes, Team 2 starters, Team 2 substitutes, Declined / offline, Ready not placed, Didn't vote or respond), search, section filter, share as tab-separated text. Leaders tap a row to set the columns; members read it.
+- API: `POST /events/:id/tracking` (leader) with one entry or `entries: [...]`; a vote in an entry fills only a missing answer.
+- `src/data/trackingSheets.ts` bundles the 2026-09-11 sheet, transcribed from the leaders' screenshot and validated against the roster (23 misread names corrected, 5 uncertain mapped to the closest roster name, Rockysaurus unmatched). Leaders import it from the 09-11 Roster sheet page; it never changes teams and never overwrites votes members gave themselves.

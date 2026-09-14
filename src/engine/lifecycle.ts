@@ -5,7 +5,7 @@
  * both use these; a future server can run the same functions inside a
  * transaction.
  */
-import type { Assignment, Attendance, AttendanceOutcome, AuditEntry, Availability, AvailabilityChoice, CanyonEvent, Member, MemberId, SlotPriorities, Team, TeamId } from '../domain/types';
+import type { Assignment, Attendance, AttendanceOutcome, AuditEntry, Availability, AvailabilityChoice, CanyonEvent, Member, MemberId, SlotPriorities, Team, TeamId, TrackingEntry, TrackingEntryInput } from '../domain/types';
 import { computeHistory } from './history';
 import { eventIdFor, isValidTimeZone, nextFriday, weekday } from './recurrence';
 import { newSeed } from './seed';
@@ -530,6 +530,50 @@ export function attendanceRows(event: CanyonEvent): Attendance[] {
   }
   for (const att of Object.values(event.attendance)) rows.set(att.member_id, att);
   return [...rows.values()];
+}
+
+/**
+ * Applies roster-sheet tracking columns (Joined? / Ready? / flag / note) for one or
+ * more members. A null value clears that column. A vote in an entry fills the
+ * member's availability only when they have not answered yet, so a sheet import
+ * never overwrites what a member said themselves.
+ */
+export function applyTrackingEntries(event: CanyonEvent, entries: TrackingEntryInput[], ctx: Context, recordedBy: MemberId | 'self' = ctx.actor === 'system' ? 'self' : ctx.actor): Result {
+  if (event.status === 'canceled') throw new LifecycleError('canceled', 'This event is canceled.');
+  const tracking: Record<MemberId, TrackingEntry> = { ...(event.tracking ?? {}) };
+  let availability = event.availability;
+  const before: Record<MemberId, TrackingEntry | null> = {};
+  for (const entry of entries) {
+    if (!entry.member_id) throw new LifecycleError('bad_request', 'Missing member.');
+    const prev = tracking[entry.member_id];
+    before[entry.member_id] = prev ?? null;
+    const next: TrackingEntry = { ...(prev ?? { updated_at: ctx.now, by: ctx.actor }), updated_at: ctx.now, by: ctx.actor };
+    if (entry.joined !== undefined) {
+      if (entry.joined === null) delete next.joined;
+      else next.joined = entry.joined;
+    }
+    if (entry.ready !== undefined) {
+      if (entry.ready === null) delete next.ready;
+      else next.ready = entry.ready;
+    }
+    if (entry.flag !== undefined) {
+      if (entry.flag === null) delete next.flag;
+      else next.flag = entry.flag;
+    }
+    if (entry.note !== undefined) {
+      const note = entry.note?.trim();
+      if (note) next.note = note.slice(0, 200);
+      else delete next.note;
+    }
+    if (next.joined || next.ready || next.flag || next.note) tracking[entry.member_id] = next;
+    else delete tracking[entry.member_id];
+    if (entry.voted && !availability[entry.member_id]) {
+      availability = { ...availability, [entry.member_id]: { event_id: event.id, member_id: entry.member_id, choice: entry.voted, recorded_by: recordedBy, updated_at: ctx.now } };
+    }
+  }
+  const after: Record<MemberId, TrackingEntry | null> = {};
+  for (const id of Object.keys(before)) after[id] = tracking[id] ?? null;
+  return { event: { ...event, tracking, availability }, audit: [audit(ctx, event.id, entries.length === 1 ? 'tracking.set' : 'tracking.import', before, after)] };
 }
 
 /** Finalizes attendance. Idempotent: history is derived from records, never incremented. */

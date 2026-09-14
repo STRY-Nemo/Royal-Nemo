@@ -21,6 +21,7 @@ import { LoginScreen } from './screens/LoginScreen';
 import { AccountsScreen } from './screens/AccountsScreen';
 import { ImportScreen } from './screens/ImportScreen';
 import { CollectScreen } from './screens/CollectScreen';
+import { RosterSheetScreen } from './screens/RosterSheetScreen';
 import { BearScreen } from './screens/BearScreen';
 import { IdeasScreen } from './screens/IdeasScreen';
 import { Starfield } from './ui/Starfield';
@@ -45,6 +46,7 @@ function Routes() {
       if (second === 'schedule') return <ScheduleScreen eventId={third} />;
       if (second === 'import') return <ImportScreen eventId={third} />;
       if (second === 'collect') return <CollectScreen eventId={third} />;
+      if (second === 'sheet') return <RosterSheetScreen eventId={third} />;
       return <CanyonScreen eventId={second} />;
     case 'organize':
       if (second === 'mapping') return <MappingScreen />;
