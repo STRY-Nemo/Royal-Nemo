@@ -16,8 +16,8 @@ function weekLabel(iso: string): string {
 }
 
 export function HomeScreen() {
-  const { state, currentEvent, me, isLeader, finalizedEvents, history, mode } = useStore();
-  const upcoming = state.events.filter((e) => (e.status === 'draft' || e.status === 'published') && e.id !== currentEvent?.id).sort((a, b) => (a.date < b.date ? -1 : 1));
+  const { state, currentEvent, today, me, isLeader, finalizedEvents, history, mode } = useStore();
+  const upcoming = state.events.filter((e) => (e.status === 'draft' || e.status === 'published') && e.id !== currentEvent?.id && e.date >= today).sort((a, b) => (a.date < b.date ? -1 : 1));
   const router = useRouter();
   const event = currentEvent;
   const myAvailability = event && me ? event.availability[me.id] : undefined;

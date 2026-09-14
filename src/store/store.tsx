@@ -139,6 +139,8 @@ export interface StoreValue {
   me: Member | null;
   membersById: Map<MemberId, Member>;
   currentEvent: CanyonEvent | null;
+  /** Today's date (YYYY-MM-DD) in the alliance timezone; events before it are past weeks. */
+  today: string;
   finalizedEvents: CanyonEvent[];
   history: Record<MemberId, MemberHistory>;
   eventById: (id: string) => CanyonEvent | undefined;
@@ -356,10 +358,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const membersById = useMemo(() => new Map(state.members.map((m) => [m.id, m])), [state.members]);
   const me = state.session.member_id ? (membersById.get(state.session.member_id) ?? null) : null;
 
-  const currentEvent = useMemo(() => {
-    const open = state.events.filter((e) => e.status === 'draft' || e.status === 'published').sort((a, b) => (a.date < b.date ? -1 : 1));
-    return open[0] ?? null;
-  }, [state.events]);
+  // "Today" in the alliance timezone; once a Friday has passed, the next one becomes this week.
+  const today = todayInZone(state.settings.timezone ?? deviceTimeZone());
+  const currentEvent = useMemo(() => L.currentEventFor(state.events, today), [state.events, today]);
+  // Demo mode has no server to roll the week over, so derive this week's draft locally.
+  useEffect(() => {
+    if (api || currentEvent) return;
+    const settings = stateRef.current.settings;
+    const res = L.ensureUpcomingDrafts(stateRef.current.events, { series_id: SERIES_ID, fromDate: today, weeks: 1, timezone: settings.timezone, team_times: settings.default_team_times });
+    if (res.created.length) commit((s) => ({ ...s, events: [...s.events, ...res.created] }));
+  }, [api, currentEvent, today, commit]);
   const finalizedEvents = useMemo(() => state.events.filter((e) => e.status === 'finalized').sort((a, b) => (a.date < b.date ? 1 : -1)), [state.events]);
   const history = useMemo(() => computeHistory(state.events, state.members), [state.events, state.members]);
 
@@ -955,6 +963,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       me,
       membersById,
       currentEvent,
+      today,
       finalizedEvents,
       history,
       eventById: (id) => state.events.find((e) => e.id === id),
@@ -962,7 +971,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       canUndoOrganization: orgUndo.current.length > 0 && undoTick >= 0,
       actions,
     }),
-    [mode, api, authState, account, loadError, lastSyncedAt, state, saveState, restored, isLeader, canOrganize, me, membersById, currentEvent, finalizedEvents, history, actions, undoTick],
+    [mode, api, authState, account, loadError, lastSyncedAt, state, saveState, restored, isLeader, canOrganize, me, membersById, currentEvent, today, finalizedEvents, history, actions, undoTick],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

@@ -241,7 +241,13 @@ router.get('/state', async (ctx) => {
     loadMascot(ctx.env, ctx.now),
   ]);
   const suggestions = await loadSuggestions(ctx.env);
-  return { members: stripPrivate(members, account), events, organization, settings, audit, mascot: mascot.doc, suggestions, account, server_time: ctx.now.toISOString() };
+  // The week rolls over on its own: once a Friday has passed, make sure the next one has a draft
+  // even if nobody finalized last week. Idempotent (deterministic event ids).
+  const today = todayInZone(settings.timezone ?? 'UTC', ctx.now);
+  const rollover = L.ensureUpcomingDrafts(events, { series_id: SERIES_ID, fromDate: today, weeks: 1, timezone: settings.timezone, team_times: settings.default_team_times });
+  for (const e of rollover.created) await insertEvent(ctx.env, e, ctx.now);
+  const allEvents = rollover.created.length ? [...events, ...rollover.created] : events;
+  return { members: stripPrivate(members, account), events: allEvents, organization, settings, audit, mascot: mascot.doc, suggestions, account, server_time: ctx.now.toISOString() };
 });
 
 router.get('/export', async (ctx) => {
