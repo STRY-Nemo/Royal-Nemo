@@ -173,6 +173,8 @@ export interface StoreValue {
     confirm: (eventId: string, memberId: MemberId) => ActionResult;
     /** Roster-sheet columns (Joined? / Ready? / flag / note) for one or many members; votes fill only missing answers. */
     setTracking: (eventId: string, entries: TrackingEntryInput[]) => ActionResult;
+    /** Whole roster sheet: tracking columns, then Team 1 and Team 2 starters/subs as lineup imports. */
+    importSheet: (eventId: string, sheet: { entries: TrackingEntryInput[]; team1: LineupRecord[]; team2: LineupRecord[] }, source: string) => ActionResult;
     recordAttendance: (eventId: string, memberId: MemberId, outcome: AttendanceOutcome, opts?: { team_id?: TeamId | null; substitute?: boolean }) => ActionResult;
     finalize: (eventId: string) => ActionResult;
     cancel: (eventId: string, reason: string) => ActionResult;
@@ -650,6 +652,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setTracking: (eventId, entries) => {
         const recorder: MemberId | 'self' = stateRef.current.session.member_id ?? 'self';
         return runEvent(eventId, (e) => L.applyTrackingEntries(e, entries, ctx(), recorder), undefined, (a) => a.tracking(eventId, entries));
+      },
+      importSheet: (eventId, sheet, source) => {
+        const recorder: MemberId | 'self' = stateRef.current.session.member_id ?? 'self';
+        const members = stateRef.current.members;
+        const mapping = stateRef.current.organization.name_mapping;
+        return runEvent(
+          eventId,
+          (e) => {
+            let res = L.applyTrackingEntries(e, sheet.entries, ctx(), recorder);
+            const audit = [...res.audit];
+            for (const records of [sheet.team1, sheet.team2]) {
+              if (!records.length) continue;
+              const r = applyLineupImport(res.event, records, members, mapping, ctx(), { source });
+              audit.push(...r.audit);
+              res = { event: r.event, audit };
+            }
+            return res;
+          },
+          { pushUndo: 'Import roster sheet' },
+          async (a) => {
+            let r = await a.tracking(eventId, sheet.entries);
+            for (const records of [sheet.team1, sheet.team2]) {
+              if (!records.length) continue;
+              r = await a.importLineup(eventId, records, source, r.event.revision);
+            }
+            return r;
+          },
+        );
       },
       confirm: (eventId, memberId) => {
         const self = stateRef.current.session.member_id === memberId;

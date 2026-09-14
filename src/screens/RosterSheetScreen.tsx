@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { TrackingEntryInput, TrackingJoined, TrackingReady } from '../domain/types';
-import { JOINED_LABELS, READY_LABELS, SECTION_LABELS, planSheetImport, sheetCounts, sheetRows, sheetText, type SheetRow, type SheetSection } from '../engine/rosterSheet';
+import { JOINED_LABELS, READY_LABELS, SECTION_LABELS, planSheetImport, sheetCounts, sheetLineupRecords, sheetRows, sheetText, type SheetRow, type SheetSection } from '../engine/rosterSheet';
+import { planLineupImport } from '../engine/lineupImport';
 import { BUNDLED_SHEETS } from '../data/trackingSheets';
 import { BottomSheet, ConfirmSheet, useFeedback, useFlash } from '../motion';
 import { useRouter } from '../store/router';
@@ -34,8 +35,18 @@ export function RosterSheetScreen({ eventId }: { eventId?: string }) {
 
   const rows = useMemo(() => (event ? sheetRows(event, state.members) : []), [event, state.members]);
   const counts = useMemo(() => sheetCounts(rows), [rows]);
-  const bundled = useMemo(() => (event ? BUNDLED_SHEETS.find((b) => b.event_date === event.date) : undefined), [event]);
+  // The latest bundled sheet can be applied to any week that is still open: exact date first, otherwise the newest.
+  const bundled = useMemo(() => (event ? (BUNDLED_SHEETS.find((b) => b.event_date === event.date) ?? [...BUNDLED_SHEETS].sort((a, b) => (a.event_date < b.event_date ? 1 : -1))[0]) : undefined), [event]);
   const plan = useMemo(() => (event && bundled ? planSheetImport(event, state.members, bundled.rows) : null), [event, bundled, state.members]);
+  const lineup = useMemo(() => (event && bundled ? sheetLineupRecords(bundled.rows, event.date) : null), [event, bundled]);
+  const teamPlans = useMemo(() => {
+    if (!event || !lineup) return null;
+    const mapping = state.organization.name_mapping;
+    return {
+      team1: lineup.team1.length ? planLineupImport(event, lineup.team1, state.members, mapping) : null,
+      team2: lineup.team2.length ? planLineupImport(event, lineup.team2, state.members, mapping) : null,
+    };
+  }, [event, lineup, state.members, state.organization.name_mapping]);
 
   if (!event) {
     return (
@@ -67,15 +78,21 @@ export function RosterSheetScreen({ eventId }: { eventId?: string }) {
   };
 
   const importSheet = () => {
-    if (!plan) return;
-    const res = actions.setTracking(event.id, plan.entries);
+    if (!plan || !lineup || !bundled) return;
+    const res = actions.importSheet(event.id, { entries: plan.entries, team1: lineup.team1, team2: lineup.team2 }, bundled.label);
     setImportOpen(false);
-    if (res.ok) toast({ kind: 'ok', text: `Sheet imported for ${plan.entries.length} members · ${plan.votesFilled} missing votes filled` });
+    if (res.ok) {
+      const t1 = teamPlans?.team1;
+      const t2 = teamPlans?.team2;
+      toast({ kind: 'ok', text: `Sheet imported · Team 1 ${t1?.starters.length ?? 0}+${t1?.reserves.length ?? 0} · Team 2 ${t2?.starters.length ?? 0}+${t2?.reserves.length ?? 0} · ${plan.entries.length} members tracked`, action: { label: 'Undo', onClick: () => actions.undoAssignments(event.id) } });
+    }
   };
 
   // Rows that only carry a vote leave no tracking entry, so judge "already imported" by the rows that would.
   const trackingRows = plan?.entries.filter((e) => e.joined || e.ready || e.flag || e.note) ?? [];
-  const alreadyImported = !!bundled && trackingRows.length > 0 && trackingRows.every((e) => event.tracking?.[e.member_id]);
+  const alreadyImported = !!bundled && trackingRows.length > 0 && trackingRows.every((e) => event.tracking?.[e.member_id]) && counts.team1_starters + counts.team2_starters > 0;
+  const importErrors = [...(teamPlans?.team1?.errors ?? []), ...(teamPlans?.team2?.errors ?? [])];
+  const canImport = isLeader && !!bundled && !!plan && event.status !== 'finalized' && !locked && !alreadyImported;
 
   return (
     <>
@@ -109,9 +126,9 @@ export function RosterSheetScreen({ eventId }: { eventId?: string }) {
           <p className="faint">
             Voted, Starter and Sub come from availability and the lineup. Joined? and Ready? are the leaders' tracking columns{canEdit ? ': tap a member to set them' : ''}. The share icon copies the whole sheet as tab-separated text.
           </p>
-          {isLeader && bundled && plan && !alreadyImported && (
+          {canImport && (
             <button type="button" className="btn secondary block" onClick={() => setImportOpen(true)}>
-              Import {bundled.label}
+              {bundled!.event_date === event.date ? `Import ${bundled!.label}` : `Import the ${bundled!.event_date.slice(5)} sheet onto this week`}
             </button>
           )}
         </div>
@@ -195,20 +212,19 @@ export function RosterSheetScreen({ eventId }: { eventId?: string }) {
         </BottomSheet>
       )}
 
-      <ConfirmSheet open={importOpen} title={bundled ? `Import ${bundled.label}?` : 'Import'} confirmLabel="Import" onCancel={() => setImportOpen(false)} onConfirm={importSheet}>
-        {plan && bundled && (
+      <ConfirmSheet open={importOpen} title={bundled ? (bundled.event_date === event.date ? `Import ${bundled.label}?` : `Import the ${bundled.event_date} sheet onto ${event.date}?`) : 'Import'} confirmLabel="Import" busy={importErrors.length > 0} onCancel={() => setImportOpen(false)} onConfirm={importSheet}>
+        {plan && bundled && teamPlans && (
           <div className="list">
             <p className="small muted">{bundled.source}.</p>
             <div className="small">
-              Sets Joined? / Ready? / markers / notes for {plan.entries.length} members. Fills {plan.votesFilled} missing vote{plan.votesFilled === 1 ? '' : 's'}; answers members already gave are kept. Teams are not changed.
+              <strong>Teams:</strong> Team 1 gets {teamPlans.team1?.starters.length ?? 0} starters and {teamPlans.team1?.reserves.length ?? 0} substitutes; Team 2 gets {teamPlans.team2?.starters.length ?? 0} starters and {teamPlans.team2?.reserves.length ?? 0} substitutes, exactly as the sheet places them.
+              {(teamPlans.team1?.replaced ?? 0) + (teamPlans.team2?.replaced ?? 0) > 0 ? ` This replaces ${(teamPlans.team1?.replaced ?? 0) + (teamPlans.team2?.replaced ?? 0)} current assignment${(teamPlans.team1?.replaced ?? 0) + (teamPlans.team2?.replaced ?? 0) === 1 ? '' : 's'} (Undo is available afterwards).` : ' The lineup is empty now, so nothing is replaced.'}
+            </div>
+            <div className="small">
+              <strong>Tracking:</strong> Joined? / Ready? / markers / notes for {plan.entries.length} members. Fills {plan.votesFilled} missing vote{plan.votesFilled === 1 ? '' : 's'}; answers members already gave are kept, and votes are widened where needed so every placed player is allowed on their team.
             </div>
             {plan.unmatched.length > 0 && <div className="small" style={{ color: 'var(--warn)' }}>Not in the roster, skipped: {plan.unmatched.join(', ')}</div>}
-            {plan.mismatches.length > 0 && (
-              <div className="small">
-                <strong>{plan.mismatches.length} team difference{plan.mismatches.length === 1 ? '' : 's'}</strong> between the sheet and the app lineup (left as in the app):
-                <div className="faint wrap" style={{ marginTop: 4 }}>{plan.mismatches.slice(0, 12).map((m) => `${m.member.username}: sheet ${m.sheet}, app ${m.app}`).join(' · ')}{plan.mismatches.length > 12 ? ' · …' : ''}</div>
-              </div>
-            )}
+            {importErrors.length > 0 && <div className="small" style={{ color: 'var(--danger)' }}>Cannot import: {importErrors.join(' ')}</div>}
           </div>
         )}
       </ConfirmSheet>
