@@ -1420,6 +1420,20 @@ p {
 .quick-avail button:disabled {
   opacity: 0.5;
 }
+.prefer-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.prefer-row .chip {
+  min-height: 34px;
+}
+.prefer-row .chip[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--primary) 28%, var(--raised));
+  border-color: var(--primary);
+  color: var(--text);
+}
 .collect-row .detail-toggle {
   justify-self: end;
   font-size: 12px;

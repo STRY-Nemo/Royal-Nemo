@@ -6,8 +6,7 @@ import { ChevronRight } from '../ui/icons';
 import { starters } from '../engine/lifecycle';
 import { describeAvailability } from '../engine/suggest';
 import { InstallHint } from '../ui/InstallHint';
-import { quickFromSlots, quickOptions } from '../ui/quickAvailability';
-import { currentSlots } from '../ui/SlotPicker';
+import { QuickAvailability } from '../ui/QuickAvailability';
 import { useFeedback } from '../motion';
 import { BearFeeder } from '../ui/Bear';
 import { Art } from '../ui/Art';
@@ -217,7 +216,7 @@ export function HomeScreen() {
   );
 }
 
-import type { CanyonEvent, Member } from '../domain/types';
+import type { AvailabilityChoice, CanyonEvent, Member, SlotPriorities } from '../domain/types';
 
 /**
  * The member's whole week in one card: answer availability with a single tap,
@@ -228,8 +227,6 @@ function MyWeek({ event, me, today }: { event: CanyonEvent; me: Member; today: s
   const router = useRouter();
   const { toast, announce } = useFeedback();
   const av = event.availability[me.id];
-  const slots = currentSlots(av);
-  const quick = quickFromSlots(slots);
   const locked = event.status === 'finalized' || event.status === 'canceled';
   const published = event.status === 'published';
   const assignment = event.assignments.find((a) => a.member_id === me.id);
@@ -237,12 +234,10 @@ function MyWeek({ event, me, today }: { event: CanyonEvent; me: Member; today: s
   const confirmed = !!event.confirmations[me.id];
   const staleDays = daysSince(me.power_as_of, today);
 
-  const answer = (key: string) => {
-    const opt = quickOptions(event.teams).find((o) => o.key === key);
-    if (!opt) return;
-    const res = actions.setAvailability(event.id, me.id, opt.choice, opt.slots);
+  const answer = (choice: AvailabilityChoice, slots?: SlotPriorities) => {
+    const res = actions.setAvailability(event.id, me.id, choice, slots);
     if (res.ok) {
-      const text = describeAvailability({ choice: opt.choice, slots: opt.slots }, event.teams);
+      const text = describeAvailability({ choice, slots }, event.teams);
       toast({ kind: 'ok', text: `Saved: ${text}` });
       announce(`Availability saved: ${text}`);
     }
@@ -259,21 +254,13 @@ function MyWeek({ event, me, today }: { event: CanyonEvent; me: Member; today: s
       <div className="card-row">
         <h3 className="grow">My week</h3>
         <button type="button" className="link-btn" onClick={() => router.navigate(`/canyon/availability/${event.id}`)}>
-          {av ? 'Change' : '1st / 2nd choice…'}
+          Details
         </button>
       </div>
       <p className={published && assignment?.role === 'starter' ? '' : 'muted small'} style={published && assignment?.role === 'starter' ? { fontWeight: 600 } : undefined}>
         {status}
       </p>
-      {!locked && !published && (
-        <div className="quick-avail" role="group" aria-label="My availability">
-          {quickOptions(event.teams).map((o) => (
-            <button key={o.key} type="button" className={o.key} aria-pressed={quick === o.key} onClick={() => answer(o.key)}>
-              {o.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {!locked && !published && <QuickAvailability teams={event.teams} current={av} onSave={answer} label="My availability" />}
       {published && assignment && assignment.role !== 'reserve' && (
         confirmed ? (
           <p className="small" style={{ color: 'var(--ok)' }}>✓ Confirmed for revision {event.confirmations[me.id].revision}</p>

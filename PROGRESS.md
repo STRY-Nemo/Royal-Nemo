@@ -110,3 +110,4 @@ Open Settings (gear icon) → choose a member and the Leader role. Canyon → Ev
 - Members list: dense rows, sticky search, per-row "updated <date>" in warn colour when power is older than two weeks.
 - Timezone pickers (Settings, Schedule) are two big choices, Game time or My device, with Other for the full list. Schedule page no longer mentions the package date.
 - `.github/workflows/wrapup-reminder.yml`: Saturday reminder to record attendance and finalize, posted to the Notifications issue.
+- My week and the collect screen: choosing Either reveals a "Prefer" row (18:00 first / 23:00 first / No preference) that saves the 1st/2nd priorities the rotation honours (`src/ui/QuickAvailability.tsx`). The separate 1st/2nd expander on the collect screen is gone.
