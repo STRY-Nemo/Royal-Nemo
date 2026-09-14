@@ -13,7 +13,7 @@
  */
 import { applyLineupImport, type LineupRecord } from '../engine/lineupImport';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { Assignment, AttendanceOutcome, AuditEntry, AvailabilityChoice, CanyonEvent, MascotState, Member, MemberId, OrganizationState, ResponsibilityId, ResponsibilitySlot, Session, Settings, SlotPriorities, Suggestion, SuggestionStatus, TeamId } from '../domain/types';
+import type { Assignment, AttendanceOutcome, AuditEntry, AvailabilityChoice, CanyonEvent, MascotState, Member, MemberId, OrganizationState, ResponsibilityId, ResponsibilitySlot, Session, Settings, SlotPriorities, Suggestion, SuggestionStatus, TeamId, TrackingEntryInput } from '../domain/types';
 import { loadSeedMembers, loadSeedOrganization, PACKAGE_DATE, seedEventDraft, SERIES_ID } from '../data/seed';
 import * as L from '../engine/lifecycle';
 import * as O from '../engine/organization';
@@ -171,6 +171,8 @@ export interface StoreValue {
     undoAssignments: (eventId: string) => ActionResult;
     publish: (eventId: string) => ActionResult;
     confirm: (eventId: string, memberId: MemberId) => ActionResult;
+    /** Roster-sheet columns (Joined? / Ready? / flag / note) for one or many members; votes fill only missing answers. */
+    setTracking: (eventId: string, entries: TrackingEntryInput[]) => ActionResult;
     recordAttendance: (eventId: string, memberId: MemberId, outcome: AttendanceOutcome, opts?: { team_id?: TeamId | null; substitute?: boolean }) => ActionResult;
     finalize: (eventId: string) => ActionResult;
     cancel: (eventId: string, reason: string) => ActionResult;
@@ -645,6 +647,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return res;
       },
       publish: (eventId) => runEvent(eventId, (e) => L.publishEvent(e, ctx(), e.revision), undefined, (a, before) => a.publish(eventId, before.revision)),
+      setTracking: (eventId, entries) => {
+        const recorder: MemberId | 'self' = stateRef.current.session.member_id ?? 'self';
+        return runEvent(eventId, (e) => L.applyTrackingEntries(e, entries, ctx(), recorder), undefined, (a) => a.tracking(eventId, entries));
+      },
       confirm: (eventId, memberId) => {
         const self = stateRef.current.session.member_id === memberId;
         if (!self && stateRef.current.session.role !== 'leader') return fail(new L.LifecycleError('forbidden', 'You can only confirm your own assignment.'));

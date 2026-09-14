@@ -6,7 +6,7 @@
  * uniqueness, availability, role permissions and stale edits are enforced
  * server-side regardless of what the UI sends.
  */
-import type { AttendanceOutcome, AvailabilityChoice, CanyonEvent, Member, OrganizationState, Settings, SlotPriorities, SlotPriority, TeamId } from '../../src/domain/types';
+import type { AttendanceOutcome, AvailabilityChoice, CanyonEvent, Member, OrganizationState, Settings, SlotPriorities, SlotPriority, TeamId, TrackingEntryInput } from '../../src/domain/types';
 import { choiceFromSlots } from '../../src/engine/suggest';
 import { SERIES_ID } from '../../src/data/seed';
 import * as L from '../../src/engine/lifecycle';
@@ -415,6 +415,29 @@ router.post('/events/:id/confirm', async (ctx) => {
   if (!requested) throw new HttpError(400, 'no_member', 'Link your roster member first.');
   if (requested !== account.member_id && account.role !== 'leader') throw new HttpError(403, 'forbidden', 'You can only confirm your own assignment.');
   const event = await mutateEvent(ctx, ctx.params.id, (e) => L.confirmAssignment(e, requested, ctxFor(account, ctx.now)));
+  return { event };
+});
+
+router.post('/events/:id/tracking', async (ctx) => {
+  const account = requireLeader(ctx.account);
+  const body = await ctx.body();
+  const raw = Array.isArray(body.entries) ? body.entries : [body];
+  const entries = raw.map((e) => {
+    const r = (e ?? {}) as Record<string, unknown>;
+    const out: Record<string, unknown> = { member_id: String(r.member_id ?? '') };
+    for (const k of ['joined', 'ready', 'flag', 'note', 'voted'] as const) {
+      if (k in r) out[k] = r[k] === null ? null : String(r[k]);
+    }
+    return out as unknown as TrackingEntryInput;
+  });
+  if (!entries.length || entries.some((e) => !e.member_id)) throw new HttpError(400, 'bad_request', 'Missing member.');
+  for (const e of entries) {
+    if (e.joined && !['yes', 'mvp', 'other_alliance', 'no'].includes(e.joined)) throw new HttpError(400, 'bad_request', 'Bad joined value.');
+    if (e.ready && !['ready', 'declined', 'offline'].includes(e.ready)) throw new HttpError(400, 'bad_request', 'Bad ready value.');
+    if (e.flag && !['removed', 'added'].includes(e.flag)) throw new HttpError(400, 'bad_request', 'Bad flag value.');
+    if (e.voted && !['team1', 'team2', 'either', 'unavailable'].includes(e.voted)) throw new HttpError(400, 'bad_request', 'Bad vote value.');
+  }
+  const event = await mutateEvent(ctx, ctx.params.id, (e) => L.applyTrackingEntries(e, entries, ctxFor(account, ctx.now), actorFor(account)));
   return { event };
 });
 

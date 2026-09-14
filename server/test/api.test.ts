@@ -323,6 +323,21 @@ describe('STRY API', () => {
     expect((await api('POST', '/mascot/feed')).status).toBe(401);
   });
 
+  it('records roster-sheet tracking columns for leaders only and fills missing votes', async () => {
+    const bad = await api('POST', `/events/${eventId}/tracking`, { member_id: memberId, joined: 'maybe' }, leaderToken);
+    expect(bad.status).toBe(400);
+    expect((await api('POST', `/events/${eventId}/tracking`, { member_id: memberId, joined: 'yes' }, memberToken)).status).toBe(403);
+    const one = await api<{ event: { tracking: Record<string, { joined?: string; ready?: string }>; availability: Record<string, { choice: string }> } }>('POST', `/events/${eventId}/tracking`, { member_id: memberId, joined: 'mvp', voted: 'team2' }, leaderToken);
+    expect(one.status).toBe(200);
+    expect(one.body.event.tracking[memberId].joined).toBe('mvp');
+    // The member already answered earlier in this suite, so the sheet vote must not replace it.
+    expect(one.body.event.availability[memberId].choice).not.toBe('team2');
+    const many = await api<{ event: { tracking: Record<string, { ready?: string; joined?: string }> } }>('POST', `/events/${eventId}/tracking`, { entries: [{ member_id: 'stry-050', ready: 'declined' }, { member_id: memberId, joined: null }] }, leaderToken);
+    expect(many.status).toBe(200);
+    expect(many.body.event.tracking['stry-050'].ready).toBe('declined');
+    expect(many.body.event.tracking[memberId]).toBeUndefined();
+  });
+
   it('edits organization slots atomically with revision checks and undo inverses', async () => {
     const state = await api<{ organization: { revision: number; responsibilities: { id: string; slots: { position: number; source_name: string | null }[] }[] } }>('GET', '/state', undefined, leaderToken);
     const org = state.body.organization;
