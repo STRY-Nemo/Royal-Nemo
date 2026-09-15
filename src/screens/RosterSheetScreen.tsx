@@ -90,7 +90,8 @@ export function RosterSheetScreen({ eventId }: { eventId?: string }) {
 
   // Rows that only carry a vote leave no tracking entry, so judge "already imported" by the rows that would.
   const trackingRows = plan?.entries.filter((e) => e.joined || e.ready || e.flag || e.note) ?? [];
-  const alreadyImported = !!bundled && trackingRows.length > 0 && trackingRows.every((e) => event.tracking?.[e.member_id]) && counts.team1_starters + counts.team2_starters > 0;
+  const placesTeams = !!lineup && lineup.team1.length + lineup.team2.length > 0;
+  const alreadyImported = !!bundled && trackingRows.length > 0 && trackingRows.every((e) => event.tracking?.[e.member_id]) && (!placesTeams || counts.team1_starters + counts.team2_starters > 0);
   const importErrors = [...(teamPlans?.team1?.errors ?? []), ...(teamPlans?.team2?.errors ?? [])];
   const canImport = isLeader && !!bundled && !!plan && event.status !== 'finalized' && !locked && !alreadyImported;
 

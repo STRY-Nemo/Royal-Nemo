@@ -1,7 +1,8 @@
 /**
  * Roster sheets transcribed from the leaders' spreadsheet and validated against
  * the source screenshot (names corrected to roster spellings). Leaders can import
- * one onto its week from the Roster sheet page; existing votes are never overwritten.
+ * one onto its week from the Roster sheet page (existing votes are kept); the
+ * "Apply roster sheet" workflow applies one server-side with force.
  */
 import type { BundledSheetRow } from '../engine/rosterSheet';
 
@@ -215,6 +216,7 @@ export const BUNDLED_SHEETS: BundledSheet[] = [
           {
                 "username": "Raul863",
                 "section": "Team 1 substitutes",
+                "joined": "no",
                 "voted": "team1",
                 "ready": "ready",
                 "sub": "Team 1"
@@ -222,6 +224,7 @@ export const BUNDLED_SHEETS: BundledSheet[] = [
           {
                 "username": "AvatarNavi",
                 "section": "Team 1 substitutes",
+                "joined": "no",
                 "voted": "team1",
                 "ready": "ready",
                 "sub": "Team 1"
@@ -245,6 +248,7 @@ export const BUNDLED_SHEETS: BundledSheet[] = [
           {
                 "username": "Pandoraloft",
                 "section": "Team 1 substitutes",
+                "joined": "no",
                 "voted": "team1",
                 "sub": "Team 1"
           },
@@ -267,6 +271,7 @@ export const BUNDLED_SHEETS: BundledSheet[] = [
           {
                 "username": "InkedWitch",
                 "section": "Team 1 substitutes",
+                "joined": "no",
                 "voted": null,
                 "ready": "ready",
                 "sub": "Team 1"
@@ -440,6 +445,7 @@ export const BUNDLED_SHEETS: BundledSheet[] = [
           {
                 "username": "JetPed",
                 "section": "Team 2 substitutes",
+                "joined": "no",
                 "voted": "team2",
                 "sub": "Team 2"
           },
@@ -454,6 +460,7 @@ export const BUNDLED_SHEETS: BundledSheet[] = [
           {
                 "username": "Sanatio Fax",
                 "section": "Team 2 substitutes",
+                "joined": "no",
                 "voted": "team2",
                 "sub": "Team 2"
           },
@@ -467,6 +474,7 @@ export const BUNDLED_SHEETS: BundledSheet[] = [
           {
                 "username": "DontMesswNess",
                 "section": "Team 2 substitutes",
+                "joined": "no",
                 "voted": "team2",
                 "ready": "ready",
                 "sub": "Team 2"
@@ -482,6 +490,7 @@ export const BUNDLED_SHEETS: BundledSheet[] = [
           {
                 "username": "USO Kiwi",
                 "section": "Team 2 substitutes",
+                "joined": "no",
                 "voted": "team2",
                 "ready": "ready",
                 "sub": "Team 2"
@@ -489,6 +498,7 @@ export const BUNDLED_SHEETS: BundledSheet[] = [
           {
                 "username": "SophieUa",
                 "section": "Team 2 substitutes",
+                "joined": "no",
                 "voted": null,
                 "sub": "Team 2"
           },
@@ -580,6 +590,7 @@ export const BUNDLED_SHEETS: BundledSheet[] = [
           {
                 "username": "Bachter",
                 "section": "Ready list",
+                "joined": "no",
                 "voted": "team1",
                 "ready": "ready"
           },
@@ -592,6 +603,7 @@ export const BUNDLED_SHEETS: BundledSheet[] = [
           {
                 "username": "Pmari Snow",
                 "section": "Ready list",
+                "joined": "no",
                 "voted": "team1",
                 "ready": "ready"
           },
@@ -616,6 +628,7 @@ export const BUNDLED_SHEETS: BundledSheet[] = [
           {
                 "username": "Wanderer629",
                 "section": "Ready list",
+                "joined": "no",
                 "voted": null,
                 "ready": "ready"
           },
@@ -629,6 +642,7 @@ export const BUNDLED_SHEETS: BundledSheet[] = [
           {
                 "username": "LostSoul1213",
                 "section": "Ready list",
+                "joined": "no",
                 "voted": "either",
                 "ready": "ready",
                 "note": "Doesn't show up"
@@ -636,6 +650,7 @@ export const BUNDLED_SHEETS: BundledSheet[] = [
           {
                 "username": "Pitour",
                 "section": "Didn't vote or respond",
+                "joined": "no",
                 "voted": "team1"
           },
           {
@@ -646,11 +661,13 @@ export const BUNDLED_SHEETS: BundledSheet[] = [
           {
                 "username": "Potepuhec",
                 "section": "Didn't vote or respond",
+                "joined": "no",
                 "voted": "team1"
           },
           {
                 "username": "Matt02",
                 "section": "Didn't vote or respond",
+                "joined": "no",
                 "voted": "team2"
           },
           {
@@ -681,6 +698,7 @@ export const BUNDLED_SHEETS: BundledSheet[] = [
           {
                 "username": "Warriorwarrior",
                 "section": "Didn't vote or respond",
+                "joined": "no",
                 "voted": null
           },
           {
@@ -711,8 +729,338 @@ export const BUNDLED_SHEETS: BundledSheet[] = [
           {
                 "username": "pepito",
                 "section": "Didn't vote or respond",
+                "joined": "no",
                 "voted": null
           }
+    ],
+  },
+  {
+    event_date: '2026-09-18',
+    label: 'Votes from the 09-18 Canyon tab',
+    source: 'The "09-18 Canyon" tab screenshot: the 18:00, 23:00 and Both columns as votes, "Played Last week" kept as a note; names matched to the roster',
+    rows: [
+      {
+        "username": "Queen Rouge",
+        "section": "Voted 18:00",
+        "voted": "team1"
+      },
+      {
+        "username": "Mada",
+        "section": "Voted 18:00",
+        "voted": "team1"
+      },
+      {
+        "username": "JoelitoBB",
+        "section": "Voted 18:00",
+        "voted": "team1"
+      },
+      {
+        "username": "LostSoul1213",
+        "section": "Voted 18:00",
+        "voted": "team1",
+        "note": "Last week: No"
+      },
+      {
+        "username": "Dorin",
+        "section": "Voted either time",
+        "voted": "either"
+      },
+      {
+        "username": "Ultra EGO",
+        "section": "Voted 18:00",
+        "voted": "team1"
+      },
+      {
+        "username": "Raul863",
+        "section": "Voted 18:00",
+        "voted": "team1",
+        "note": "Last week: Sub (No)"
+      },
+      {
+        "username": "Pandoraloft",
+        "section": "Voted 18:00",
+        "voted": "team1",
+        "note": "Last week: No"
+      },
+      {
+        "username": "-Yeti-",
+        "section": "Voted 18:00",
+        "voted": "team1",
+        "note": "Last week: Sub (Yes)"
+      },
+      {
+        "username": "Shastorm",
+        "section": "Voted 18:00",
+        "voted": "team1"
+      },
+      {
+        "username": "Tẽmujïn",
+        "section": "Voted either time",
+        "voted": "either",
+        "slots": {
+          "team1": 1,
+          "team2": 2
+        },
+        "note": "Can do both, prefers 18:00 · Last week: Sub (Yes)"
+      },
+      {
+        "username": "MamaBt",
+        "section": "Voted 18:00",
+        "voted": "team1"
+      },
+      {
+        "username": "Bachter",
+        "section": "Voted 18:00",
+        "voted": "team1",
+        "note": "Last week: No"
+      },
+      {
+        "username": "SwiftBunny DH",
+        "section": "Voted 18:00",
+        "voted": "team1"
+      },
+      {
+        "username": "AvatarNavi",
+        "section": "Voted 18:00",
+        "voted": "team1",
+        "note": "Last week: Sub (No)"
+      },
+      {
+        "username": "levON",
+        "section": "Voted 18:00",
+        "voted": "team1",
+        "note": "Last week: Sub (Yes)"
+      },
+      {
+        "username": "Chika Strike",
+        "section": "Voted 18:00",
+        "voted": "team1",
+        "note": "Last week: MVP"
+      },
+      {
+        "username": "Potepuhec",
+        "section": "Voted 18:00",
+        "voted": "team1",
+        "note": "Last week: No"
+      },
+      {
+        "username": "Sats0mNlak",
+        "section": "Voted 18:00",
+        "voted": "team1"
+      },
+      {
+        "username": "PajuHalfLapin",
+        "section": "Voted 18:00",
+        "voted": "team1",
+        "note": "Last week: No"
+      },
+      {
+        "username": "Azale",
+        "section": "Voted 18:00",
+        "voted": "team1",
+        "note": "Last week: No"
+      },
+      {
+        "username": "• Dyo •",
+        "section": "Voted 18:00",
+        "voted": "team1"
+      },
+      {
+        "username": "Flowmotion47",
+        "section": "Voted 18:00",
+        "voted": "team1"
+      },
+      {
+        "username": "Matt02",
+        "section": "Voted 18:00",
+        "voted": "team1",
+        "note": "Last week: No"
+      },
+      {
+        "username": "Giovanni Savage",
+        "section": "Voted 18:00",
+        "voted": "team1"
+      },
+      {
+        "username": "Mapinski",
+        "section": "Voted 18:00",
+        "voted": "team1",
+        "note": "Last week: Sub (Yes)"
+      },
+      {
+        "username": "Victoria13",
+        "section": "Voted either time",
+        "voted": "either"
+      },
+      {
+        "username": "crumbum271",
+        "section": "Voted 18:00",
+        "voted": "team1"
+      },
+      {
+        "username": "Pmari Snow",
+        "section": "Voted 18:00",
+        "voted": "team1",
+        "note": "Last week: No"
+      },
+      {
+        "username": "Warriorwarrior",
+        "section": "Voted 18:00",
+        "voted": "team1",
+        "note": "Last week: No"
+      },
+      {
+        "username": "Pitour",
+        "section": "Voted 18:00",
+        "voted": "team1",
+        "note": "Last week: No"
+      },
+      {
+        "username": "Mario AK47",
+        "section": "Voted 23:00",
+        "voted": "team2"
+      },
+      {
+        "username": "RosolinoFriddi",
+        "section": "Voted 23:00",
+        "voted": "team2"
+      },
+      {
+        "username": "TinaG",
+        "section": "Voted 23:00",
+        "voted": "team2"
+      },
+      {
+        "username": "Apparition-",
+        "section": "Voted 23:00",
+        "voted": "team2"
+      },
+      {
+        "username": "Galihad",
+        "section": "Voted either time",
+        "voted": "either"
+      },
+      {
+        "username": "DemonKingg",
+        "section": "Voted 23:00",
+        "voted": "team2"
+      },
+      {
+        "username": "JetPed",
+        "section": "Voted 23:00",
+        "voted": "team2",
+        "note": "Last week: No"
+      },
+      {
+        "username": "SophieUa",
+        "section": "Voted 23:00",
+        "voted": "team2",
+        "note": "Last week: No"
+      },
+      {
+        "username": "raZ",
+        "section": "Voted 23:00",
+        "voted": "team2"
+      },
+      {
+        "username": "King of goats",
+        "section": "Voted 23:00",
+        "voted": "team2",
+        "note": "Last week: Sub (Yes)"
+      },
+      {
+        "username": "DeeDeeeee",
+        "section": "Voted 23:00",
+        "voted": "team2"
+      },
+      {
+        "username": "KingLow",
+        "section": "Voted 23:00",
+        "voted": "team2",
+        "note": "Last week: Sub (Yes)"
+      },
+      {
+        "username": "JAY QUEEN",
+        "section": "Voted 23:00",
+        "voted": "team2"
+      },
+      {
+        "username": "MaKaRa",
+        "section": "Voted 23:00",
+        "voted": "team2"
+      },
+      {
+        "username": "Captain Cake",
+        "section": "Voted 23:00",
+        "voted": "team2"
+      },
+      {
+        "username": "pepito",
+        "section": "Voted 23:00",
+        "voted": "team2",
+        "note": "Last week: No"
+      },
+      {
+        "username": "-PIM-",
+        "section": "Voted either time",
+        "voted": "either"
+      },
+      {
+        "username": "Vodkashot",
+        "section": "Voted 23:00",
+        "voted": "team2",
+        "note": "Last week: No"
+      },
+      {
+        "username": "Wanderer629",
+        "section": "Voted 23:00",
+        "voted": "team2",
+        "note": "Last week: No"
+      },
+      {
+        "username": "Dinkleberg6969",
+        "section": "Voted 23:00",
+        "voted": "team2"
+      },
+      {
+        "username": "DontMesswNess",
+        "section": "Voted 23:00",
+        "voted": "team2",
+        "note": "Last week: Sub (No)"
+      },
+      {
+        "username": "Sanatio Fax",
+        "section": "Voted 23:00",
+        "voted": "team2",
+        "note": "Last week: Sub (No)"
+      },
+      {
+        "username": "Dvon Khan",
+        "section": "Voted 23:00",
+        "voted": "team2"
+      },
+      {
+        "username": "USO Kiwi",
+        "section": "Voted either time",
+        "voted": "either",
+        "note": "Last week: Sub (No)"
+      },
+      {
+        "username": "Appins",
+        "section": "Voted either time",
+        "voted": "either"
+      },
+      {
+        "username": "Pappless",
+        "section": "Voted either time",
+        "voted": "either"
+      },
+      {
+        "username": "InkedWitch",
+        "section": "Voted either time",
+        "voted": "either",
+        "note": "Last week: No"
+      }
     ],
   },
 ];

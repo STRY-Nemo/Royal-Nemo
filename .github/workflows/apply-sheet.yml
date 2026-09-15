@@ -1,0 +1,46 @@
+name: Apply roster sheet
+# Populates a Canyon Clash week on the live API from a sheet bundled in
+# src/data/trackingSheets.ts (votes, the leaders' tracking columns and the
+# Team 1 / Team 2 placements) so nobody has to tap through the app.
+# Run it from the Actions tab: pick the Friday date of the bundled sheet.
+#
+# Needs the repository secret SUGGESTIONS_SYNC_TOKEN, which the "Sync ideas to
+# issues" workflow already copies onto the Worker.
+
+on:
+  workflow_dispatch:
+    inputs:
+      event_date:
+        description: 'Friday of the bundled sheet to apply (YYYY-MM-DD)'
+        required: true
+        type: string
+      force:
+        description: 'Overwrite votes and lineup already in the app (a finalized week is reopened and finalized again)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply the sheet
+        env:
+          SYNC_TOKEN: ${{ secrets.SUGGESTIONS_SYNC_TOKEN }}
+          EVENT_DATE: ${{ inputs.event_date }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          if [ -z "$SYNC_TOKEN" ]; then
+            echo "::error::SUGGESTIONS_SYNC_TOKEN is not set; add it as a repository secret and run 'Sync ideas to issues' once so the API learns it."; exit 1
+          fi
+          api=$(grep -oE 'VITE_API_URL=\S+' .env.production | cut -d= -f2)
+          code=$(curl -sS -o out.json -w '%{http_code}' -X POST \
+            -H "x-sync-token: $SYNC_TOKEN" -H 'content-type: application/json' \
+            -d "{\"event_date\":\"$EVENT_DATE\",\"force\":${FORCE:-true}}" "$api/admin/apply-sheet")
+          echo "HTTP $code"
+          jq . out.json || cat out.json
+          if [ "$code" != "200" ]; then echo "::error::The API returned $code (see the response above)."; exit 1; fi
+          echo "::notice::$(jq -r '"\(.event_date) (\(.status), revision \(.revision)): \(.summary.matched) matched, \(.summary.unmatched | length) unmatched (\(.summary.unmatched | join(", "))), \(.summary.votes_set) votes set, \(.summary.tracked) tracked, Team 1 \(.summary.team1.starters // 0)+\(.summary.team1.reserves // 0), Team 2 \(.summary.team2.starters // 0)+\(.summary.team2.reserves // 0)"' out.json)"

@@ -9,10 +9,12 @@
 import type { AttendanceOutcome, AvailabilityChoice, CanyonEvent, Member, OrganizationState, Settings, SlotPriorities, SlotPriority, TeamId, TrackingEntryInput } from '../../src/domain/types';
 import { choiceFromSlots } from '../../src/engine/suggest';
 import { SERIES_ID } from '../../src/data/seed';
+import { BUNDLED_SHEETS } from '../../src/data/trackingSheets';
+import { applyBundledSheet } from '../../src/engine/rosterSheet';
 import * as L from '../../src/engine/lifecycle';
 import { applyLineupImport, type LineupRecord } from '../../src/engine/lineupImport';
 import * as O from '../../src/engine/organization';
-import { isValidTimeZone, todayInZone } from '../../src/engine/recurrence';
+import { eventIdFor, isValidTimeZone, todayInZone } from '../../src/engine/recurrence';
 import {
   accountFromRequest,
   createSession,
@@ -554,6 +556,43 @@ router.get('/suggestions/export', async (ctx) => {
   const given = ctx.request.headers.get('x-sync-token') ?? '';
   if (!token || given !== token) throw new HttpError(404, 'not_found', 'Not found.');
   return { exported_at: ctx.now.toISOString(), suggestions: await loadSuggestions(ctx.env) };
+});
+
+/**
+ * Automation: applies a bundled roster sheet (src/data/trackingSheets.ts) to its week
+ * without anyone tapping through the app. Guarded by the same sync token as the
+ * ideas export; the "Apply roster sheet" GitHub workflow calls it. With `force`
+ * (the default) it overwrites votes and re-places the teams from the sheet.
+ */
+router.post('/admin/apply-sheet', async (ctx) => {
+  const token = ctx.env.SUGGESTIONS_SYNC_TOKEN;
+  const given = ctx.request.headers.get('x-sync-token') ?? '';
+  if (!token || given !== token) throw new HttpError(404, 'not_found', 'Not found.');
+  const body = await ctx.body();
+  const date = str(body, 'event_date');
+  const sheet = BUNDLED_SHEETS.find((b) => b.event_date === date);
+  if (!sheet) throw new HttpError(404, 'no_sheet', `No bundled sheet for ${date}. Bundled: ${BUNDLED_SHEETS.map((b) => b.event_date).join(', ')}.`);
+  const force = body.force !== false;
+  const [members, events, org, settings] = await Promise.all([loadMembers(ctx.env), loadEvents(ctx.env), loadOrganization(ctx.env), loadSettings(ctx.env)]);
+  const id = eventIdFor(SERIES_ID, date);
+  let created = false;
+  if (!events.some((e) => e.id === id)) {
+    let draft: CanyonEvent;
+    try {
+      draft = L.createDraftEvent({ series_id: SERIES_ID, date, timezone: settings.timezone, team_times: settings.default_team_times });
+    } catch (err) {
+      mapError(err);
+    }
+    await insertEvent(ctx.env, draft!, ctx.now);
+    created = true;
+  }
+  let summary: unknown = null;
+  const event = await mutateEvent(ctx, id, (e) => {
+    const r = applyBundledSheet(e, sheet.rows, members, org.name_mapping, { actor: 'system', now: ctx.now.toISOString() }, { force, source: sheet.label });
+    summary = r.summary;
+    return r;
+  });
+  return { event_date: date, event_id: id, created, status: event.status, revision: event.revision, force, summary };
 });
 
 // ---- Mascot --------------------------------------------------------------------
