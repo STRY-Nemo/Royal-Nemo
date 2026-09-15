@@ -3,9 +3,10 @@
  * with the columns the organizers track by hand (Joined? · Voted · Family Member ·
  * Ready? · Starter · Sub), grouped into the sheet's sections.
  */
-import type { AvailabilityChoice, CanyonEvent, Member, MemberId, TrackingEntry, TrackingEntryInput, TrackingJoined, TrackingReady } from '../domain/types';
+import type { AvailabilityChoice, CanyonEvent, Member, MemberId, SlotPriorities, TrackingEntry, TrackingEntryInput, TrackingJoined, TrackingReady } from '../domain/types';
 import { describeAvailability } from './suggest';
-import type { LineupRecord, TeamNumber } from './lineupImport';
+import { applyLineupImport, type LineupRecord, type TeamNumber } from './lineupImport';
+import { applyTrackingEntries, finalizeEvent, LifecycleError, setAvailability, type Context, type Result } from './lifecycle';
 
 export type SheetSection = 'team1_starters' | 'team1_subs' | 'team2_starters' | 'team2_subs' | 'declined' | 'ready' | 'no_response';
 
@@ -126,6 +127,8 @@ export interface BundledSheetRow {
   username: string;
   section: string;
   voted: AvailabilityChoice | null;
+  /** First/second choice between the two times when the sheet says so (e.g. "can do both, prefers 18:00"). */
+  slots?: SlotPriorities;
   joined?: TrackingJoined;
   ready?: TrackingReady;
   flag?: 'removed' | 'added';
@@ -144,23 +147,33 @@ export interface SheetImportPlan {
   votesFilled: number;
 }
 
-/** Matches sheet rows to roster members and lists what an import would change. */
-export function planSheetImport(event: CanyonEvent, members: Member[], rows: BundledSheetRow[]): SheetImportPlan {
+/** Matches sheet rows to active roster members by normalized username; duplicate source rows keep their first. */
+export function matchSheetRows(members: Member[], rows: BundledSheetRow[]): { matched: { row: BundledSheetRow; member: Member }[]; unmatched: string[] } {
   const byName = new Map(members.filter((m) => m.active).map((m) => [normalize(m.username), m]));
-  const entries: TrackingEntryInput[] = [];
+  const matched: { row: BundledSheetRow; member: Member }[] = [];
   const unmatched: string[] = [];
-  const mismatches: SheetImportPlan['mismatches'] = [];
   const seen = new Set<MemberId>();
-  let votesFilled = 0;
-  const current = sheetRows(event, members);
   for (const row of rows) {
     const m = byName.get(normalize(row.username));
     if (!m) {
       unmatched.push(row.username);
       continue;
     }
-    if (seen.has(m.id)) continue; // duplicate source entries keep their first row
+    if (seen.has(m.id)) continue;
     seen.add(m.id);
+    matched.push({ row, member: m });
+  }
+  return { matched, unmatched };
+}
+
+/** Matches sheet rows to roster members and lists what an import would change. */
+export function planSheetImport(event: CanyonEvent, members: Member[], rows: BundledSheetRow[]): SheetImportPlan {
+  const entries: TrackingEntryInput[] = [];
+  const mismatches: SheetImportPlan['mismatches'] = [];
+  let votesFilled = 0;
+  const current = sheetRows(event, members);
+  const { matched, unmatched } = matchSheetRows(members, rows);
+  for (const { row, member: m } of matched) {
     const entry: TrackingEntryInput = { member_id: m.id };
     if (row.joined) entry.joined = row.joined;
     if (row.ready) entry.ready = row.ready;
@@ -211,6 +224,79 @@ export function sheetLineupRecords(rows: BundledSheetRow[], eventDate: string): 
     (team === 1 ? out.team1 : out.team2).push(record);
   }
   return out;
+}
+
+export interface ApplySheetOptions {
+  /** Overwrite votes members gave themselves and re-place the teams; a finalized week is reopened for the apply and finalized again. */
+  force?: boolean;
+  source?: string;
+  recordedBy?: MemberId | 'self';
+}
+
+export interface ApplySheetSummary {
+  matched: number;
+  unmatched: string[];
+  votes_set: number;
+  votes_kept: number;
+  tracked: number;
+  team1: { starters: number; reserves: number } | null;
+  team2: { starters: number; reserves: number } | null;
+  refinalized: boolean;
+}
+
+/**
+ * Applies a whole bundled sheet to its week in one step: votes (overwriting
+ * existing ones when `force`), the tracking columns, and the Starter / Sub
+ * placements for both teams. Used server-side to populate a week without
+ * anyone tapping through the app.
+ */
+export function applyBundledSheet(event: CanyonEvent, rows: BundledSheetRow[], members: Member[], nameMapping: Record<string, MemberId | null>, ctx: Context, opts: ApplySheetOptions = {}): Result & { summary: ApplySheetSummary } {
+  if (event.status === 'canceled') throw new LifecycleError('canceled', 'This event is canceled.');
+  const wasFinalized = event.status === 'finalized';
+  if (wasFinalized && !opts.force) throw new LifecycleError('finalized', 'This event is finalized; pass force to reopen it for the sheet.');
+  let working: CanyonEvent = wasFinalized ? { ...event, status: 'published' } : event;
+  const audit: Result['audit'] = [];
+  const recordedBy = opts.recordedBy ?? 'self';
+  const { matched, unmatched } = matchSheetRows(members, rows);
+  let votesSet = 0;
+  let votesKept = 0;
+  const entries: TrackingEntryInput[] = [];
+  for (const { row, member } of matched) {
+    if (row.voted) {
+      if (opts.force || !working.availability[member.id]) {
+        const r = setAvailability(working, member.id, row.voted, ctx, recordedBy, row.slots);
+        working = r.event;
+        audit.push(...r.audit);
+        votesSet++;
+      } else votesKept++;
+    }
+    const entry: TrackingEntryInput = { member_id: member.id };
+    if (row.joined) entry.joined = row.joined;
+    if (row.ready) entry.ready = row.ready;
+    if (row.flag) entry.flag = row.flag;
+    if (row.note) entry.note = row.note;
+    if (entry.joined || entry.ready || entry.flag || entry.note) entries.push(entry);
+  }
+  if (entries.length) {
+    const r = applyTrackingEntries(working, entries, ctx, recordedBy);
+    working = r.event;
+    audit.push(...r.audit);
+  }
+  const records = sheetLineupRecords(rows, working.date);
+  const teams: { team1: ApplySheetSummary['team1']; team2: ApplySheetSummary['team2'] } = { team1: null, team2: null };
+  for (const key of ['team1', 'team2'] as const) {
+    if (!records[key].length) continue;
+    const r = applyLineupImport(working, records[key], members, nameMapping, ctx, { source: opts.source });
+    working = r.event;
+    audit.push(...r.audit);
+    teams[key] = { starters: r.plan.starters.length, reserves: r.plan.reserves.length };
+  }
+  if (wasFinalized) {
+    const r = finalizeEvent(working, ctx);
+    working = r.event;
+    audit.push(...r.audit);
+  }
+  return { event: working, audit, summary: { matched: matched.length, unmatched, votes_set: votesSet, votes_kept: votesKept, tracked: entries.length, ...teams, refinalized: wasFinalized } };
 }
 
 function normalize(s: string): string {

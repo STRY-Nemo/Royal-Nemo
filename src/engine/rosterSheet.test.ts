@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { loadSeedMembers } from '../data/seed';
 import { BUNDLED_SHEETS } from '../data/trackingSheets';
-import { applyTrackingEntries, createDraftEvent, setAvailability } from './lifecycle';
-import { planSheetImport, sheetCounts, sheetLineupRecords, sheetRows, sheetText } from './rosterSheet';
+import { applyTrackingEntries, createDraftEvent, finalizeEvent, publishEvent, setAvailability } from './lifecycle';
+import { applyBundledSheet, planSheetImport, sheetCounts, sheetLineupRecords, sheetRows, sheetText } from './rosterSheet';
 import { applyLineupImport } from './lineupImport';
 import { APOCALYPSE_TIME_ZONE } from './recurrence';
 
@@ -74,5 +74,58 @@ describe('roster sheet', () => {
     expect(rows.find((r) => r.member.username === 'crumbum271')?.starter).toBe('Team 1');
     expect(rows.find((r) => r.member.username === 'Rrrrrrrrrd')?.starter).toBeNull();
     expect(rows.find((r) => r.member.username === 'Captain Cake')?.starter).toBe('Team 2');
+  });
+
+  it('applies a whole sheet with force: votes overwritten, tracking set, both teams placed', () => {
+    const sheet = BUNDLED_SHEETS.find((b) => b.event_date === '2026-09-11')!;
+    const elmoId = members.find((m) => m.username === 'Elmo')!.id;
+    const event = setAvailability(draft(), elmoId, 'unavailable', ctx, 'self').event; // Elmo said no, sheet says either + Team 1 starter
+    const kept = applyBundledSheet(event, sheet.rows, members, {}, ctx, { force: false });
+    expect(kept.summary.votes_kept).toBe(1);
+    const res = applyBundledSheet(event, sheet.rows, members, {}, ctx, { force: true, source: 'sheet' });
+    expect(res.summary.votes_kept).toBe(0);
+    expect(res.summary.unmatched).toEqual(['Rockysaurus']);
+    expect(res.summary.team1).toEqual({ starters: 20, reserves: 11 });
+    expect(res.summary.team2).toEqual({ starters: 20, reserves: 9 });
+    expect(res.summary.refinalized).toBe(false);
+    const rows = sheetRows(res.event, members);
+    const elmo = rows.find((r) => r.member.id === elmoId)!;
+    expect(elmo.starter).toBe('Team 1');
+    expect(elmo.voted).not.toBe('unavailable');
+    expect(sheetCounts(rows).team1_starters).toBe(20);
+    expect(rows.find((r) => r.member.username === 'LostSoul1213')?.joined).toBe('no');
+    // Applying again is idempotent for the lineup.
+    const again = applyBundledSheet(res.event, sheet.rows, members, {}, ctx, { force: true });
+    expect(sheetCounts(sheetRows(again.event, members)).team2_starters).toBe(20);
+  });
+
+  it('reopens a finalized week for a forced apply and finalizes it again', () => {
+    const sheet = BUNDLED_SHEETS.find((b) => b.event_date === '2026-09-11')!;
+    const confirmed = createDraftEvent({ series_id: 'canyon-friday', date: '2026-09-11', timezone: APOCALYPSE_TIME_ZONE, team_times: { team1: '18:00', team2: '23:00' }, date_confirmed: true });
+    let event = applyBundledSheet(confirmed, sheet.rows, members, {}, ctx).event;
+    event = publishEvent(event, ctx).event;
+    event = finalizeEvent(event, ctx).event;
+    expect(() => applyBundledSheet(event, sheet.rows, members, {}, ctx)).toThrow(/finalized/);
+    const res = applyBundledSheet(event, sheet.rows, members, {}, ctx, { force: true });
+    expect(res.event.status).toBe('finalized');
+    expect(res.summary.refinalized).toBe(true);
+  });
+
+  it('bundles the 09-18 votes with the prefer-18:00 slots and two names not on the roster', () => {
+    const sheet = BUNDLED_SHEETS.find((b) => b.event_date === '2026-09-18')!;
+    const week = createDraftEvent({ series_id: 'canyon-friday', date: '2026-09-18', timezone: APOCALYPSE_TIME_ZONE, team_times: { team1: '18:00', team2: '23:00' } });
+    const res = applyBundledSheet(week, sheet.rows, members, {}, ctx, { force: true });
+    expect(res.summary.unmatched).toEqual(['Azale', 'Vodkashot']);
+    expect(res.summary.team1).toBeNull();
+    expect(res.summary.votes_set).toBe(sheet.rows.length - 2);
+    const rows = sheetRows(res.event, members);
+    const temujin = rows.find((r) => r.member.username === 'Tẽmujïn')!;
+    expect(temujin.voted).toBe('either');
+    expect(res.event.availability[temujin.member.id].slots).toEqual({ team1: 1, team2: 2 });
+    expect(rows.find((r) => r.member.username === 'Dorin')?.voted).toBe('either');
+    expect(rows.find((r) => r.member.username === 'Queen Rouge')?.votedLabel).toBe('18:00');
+    expect(rows.find((r) => r.member.username === 'Mario AK47')?.votedLabel).toBe('23:00');
+    expect(rows.find((r) => r.member.username === 'Raul863')?.note).toBe('Last week: Sub (No)');
+    expect(sheetCounts(rows).no_response).toBe(rows.length - (sheet.rows.length - 2));
   });
 });

@@ -48,7 +48,7 @@ beforeAll(async () => {
   const env = { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: 'true', NO_D1_WARNING: 'true' };
   const migrate = spawnSync('npx', ['wrangler', 'd1', 'migrations', 'apply', 'stry-alliance', '--local', '--persist-to', persistDir], { cwd: SERVER_DIR, env, encoding: 'utf8' });
   if (migrate.status !== 0) throw new Error(`migrations failed: ${migrate.stdout}\n${migrate.stderr}`);
-  proc = spawn('npx', ['wrangler', 'dev', '--local', '--port', String(PORT), '--persist-to', persistDir, '--var', `OWNER_SETUP_CODE:${OWNER_CODE}`, '--var', 'ALLOWED_ORIGINS:http://localhost:5173'], {
+  proc = spawn('npx', ['wrangler', 'dev', '--local', '--port', String(PORT), '--persist-to', persistDir, '--var', `OWNER_SETUP_CODE:${OWNER_CODE}`, '--var', 'ALLOWED_ORIGINS:http://localhost:5173', '--var', 'SUGGESTIONS_SYNC_TOKEN:test-sync-token'], {
     cwd: SERVER_DIR,
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -303,6 +303,28 @@ describe('STRY API', () => {
     expect(state.body.suggestions.some((s) => s.id === id)).toBe(true);
     expect((await api('GET', '/suggestions/export')).status).toBe(404);
     expect((await api('GET', '/suggestions/export', undefined, undefined)).status).toBe(404);
+  });
+
+  it('applies a bundled roster sheet server-side with the sync token only', async () => {
+    const post = async (body: unknown, token?: string) => {
+      const r = await fetch(`${BASE}/admin/apply-sheet`, { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { 'x-sync-token': token } : {}) }, body: JSON.stringify(body) });
+      return { status: r.status, body: (await r.json()) as Record<string, unknown> };
+    };
+    expect((await post({ event_date: '2026-09-18' })).status).toBe(404);
+    expect((await post({ event_date: '2026-09-18' }, 'wrong')).status).toBe(404);
+    expect((await post({ event_date: '2026-10-02' }, 'test-sync-token')).status).toBe(404);
+    const res = await post({ event_date: '2026-09-18' }, 'test-sync-token');
+    expect(res.status).toBe(200);
+    const summary = res.body.summary as { matched: number; unmatched: string[]; votes_set: number; team1: unknown };
+    expect(summary.unmatched).toEqual(['Azale', 'Vodkashot']);
+    expect(summary.votes_set).toBe(summary.matched);
+    expect(summary.team1).toBeNull();
+    const state = await api<{ events: { id: string; availability: Record<string, { choice: string }> }[] }>('GET', '/state', undefined, leaderToken);
+    const week = state.body.events.find((e) => e.id === res.body.event_id)!;
+    expect(Object.keys(week.availability).length).toBeGreaterThanOrEqual(summary.matched);
+    const older = await post({ event_date: '2026-09-11' }, 'test-sync-token');
+    expect(older.status).toBe(200);
+    expect((older.body.summary as { team1: { starters: number } }).team1.starters).toBe(20);
   });
 
   it('feeds the shared bear with a per-person cooldown', async () => {
