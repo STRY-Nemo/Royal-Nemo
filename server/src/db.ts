@@ -36,6 +36,11 @@ export async function loadMember(env: Env, id: string): Promise<Member> {
   return JSON.parse(row.doc) as Member;
 }
 
+/** Adds a roster member that is not in the database yet (no-op if the id exists). */
+export async function insertMember(env: Env, member: Member, now: Date): Promise<void> {
+  await env.DB.prepare('INSERT OR IGNORE INTO members (id, doc, updated_at) VALUES (?, ?, ?)').bind(member.id, JSON.stringify(member), now.toISOString()).run();
+}
+
 export async function saveMember(env: Env, member: Member, now: Date): Promise<void> {
   await env.DB.prepare('UPDATE members SET doc = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(member), now.toISOString(), member.id).run();
 }

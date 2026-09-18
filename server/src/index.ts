@@ -9,6 +9,7 @@
 import type { AttendanceOutcome, AvailabilityChoice, CanyonEvent, Member, OrganizationState, Settings, SlotPriorities, SlotPriority, TeamId, TrackingEntryInput } from '../../src/domain/types';
 import { choiceFromSlots } from '../../src/engine/suggest';
 import { SERIES_ID } from '../../src/data/seed';
+import { ROSTER_ADDITIONS } from '../../src/data/rosterAdditions';
 import { BUNDLED_SHEETS } from '../../src/data/trackingSheets';
 import { applyBundledSheet } from '../../src/engine/rosterSheet';
 import * as L from '../../src/engine/lifecycle';
@@ -31,7 +32,7 @@ import {
   validateUsername,
   verifyPassword,
 } from './auth';
-import { auditStatement, ensureSeeded, insertEvent, loadDocument, loadEvent, loadEvents, loadMascot, loadMember, loadMembers, loadOrganization, loadSettings, loadSuggestion, loadSuggestions, recentAudit, saveDocumentCas, saveEventCas, saveMember, saveSuggestion } from './db';
+import { auditStatement, ensureSeeded, insertEvent, insertMember, loadDocument, loadEvent, loadEvents, loadMascot, loadMember, loadMembers, loadOrganization, loadSettings, loadSuggestion, loadSuggestions, recentAudit, saveDocumentCas, saveEventCas, saveMember, saveSuggestion } from './db';
 import { createSuggestion, setSuggestionStatus, toggleVote } from '../../src/engine/suggestions';
 import { feedMascot, MascotError } from '../../src/engine/mascot';
 import { applyStats, type StatsPatch } from '../../src/engine/memberStats';
@@ -573,7 +574,11 @@ router.post('/admin/apply-sheet', async (ctx) => {
   const sheet = BUNDLED_SHEETS.find((b) => b.event_date === date);
   if (!sheet) throw new HttpError(404, 'no_sheet', `No bundled sheet for ${date}. Bundled: ${BUNDLED_SHEETS.map((b) => b.event_date).join(', ')}.`);
   const force = body.force !== false;
-  const [members, events, org, settings] = await Promise.all([loadMembers(ctx.env), loadEvents(ctx.env), loadOrganization(ctx.env), loadSettings(ctx.env)]);
+  const [stored, events, org, settings] = await Promise.all([loadMembers(ctx.env), loadEvents(ctx.env), loadOrganization(ctx.env), loadSettings(ctx.env)]);
+  // People who joined after the seed roster (src/data/rosterAdditions.ts) are added first, so the sheet can place them.
+  const added = ROSTER_ADDITIONS.filter((m) => !stored.some((x) => x.id === m.id));
+  for (const m of added) await insertMember(ctx.env, m, ctx.now);
+  const members = [...stored, ...added];
   const id = eventIdFor(SERIES_ID, date);
   let created = false;
   if (!events.some((e) => e.id === id)) {
@@ -592,7 +597,7 @@ router.post('/admin/apply-sheet', async (ctx) => {
     summary = r.summary;
     return r;
   });
-  return { event_date: date, event_id: id, created, status: event.status, revision: event.revision, force, summary };
+  return { event_date: date, event_id: id, created, status: event.status, revision: event.revision, force, members_added: added.map((m) => m.username), summary };
 });
 
 // ---- Mascot --------------------------------------------------------------------

@@ -736,331 +736,430 @@ export const BUNDLED_SHEETS: BundledSheet[] = [
   },
   {
     event_date: '2026-09-18',
-    label: 'Votes from the 09-18 Canyon tab',
-    source: 'The "09-18 Canyon" tab screenshot: the 18:00, 23:00 and Both columns as votes, "Played Last week" kept as a note; names matched to the roster',
+    label: 'Roster sheet for Friday 2026-09-18',
+    source: 'Canyon_Clash_Participants_2026-09-18.xlsx (confirmed Team 1 / Team 2 starters and substitutes) plus the "09-18 Canyon" tab: 18:00, 23:00 and Both columns as votes, "Played Last week" kept as a note; names matched to the roster',
     rows: [
-      {
-        "username": "Queen Rouge",
-        "section": "Voted 18:00",
-        "voted": "team1"
+    {
+      "username": "Queen Rouge",
+      "section": "Team 1 starters",
+      "voted": "team1",
+      "starter": "Team 1"
+    },
+    {
+      "username": "Mada",
+      "section": "Team 1 starters",
+      "voted": "team1",
+      "starter": "Team 1"
+    },
+    {
+      "username": "Dorin",
+      "section": "Team 1 starters",
+      "voted": "either",
+      "starter": "Team 1"
+    },
+    {
+      "username": "Ultra EGO",
+      "section": "Team 1 starters",
+      "voted": "team1",
+      "starter": "Team 1"
+    },
+    {
+      "username": "Raul863",
+      "section": "Team 1 starters",
+      "voted": "team1",
+      "starter": "Team 1",
+      "note": "Last week: Sub (No)"
+    },
+    {
+      "username": "Pandoraloft",
+      "section": "Team 1 starters",
+      "voted": "team1",
+      "starter": "Team 1",
+      "note": "Last week: No"
+    },
+    {
+      "username": "-Yeti-",
+      "section": "Team 1 starters",
+      "voted": "team1",
+      "starter": "Team 1",
+      "note": "Last week: Sub (Yes)"
+    },
+    {
+      "username": "Shastorm",
+      "section": "Team 1 starters",
+      "voted": "team1",
+      "starter": "Team 1"
+    },
+    {
+      "username": "Tẽmujïn",
+      "section": "Team 1 starters",
+      "voted": "either",
+      "slots": {
+        "team1": 1,
+        "team2": 2
       },
-      {
-        "username": "Mada",
-        "section": "Voted 18:00",
-        "voted": "team1"
-      },
-      {
-        "username": "JoelitoBB",
-        "section": "Voted 18:00",
-        "voted": "team1"
-      },
-      {
-        "username": "LostSoul1213",
-        "section": "Voted 18:00",
-        "voted": "team1",
-        "note": "Last week: No"
-      },
-      {
-        "username": "Dorin",
-        "section": "Voted either time",
-        "voted": "either"
-      },
-      {
-        "username": "Ultra EGO",
-        "section": "Voted 18:00",
-        "voted": "team1"
-      },
-      {
-        "username": "Raul863",
-        "section": "Voted 18:00",
-        "voted": "team1",
-        "note": "Last week: Sub (No)"
-      },
-      {
-        "username": "Pandoraloft",
-        "section": "Voted 18:00",
-        "voted": "team1",
-        "note": "Last week: No"
-      },
-      {
-        "username": "-Yeti-",
-        "section": "Voted 18:00",
-        "voted": "team1",
-        "note": "Last week: Sub (Yes)"
-      },
-      {
-        "username": "Shastorm",
-        "section": "Voted 18:00",
-        "voted": "team1"
-      },
-      {
-        "username": "Tẽmujïn",
-        "section": "Voted either time",
-        "voted": "either",
-        "slots": {
-          "team1": 1,
-          "team2": 2
-        },
-        "note": "Can do both, prefers 18:00 · Last week: Sub (Yes)"
-      },
-      {
-        "username": "MamaBt",
-        "section": "Voted 18:00",
-        "voted": "team1"
-      },
-      {
-        "username": "Bachter",
-        "section": "Voted 18:00",
-        "voted": "team1",
-        "note": "Last week: No"
-      },
-      {
-        "username": "SwiftBunny DH",
-        "section": "Voted 18:00",
-        "voted": "team1"
-      },
-      {
-        "username": "AvatarNavi",
-        "section": "Voted 18:00",
-        "voted": "team1",
-        "note": "Last week: Sub (No)"
-      },
-      {
-        "username": "levON",
-        "section": "Voted 18:00",
-        "voted": "team1",
-        "note": "Last week: Sub (Yes)"
-      },
-      {
-        "username": "Chika Strike",
-        "section": "Voted 18:00",
-        "voted": "team1",
-        "note": "Last week: MVP"
-      },
-      {
-        "username": "Potepuhec",
-        "section": "Voted 18:00",
-        "voted": "team1",
-        "note": "Last week: No"
-      },
-      {
-        "username": "Sats0mNlak",
-        "section": "Voted 18:00",
-        "voted": "team1"
-      },
-      {
-        "username": "PajuHalfLapin",
-        "section": "Voted 18:00",
-        "voted": "team1",
-        "note": "Last week: No"
-      },
-      {
-        "username": "Azale",
-        "section": "Voted 18:00",
-        "voted": "team1",
-        "note": "Last week: No"
-      },
-      {
-        "username": "• Dyo •",
-        "section": "Voted 18:00",
-        "voted": "team1"
-      },
-      {
-        "username": "Flowmotion47",
-        "section": "Voted 18:00",
-        "voted": "team1"
-      },
-      {
-        "username": "Matt02",
-        "section": "Voted 18:00",
-        "voted": "team1",
-        "note": "Last week: No"
-      },
-      {
-        "username": "Giovanni Savage",
-        "section": "Voted 18:00",
-        "voted": "team1"
-      },
-      {
-        "username": "Mapinski",
-        "section": "Voted 18:00",
-        "voted": "team1",
-        "note": "Last week: Sub (Yes)"
-      },
-      {
-        "username": "Victoria13",
-        "section": "Voted either time",
-        "voted": "either"
-      },
-      {
-        "username": "crumbum271",
-        "section": "Voted 18:00",
-        "voted": "team1"
-      },
-      {
-        "username": "Pmari Snow",
-        "section": "Voted 18:00",
-        "voted": "team1",
-        "note": "Last week: No"
-      },
-      {
-        "username": "Warriorwarrior",
-        "section": "Voted 18:00",
-        "voted": "team1",
-        "note": "Last week: No"
-      },
-      {
-        "username": "Pitour",
-        "section": "Voted 18:00",
-        "voted": "team1",
-        "note": "Last week: No"
-      },
-      {
-        "username": "Mario AK47",
-        "section": "Voted 23:00",
-        "voted": "team2"
-      },
-      {
-        "username": "RosolinoFriddi",
-        "section": "Voted 23:00",
-        "voted": "team2"
-      },
-      {
-        "username": "TinaG",
-        "section": "Voted 23:00",
-        "voted": "team2"
-      },
-      {
-        "username": "Apparition-",
-        "section": "Voted 23:00",
-        "voted": "team2"
-      },
-      {
-        "username": "Galihad",
-        "section": "Voted either time",
-        "voted": "either"
-      },
-      {
-        "username": "DemonKingg",
-        "section": "Voted 23:00",
-        "voted": "team2"
-      },
-      {
-        "username": "JetPed",
-        "section": "Voted 23:00",
-        "voted": "team2",
-        "note": "Last week: No"
-      },
-      {
-        "username": "SophieUa",
-        "section": "Voted 23:00",
-        "voted": "team2",
-        "note": "Last week: No"
-      },
-      {
-        "username": "raZ",
-        "section": "Voted 23:00",
-        "voted": "team2"
-      },
-      {
-        "username": "King of goats",
-        "section": "Voted 23:00",
-        "voted": "team2",
-        "note": "Last week: Sub (Yes)"
-      },
-      {
-        "username": "DeeDeeeee",
-        "section": "Voted 23:00",
-        "voted": "team2"
-      },
-      {
-        "username": "KingLow",
-        "section": "Voted 23:00",
-        "voted": "team2",
-        "note": "Last week: Sub (Yes)"
-      },
-      {
-        "username": "JAY QUEEN",
-        "section": "Voted 23:00",
-        "voted": "team2"
-      },
-      {
-        "username": "MaKaRa",
-        "section": "Voted 23:00",
-        "voted": "team2"
-      },
-      {
-        "username": "Captain Cake",
-        "section": "Voted 23:00",
-        "voted": "team2"
-      },
-      {
-        "username": "pepito",
-        "section": "Voted 23:00",
-        "voted": "team2",
-        "note": "Last week: No"
-      },
-      {
-        "username": "-PIM-",
-        "section": "Voted either time",
-        "voted": "either"
-      },
-      {
-        "username": "Vodkashot",
-        "section": "Voted 23:00",
-        "voted": "team2",
-        "note": "Last week: No"
-      },
-      {
-        "username": "Wanderer629",
-        "section": "Voted 23:00",
-        "voted": "team2",
-        "note": "Last week: No"
-      },
-      {
-        "username": "Dinkleberg6969",
-        "section": "Voted 23:00",
-        "voted": "team2"
-      },
-      {
-        "username": "DontMesswNess",
-        "section": "Voted 23:00",
-        "voted": "team2",
-        "note": "Last week: Sub (No)"
-      },
-      {
-        "username": "Sanatio Fax",
-        "section": "Voted 23:00",
-        "voted": "team2",
-        "note": "Last week: Sub (No)"
-      },
-      {
-        "username": "Dvon Khan",
-        "section": "Voted 23:00",
-        "voted": "team2"
-      },
-      {
-        "username": "USO Kiwi",
-        "section": "Voted either time",
-        "voted": "either",
-        "note": "Last week: Sub (No)"
-      },
-      {
-        "username": "Appins",
-        "section": "Voted either time",
-        "voted": "either"
-      },
-      {
-        "username": "Pappless",
-        "section": "Voted either time",
-        "voted": "either"
-      },
-      {
-        "username": "InkedWitch",
-        "section": "Voted either time",
-        "voted": "either",
-        "note": "Last week: No"
-      }
+      "starter": "Team 1",
+      "note": "Can do both, prefers 18:00 · Last week: Sub (Yes)"
+    },
+    {
+      "username": "MamaBt",
+      "section": "Team 1 starters",
+      "voted": "team1",
+      "starter": "Team 1"
+    },
+    {
+      "username": "Bachter",
+      "section": "Team 1 starters",
+      "voted": "team1",
+      "starter": "Team 1",
+      "note": "Last week: No"
+    },
+    {
+      "username": "Chika Strike",
+      "section": "Team 1 starters",
+      "voted": "team1",
+      "starter": "Team 1",
+      "note": "Last week: MVP"
+    },
+    {
+      "username": "PajuHalfLapin",
+      "section": "Team 1 starters",
+      "voted": "team1",
+      "starter": "Team 1",
+      "note": "Last week: No"
+    },
+    {
+      "username": "Azale",
+      "section": "Team 1 starters",
+      "voted": "team1",
+      "starter": "Team 1",
+      "note": "Last week: No"
+    },
+    {
+      "username": "Matt02",
+      "section": "Team 1 starters",
+      "voted": "team1",
+      "starter": "Team 1",
+      "note": "Last week: No"
+    },
+    {
+      "username": "Mapinski",
+      "section": "Team 1 starters",
+      "voted": "team1",
+      "starter": "Team 1",
+      "note": "Last week: Sub (Yes)"
+    },
+    {
+      "username": "Victoria13",
+      "section": "Team 1 starters",
+      "voted": "either",
+      "starter": "Team 1"
+    },
+    {
+      "username": "Pitour",
+      "section": "Team 1 starters",
+      "voted": "team1",
+      "starter": "Team 1",
+      "note": "Last week: No"
+    },
+    {
+      "username": "Pappless",
+      "section": "Team 1 starters",
+      "voted": "either",
+      "starter": "Team 1"
+    },
+    {
+      "username": "Nemo Hoes",
+      "section": "Team 1 starters",
+      "voted": null,
+      "starter": "Team 1"
+    },
+    {
+      "username": "JoelitoBB",
+      "section": "Team 1 substitutes",
+      "voted": "team1",
+      "sub": "Team 1"
+    },
+    {
+      "username": "LostSoul1213",
+      "section": "Team 1 substitutes",
+      "voted": "team1",
+      "sub": "Team 1",
+      "note": "Last week: No"
+    },
+    {
+      "username": "SwiftBunny DH",
+      "section": "Team 1 substitutes",
+      "voted": "team1",
+      "sub": "Team 1"
+    },
+    {
+      "username": "AvatarNavi",
+      "section": "Team 1 substitutes",
+      "voted": "team1",
+      "sub": "Team 1",
+      "note": "Last week: Sub (No)"
+    },
+    {
+      "username": "levON",
+      "section": "Team 1 substitutes",
+      "voted": "team1",
+      "sub": "Team 1",
+      "note": "Last week: Sub (Yes)"
+    },
+    {
+      "username": "Potepuhec",
+      "section": "Team 1 substitutes",
+      "voted": "team1",
+      "sub": "Team 1",
+      "note": "Last week: No"
+    },
+    {
+      "username": "Sats0mNlak",
+      "section": "Team 1 substitutes",
+      "voted": "team1",
+      "sub": "Team 1"
+    },
+    {
+      "username": "• Dyo •",
+      "section": "Team 1 substitutes",
+      "voted": "team1",
+      "sub": "Team 1"
+    },
+    {
+      "username": "Flowmotion47",
+      "section": "Team 1 substitutes",
+      "voted": "team1",
+      "sub": "Team 1"
+    },
+    {
+      "username": "crumbum271",
+      "section": "Team 1 substitutes",
+      "voted": "team1",
+      "sub": "Team 1"
+    },
+    {
+      "username": "Pmari Snow",
+      "section": "Team 1 substitutes",
+      "voted": "team1",
+      "sub": "Team 1",
+      "note": "Last week: No"
+    },
+    {
+      "username": "Warriorwarrior",
+      "section": "Team 1 substitutes",
+      "voted": "team1",
+      "sub": "Team 1",
+      "note": "Last week: No"
+    },
+    {
+      "username": "Kotsos rs6",
+      "section": "Team 1 substitutes",
+      "voted": null,
+      "sub": "Team 1"
+    },
+    {
+      "username": "Mario AK47",
+      "section": "Team 2 starters",
+      "voted": "team2",
+      "starter": "Team 2"
+    },
+    {
+      "username": "TinaG",
+      "section": "Team 2 starters",
+      "voted": "team2",
+      "starter": "Team 2"
+    },
+    {
+      "username": "Apparition-",
+      "section": "Team 2 starters",
+      "voted": "team2",
+      "starter": "Team 2"
+    },
+    {
+      "username": "Galihad",
+      "section": "Team 2 starters",
+      "voted": "either",
+      "starter": "Team 2"
+    },
+    {
+      "username": "DemonKingg",
+      "section": "Team 2 starters",
+      "voted": "team2",
+      "starter": "Team 2"
+    },
+    {
+      "username": "SophieUa",
+      "section": "Team 2 starters",
+      "voted": "team2",
+      "starter": "Team 2",
+      "note": "Last week: No"
+    },
+    {
+      "username": "raZ",
+      "section": "Team 2 starters",
+      "voted": "team2",
+      "starter": "Team 2"
+    },
+    {
+      "username": "DeeDeeeee",
+      "section": "Team 2 starters",
+      "voted": "team2",
+      "starter": "Team 2"
+    },
+    {
+      "username": "MaKaRa",
+      "section": "Team 2 starters",
+      "voted": "team2",
+      "starter": "Team 2"
+    },
+    {
+      "username": "Captain Cake",
+      "section": "Team 2 starters",
+      "voted": "team2",
+      "starter": "Team 2"
+    },
+    {
+      "username": "pepito",
+      "section": "Team 2 starters",
+      "voted": "team2",
+      "starter": "Team 2",
+      "note": "Last week: No"
+    },
+    {
+      "username": "-PIM-",
+      "section": "Team 2 starters",
+      "voted": "either",
+      "starter": "Team 2"
+    },
+    {
+      "username": "Vodkashot",
+      "section": "Team 2 starters",
+      "voted": "team2",
+      "starter": "Team 2",
+      "note": "Last week: No"
+    },
+    {
+      "username": "Wanderer629",
+      "section": "Team 2 starters",
+      "voted": "team2",
+      "starter": "Team 2",
+      "note": "Last week: No"
+    },
+    {
+      "username": "DontMesswNess",
+      "section": "Team 2 starters",
+      "voted": "team2",
+      "starter": "Team 2",
+      "note": "Last week: Sub (No)"
+    },
+    {
+      "username": "Sanatio Fax",
+      "section": "Team 2 starters",
+      "voted": "team2",
+      "starter": "Team 2",
+      "note": "Last week: Sub (No)"
+    },
+    {
+      "username": "Dvon Khan",
+      "section": "Team 2 starters",
+      "voted": "team2",
+      "starter": "Team 2"
+    },
+    {
+      "username": "Appins",
+      "section": "Team 2 starters",
+      "voted": "either",
+      "starter": "Team 2"
+    },
+    {
+      "username": "InkedWitch",
+      "section": "Team 2 starters",
+      "voted": "either",
+      "starter": "Team 2",
+      "note": "Last week: No"
+    },
+    {
+      "username": "IcemanPowaaa",
+      "section": "Team 2 starters",
+      "voted": null,
+      "starter": "Team 2"
+    },
+    {
+      "username": "Giovanni Savage",
+      "section": "Team 2 substitutes",
+      "voted": "team1",
+      "sub": "Team 2"
+    },
+    {
+      "username": "RosolinoFriddi",
+      "section": "Team 2 substitutes",
+      "voted": "team2",
+      "sub": "Team 2"
+    },
+    {
+      "username": "JetPed",
+      "section": "Team 2 substitutes",
+      "voted": "team2",
+      "sub": "Team 2",
+      "note": "Last week: No"
+    },
+    {
+      "username": "KingLow",
+      "section": "Team 2 substitutes",
+      "voted": "team2",
+      "sub": "Team 2",
+      "note": "Last week: Sub (Yes)"
+    },
+    {
+      "username": "JAY QUEEN",
+      "section": "Team 2 substitutes",
+      "voted": "team2",
+      "sub": "Team 2"
+    },
+    {
+      "username": "Dinkleberg6969",
+      "section": "Team 2 substitutes",
+      "voted": "team2",
+      "sub": "Team 2"
+    },
+    {
+      "username": "USO Kiwi",
+      "section": "Team 2 substitutes",
+      "voted": "either",
+      "sub": "Team 2",
+      "note": "Last week: Sub (No)"
+    },
+    {
+      "username": "Rrrrrrrrrd",
+      "section": "Team 2 substitutes",
+      "voted": null,
+      "sub": "Team 2"
+    },
+    {
+      "username": "Twist of Fate",
+      "section": "Team 2 substitutes",
+      "voted": null,
+      "sub": "Team 2"
+    },
+    {
+      "username": "Krakenasaurus",
+      "section": "Team 2 substitutes",
+      "voted": null,
+      "sub": "Team 2"
+    },
+    {
+      "username": "Hamos1otus",
+      "section": "Team 2 substitutes",
+      "voted": null,
+      "sub": "Team 2"
+    },
+    {
+      "username": "King of goats",
+      "section": "Voted 23:00",
+      "voted": "team2",
+      "note": "Last week: Sub (Yes)"
+    }
     ],
   },
 ];
