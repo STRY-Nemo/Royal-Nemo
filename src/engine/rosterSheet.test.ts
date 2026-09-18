@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { loadSeedMembers } from '../data/seed';
 import { BUNDLED_SHEETS } from '../data/trackingSheets';
+import { ROSTER_ADDITIONS } from '../data/rosterAdditions';
 import { applyTrackingEntries, createDraftEvent, finalizeEvent, publishEvent, setAvailability } from './lifecycle';
 import { applyBundledSheet, planSheetImport, sheetCounts, sheetLineupRecords, sheetRows, sheetText } from './rosterSheet';
 import { applyLineupImport } from './lineupImport';
@@ -111,21 +112,26 @@ describe('roster sheet', () => {
     expect(res.summary.refinalized).toBe(true);
   });
 
-  it('bundles the 09-18 votes with the prefer-18:00 slots and two names not on the roster', () => {
+  it('bundles the 09-18 sheet: confirmed teams, votes with the prefer-18:00 slots, every name on the roster', () => {
     const sheet = BUNDLED_SHEETS.find((b) => b.event_date === '2026-09-18')!;
     const week = createDraftEvent({ series_id: 'canyon-friday', date: '2026-09-18', timezone: APOCALYPSE_TIME_ZONE, team_times: { team1: '18:00', team2: '23:00' } });
-    const res = applyBundledSheet(week, sheet.rows, members, {}, ctx, { force: true });
-    expect(res.summary.unmatched).toEqual(['Azale', 'Vodkashot']);
-    expect(res.summary.team1).toBeNull();
-    expect(res.summary.votes_set).toBe(sheet.rows.length - 2);
-    const rows = sheetRows(res.event, members);
+    const roster = [...members, ...ROSTER_ADDITIONS];
+    const res = applyBundledSheet(week, sheet.rows, roster, {}, ctx, { force: true });
+    expect(res.summary.unmatched).toEqual([]);
+    expect(res.summary.team1).toEqual({ starters: 20, reserves: 13 });
+    expect(res.summary.team2).toEqual({ starters: 20, reserves: 11 });
+    const rows = sheetRows(res.event, roster);
+    const counts = sheetCounts(rows);
+    expect(counts.team1_starters).toBe(20);
+    expect(counts.team2_starters).toBe(20);
+    expect(counts.team1_subs).toBe(13);
+    expect(counts.team2_subs).toBe(11);
     const temujin = rows.find((r) => r.member.username === 'Tẽmujïn')!;
-    expect(temujin.voted).toBe('either');
+    expect(temujin.starter).toBe('Team 1');
     expect(res.event.availability[temujin.member.id].slots).toEqual({ team1: 1, team2: 2 });
-    expect(rows.find((r) => r.member.username === 'Dorin')?.voted).toBe('either');
-    expect(rows.find((r) => r.member.username === 'Queen Rouge')?.votedLabel).toBe('18:00');
-    expect(rows.find((r) => r.member.username === 'Mario AK47')?.votedLabel).toBe('23:00');
+    expect(rows.find((r) => r.member.username === 'Azale')?.starter).toBe('Team 1');
+    expect(rows.find((r) => r.member.username === 'Hamos1otus')?.sub).toBe('Team 2');
+    expect(rows.find((r) => r.member.username === 'King of goats')?.votedLabel).toBe('23:00');
     expect(rows.find((r) => r.member.username === 'Raul863')?.note).toBe('Last week: Sub (No)');
-    expect(sheetCounts(rows).no_response).toBe(rows.length - (sheet.rows.length - 2));
   });
 });

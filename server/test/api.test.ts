@@ -316,12 +316,12 @@ describe('STRY API', () => {
     const res = await post({ event_date: '2026-09-18' }, 'test-sync-token');
     expect(res.status).toBe(200);
     const summary = res.body.summary as { matched: number; unmatched: string[]; votes_set: number; team1: unknown };
-    expect(summary.unmatched).toEqual(['Azale', 'Vodkashot']);
-    expect(summary.votes_set).toBe(summary.matched);
-    expect(summary.team1).toBeNull();
+    expect(summary.unmatched).toEqual([]);
+    expect((summary as { team1: { starters: number; reserves: number } }).team1).toEqual({ starters: 20, reserves: 13 });
+    expect(res.body.members_added).toEqual(['Azale', 'Vodkashot', 'Hamos1otus']); // newcomers from rosterAdditions.ts
     const state = await api<{ events: { id: string; availability: Record<string, { choice: string }> }[] }>('GET', '/state', undefined, leaderToken);
     const week = state.body.events.find((e) => e.id === res.body.event_id)!;
-    expect(Object.keys(week.availability).length).toBeGreaterThanOrEqual(summary.matched);
+    expect(Object.keys(week.availability).length).toBeGreaterThanOrEqual(summary.votes_set);
     const older = await post({ event_date: '2026-09-11' }, 'test-sync-token');
     expect(older.status).toBe(200);
     expect((older.body.summary as { team1: { starters: number } }).team1.starters).toBe(20);
@@ -495,7 +495,7 @@ describe('STRY API', () => {
     expect((await api('POST', `/accounts/${appins.id}`, { disabled: true }, leaderToken)).status).toBe(200);
     expect((await api('GET', '/me', undefined, memberToken)).status).toBe(401);
     const exp = await api<{ members: unknown[]; audit: unknown[] }>('GET', '/export', undefined, leaderToken);
-    expect(exp.body.members).toHaveLength(100);
+    expect(exp.body.members).toHaveLength(103); // 100 seeded + the 3 newcomers the apply-sheet test added
     expect(exp.body.audit.length).toBeGreaterThan(5);
   });
 
