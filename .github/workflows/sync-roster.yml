@@ -1,0 +1,35 @@
+name: Sync roster
+# Applies the newest roster snapshot bundled in src/data/rosterSnapshots.ts to the
+# live API: names, ranks, origin alliances, levels, arena power, newcomers and
+# departures. Run it from the Actions tab after a new snapshot is merged.
+# Needs the repository secret SUGGESTIONS_SYNC_TOKEN (already used by the ideas sync).
+
+on:
+  workflow_dispatch:
+    inputs:
+      as_of:
+        description: 'Snapshot date to apply (YYYY-MM-DD); blank = newest'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sync the roster
+        env:
+          SYNC_TOKEN: ${{ secrets.SUGGESTIONS_SYNC_TOKEN }}
+          AS_OF: ${{ inputs.as_of }}
+        run: |
+          if [ -z "$SYNC_TOKEN" ]; then echo "::error::SUGGESTIONS_SYNC_TOKEN is not set."; exit 1; fi
+          api=$(grep -oE 'VITE_API_URL=\S+' .env.production | cut -d= -f2)
+          if [ -n "$AS_OF" ]; then body="{\"as_of\":\"$AS_OF\"}"; else body='{}'; fi
+          code=$(curl -sS -o out.json -w '%{http_code}' -X POST -H "x-sync-token: $SYNC_TOKEN" -H 'content-type: application/json' -d "$body" "$api/admin/sync-roster")
+          echo "HTTP $code"
+          jq . out.json || cat out.json
+          if [ "$code" != "200" ]; then echo "::error::The API returned $code (see the response above)."; exit 1; fi
+          echo "::notice::$(jq -r '"Roster \(.snapshot): \(.summary.updated) updated, \(.summary.unchanged) unchanged, \(.summary.renamed | length) renamed, \(.summary.added | length) added (\(.summary.added | join(", "))), \(.summary.deactivated | length) left (\(.summary.deactivated | join(", ")))"' out.json)"
