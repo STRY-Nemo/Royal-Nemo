@@ -10,6 +10,8 @@ import type { AttendanceOutcome, AvailabilityChoice, CanyonEvent, Member, Organi
 import { choiceFromSlots } from '../../src/engine/suggest';
 import { SERIES_ID } from '../../src/data/seed';
 import { ROSTER_ADDITIONS } from '../../src/data/rosterAdditions';
+import { ROSTER_SNAPSHOTS } from '../../src/data/rosterSnapshots';
+import { applyRosterSnapshot } from '../../src/engine/rosterSnapshot';
 import { BUNDLED_SHEETS } from '../../src/data/trackingSheets';
 import { applyBundledSheet } from '../../src/engine/rosterSheet';
 import * as L from '../../src/engine/lifecycle';
@@ -598,6 +600,33 @@ router.post('/admin/apply-sheet', async (ctx) => {
     return r;
   });
   return { event_date: date, event_id: id, created, status: event.status, revision: event.revision, force, members_added: added.map((m) => m.username), summary };
+});
+
+/**
+ * Automation: applies the newest bundled roster snapshot (src/data/rosterSnapshots.ts)
+ * to the live roster: names, ranks, origin, level and arena power; renamed members keep
+ * their id; newcomers are added; anyone missing from the snapshot becomes inactive.
+ * Guarded by the sync token; the "Sync roster" GitHub workflow calls it.
+ */
+router.post('/admin/sync-roster', async (ctx) => {
+  const token = ctx.env.SUGGESTIONS_SYNC_TOKEN;
+  const given = ctx.request.headers.get('x-sync-token') ?? '';
+  if (!token || given !== token) throw new HttpError(404, 'not_found', 'Not found.');
+  const body = await ctx.body();
+  const asOf = str(body, 'as_of', false);
+  const snapshot = asOf ? ROSTER_SNAPSHOTS.find((s) => s.as_of === asOf) : [...ROSTER_SNAPSHOTS].sort((a, b) => (a.as_of < b.as_of ? 1 : -1))[0];
+  if (!snapshot) throw new HttpError(404, 'no_snapshot', `No bundled roster snapshot for ${asOf}. Bundled: ${ROSTER_SNAPSHOTS.map((s) => s.as_of).join(', ')}.`);
+  const stored = await loadMembers(ctx.env);
+  const storedIds = new Set(stored.map((m) => m.id));
+  const { changed, summary } = applyRosterSnapshot(stored, snapshot);
+  for (const m of changed) {
+    if (storedIds.has(m.id)) await saveMember(ctx.env, m, ctx.now);
+    else await insertMember(ctx.env, m, ctx.now);
+  }
+  await ctx.env.DB.batch([
+    auditStatement(ctx.env, { id: `${ctx.now.toISOString()}-roster-${randomToken(4)}`, event_id: null, actor_id: 'system', action: 'roster.sync', before: { members: stored.length }, after: summary, timestamp: ctx.now.toISOString() }),
+  ]);
+  return { snapshot: snapshot.as_of, source: snapshot.source, members: stored.length + summary.added.length, summary };
 });
 
 // ---- Mascot --------------------------------------------------------------------

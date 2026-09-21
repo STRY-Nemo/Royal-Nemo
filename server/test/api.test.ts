@@ -327,6 +327,27 @@ describe('STRY API', () => {
     expect((older.body.summary as { team1: { starters: number } }).team1.starters).toBe(20);
   });
 
+  it('syncs the bundled roster snapshot with the sync token only', async () => {
+    const post = async (body: unknown, token?: string) => {
+      const r = await fetch(`${BASE}/admin/sync-roster`, { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { 'x-sync-token': token } : {}) }, body: JSON.stringify(body) });
+      return { status: r.status, body: (await r.json()) as Record<string, unknown> };
+    };
+    expect((await post({})).status).toBe(404);
+    expect((await post({ as_of: '2020-01-01' }, 'test-sync-token')).status).toBe(404);
+    const res = await post({}, 'test-sync-token');
+    expect(res.status).toBe(200);
+    expect(res.body.snapshot).toBe('2026-09-20');
+    const summary = res.body.summary as { added: string[]; deactivated: string[]; renamed: { from: string; to: string }[] };
+    expect(summary.added.sort()).toEqual(['DemonKingg2', 'Ελισάβετ']);
+    expect(summary.renamed.some((r) => r.from === 'RockyNoSpeedUps' && r.to === 'Rockysaurus')).toBe(true);
+    const state = await api<{ members: { username: string; arena_power_m: number; active: boolean; power_as_of: string }[] }>('GET', '/state', undefined, leaderToken);
+    expect(state.body.members.find((m) => m.username === 'Mario AK47')?.arena_power_m).toBe(866);
+    expect(state.body.members.find((m) => m.username === 'MathSic')?.active).toBe(false);
+    expect(state.body.members.filter((m) => m.active)).toHaveLength(100);
+    const again = await post({}, 'test-sync-token');
+    expect((again.body.summary as { updated: number }).updated).toBe(0);
+  });
+
   it('feeds the shared bear with a per-person cooldown', async () => {
     const st = await api<{ mascot: { feeds: number; revision: number } }>('GET', '/state', undefined, memberToken);
     expect(st.body.mascot.feeds).toBe(0);
@@ -495,7 +516,7 @@ describe('STRY API', () => {
     expect((await api('POST', `/accounts/${appins.id}`, { disabled: true }, leaderToken)).status).toBe(200);
     expect((await api('GET', '/me', undefined, memberToken)).status).toBe(401);
     const exp = await api<{ members: unknown[]; audit: unknown[] }>('GET', '/export', undefined, leaderToken);
-    expect(exp.body.members).toHaveLength(103); // 100 seeded + the 3 newcomers the apply-sheet test added
+    expect(exp.body.members).toHaveLength(105); // 100 seeded + 3 newcomers from the apply-sheet test + 2 from the roster sync test
     expect(exp.body.audit.length).toBeGreaterThan(5);
   });
 
