@@ -1,7 +1,8 @@
 name: Probe live game endpoints
-# Read-only health check of everywhere the game lives: the hosts, the
-# Firebase leaderboard rules, and a real headless browser run of the
-# public link. Deploys nothing.
+# Read-only health checks: the game's hosts, the Firebase leaderboard,
+# a headless browser run of the public link, the database rules (in the
+# Firebase emulator, never production), and whether Netlify is still
+# deploying this branch. Deploys nothing.
 
 on:
   push:
@@ -12,7 +13,7 @@ permissions:
   contents: read
 
 jobs:
-  probe:
+  live:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -22,10 +23,9 @@ jobs:
             echo "===== $1"
             curl -sSL -o body.html -D headers.txt --max-time 30 \
               -w 'FINAL %{http_code} %{url_effective} | %{content_type} | %{size_download}B\n' "$1" || echo "CURL FAILED"
-            grep -iE '^(HTTP/|location:|server:|x-nf-request-id:|age:|last-modified:)' headers.txt || true
+            grep -iE '^(HTTP/|location:|server:|age:|last-modified:)' headers.txt || true
             echo "TITLE: $(grep -o '<title>[^<]*' body.html | head -1)"
             echo "VERSION: $(grep -oE "const VERSION = '[^']*'" body.html | head -1)"
-            echo "HEAD: $(head -c 240 body.html | tr '\n' ' ')"
           }
           for u in https://royal-nemo.netlify.app/ https://royal-nemo.netlify.app/admin.html \
                    https://ryanrhernandez-design.github.io/Royal-Nemo/ https://stry-nemo.github.io/Royal-Nemo/; do
@@ -52,9 +52,10 @@ jobs:
           ts = [e['ts'] for e in rows if e.get('ts')]
           if ts:
               print('newest score:', datetime.datetime.utcfromtimestamp(max(ts) / 1000).isoformat(), 'UTC')
+          print('backfilled entries:', sum(1 for e in rows if e.get('backfill')))
           rows.sort(key=lambda e: -(e.get('score') or 0))
           for e in rows[:10]:
-              print(' ', e.get('score'), e.get('name'), '(device id)' if e.get('pid') else '(legacy)')
+              print(' ', e.get('score'), e.get('name'))
           PY
       - uses: actions/setup-node@v4
         with:
@@ -66,22 +67,61 @@ jobs:
           npx playwright install --with-deps chromium >/dev/null 2>&1
           cat > check.mjs <<'JS'
           import { chromium } from 'playwright';
-          const url = 'https://royal-nemo.netlify.app/';
           const b = await chromium.launch();
           const p = await b.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
-          p.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') console.log('CONSOLE', m.type(), m.text()); });
           p.on('pageerror', e => console.log('PAGEERROR', e.message));
           p.on('requestfailed', r => console.log('REQFAILED', r.url().slice(0, 120), r.failure()?.errorText));
           p.on('response', r => { if (r.status() >= 400) console.log('HTTP', r.status(), r.url().slice(0, 120)); });
-          const res = await p.goto(url, { waitUntil: 'load', timeout: 30000 }).catch(e => (console.log('GOTO FAILED', e.message), null));
+          const res = await p.goto('https://royal-nemo.netlify.app/', { waitUntil: 'load', timeout: 30000 })
+            .catch(e => (console.log('GOTO FAILED', e.message), null));
           console.log('STATUS', res && res.status(), 'TITLE', await p.title().catch(() => '?'));
           await p.waitForTimeout(2500);
-          const info = await p.evaluate(() => ({
-            canvas: !!document.getElementById('game'),
-            overlayOpen: document.getElementById('nameOverlay')?.classList.contains('open'),
-            text: document.body.innerText.slice(0, 200)
-          })).catch(e => ({ err: e.message }));
-          console.log('DOM', JSON.stringify(info));
           await b.close();
           JS
           node check.mjs
+
+  rules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dashboard publishes the same rules as database.rules.json
+        run: |
+          python3 - <<'PY'
+          import json, re
+          html = open('admin.html').read()
+          embedded = json.loads(re.search(r'<script type="application/json" id="dbRules">(.*?)</script>', html, re.S).group(1))
+          assert embedded == json.load(open('database.rules.json')), 'admin.html rules differ from database.rules.json'
+          print('admin.html embeds the same rules as database.rules.json')
+          PY
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Rules in the Firebase emulator
+        env:
+          NS: demo-royal-nemo-default-rtdb
+        run: |
+          echo '{"database":{"rules":"database.rules.json"},"emulators":{"database":{"port":9000},"ui":{"enabled":false}}}' > firebase.json
+          npx -y firebase-tools@13 emulators:exec --only database --project demo-royal-nemo \
+            "node .github/probe/rules-test.mjs"
+
+  netlify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Does Netlify serve this commit?
+        run: |
+          want=$(grep -oE "const VERSION = '[^']*'" index.html | head -1)
+          echo "This commit ships: $want"
+          for i in $(seq 1 20); do
+            got=$(curl -sS --max-time 20 "https://royal-nemo.netlify.app/?probe=$i$RANDOM" | grep -oE "const VERSION = '[^']*'" | head -1)
+            echo "check $i: Netlify serves: $got"
+            if [ "$got" = "$want" ]; then echo "NETLIFY IN SYNC"; exit 0; fi
+            sleep 15
+          done
+          echo "::warning::NETLIFY STALE: still serving $got five minutes after this push; it is no longer deploying this branch"

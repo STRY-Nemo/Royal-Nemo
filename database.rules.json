@@ -1,0 +1,19 @@
+{
+  "rules": {
+    "scores": {
+      ".read": true,
+      "$id": {
+        ".write": "newData.exists()",
+        ".validate": "newData.hasChildren(['name', 'score'])",
+        "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24" },
+        "score": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000" }
+      }
+    },
+    "plays": {
+      ".read": false,
+      "$id": {
+        ".write": "!data.exists() && newData.exists()"
+      }
+    }
+  }
+}

@@ -157,7 +157,7 @@
 </div>
 <script>
 (() => {
-  const VERSION = 'v28'; // shown on the title screen so you know which build you're playing
+  const VERSION = 'v29'; // shown on the title screen so you know which build you're playing
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const nameBtn = document.getElementById('nameBtn');
@@ -302,9 +302,16 @@
   }
   function addToLB(name, sc) {
     const lb = getLB();
-    lb.push({ name, score: sc, pid: PID });
+    const entry = { name, score: sc, pid: PID, ts: Date.now() };
+    lb.push(entry);
     lb.sort((a, b) => b.score - a.score);
     saveLB(lb.slice(0, 100));
+    return entry;
+  }
+  function markUploaded(entry) {
+    const lb = getLB();
+    const e = lb.find(x => !x.up && x.pid === entry.pid && x.score === entry.score && x.ts === entry.ts);
+    if (e) { e.up = 1; saveLB(lb); }
   }
   function setName(newName) {
     newName = (newName || '').trim().slice(0, 12) || 'Nemo';
@@ -323,33 +330,66 @@
   // Set to a Firebase Realtime Database URL, e.g.
   // 'https://royal-nemo-default-rtdb.firebaseio.com' — empty = this device only.
   const REMOTE_DB = 'https://royal-nemo-default-rtdb.firebaseio.com';
-  let remoteLB = null; // latest fetched global top-10
+  let remoteLB = null; // latest global top-100; null while the shared board can't be reached
+  const inFlight = new Set(); // local entries currently being uploaded (by timestamp)
 
   function lbTop() {
     return remoteLB || getLB();
   }
+  async function fetchRemoteScores() {
+    const res = await fetch(REMOTE_DB + '/scores.json');
+    // a locked database answers 401 with an {"error": ...} body, not scores
+    if (!res.ok) throw new Error('leaderboard HTTP ' + res.status);
+    return (await res.json()) || {};
+  }
   async function refreshRemoteLB() {
     if (!REMOTE_DB) return;
     try {
-      const res = await fetch(REMOTE_DB + '/scores.json');
-      const data = await res.json() || {};
-      const all = Object.values(data).filter(e => e && e.name && typeof e.score === 'number');
+      const all = Object.values(await fetchRemoteScores())
+        .filter(e => e && e.name && typeof e.score === 'number');
+      backfillLocalScores(all);
       all.sort((a, b) => b.score - a.score);
       remoteLB = all.slice(0, 100);
-    } catch (e) { /* offline: keep showing the last list we had */ }
+    } catch (e) {
+      remoteLB = null; // unreachable or locked: show this device's own board instead
+    }
   }
-  function pushRemoteScore(name, sc) {
-    if (!REMOTE_DB) return;
-    fetch(REMOTE_DB + '/scores.json', {
-      method: 'POST',
-      body: JSON.stringify({ name, score: sc, ts: Date.now(), pid: PID })
-    }).then(refreshRemoteLB).catch(() => {});
+  // Runs finished while the shared board was unreachable only reached this
+  // device's board. Once it answers again, upload the ones it is missing,
+  // matched by device id and score so renames don't matter. An entry is only
+  // ever uploaded once, so scores the developer deletes stay deleted.
+  function backfillLocalScores(remoteAll) {
+    const onServer = {};
+    for (const e of remoteAll) if (e.pid === PID) onServer[e.score] = (onServer[e.score] || 0) + 1;
+    const lb = getLB();
+    for (const e of lb) if (e.pid === PID && e.up && onServer[e.score] > 0) onServer[e.score]--;
+    const missing = [];
+    let changed = false;
+    for (const e of lb) {
+      if (e.pid !== PID || e.up || inFlight.has(e.ts)) continue;
+      if (onServer[e.score] > 0) { onServer[e.score]--; e.up = 1; changed = true; }
+      else missing.push(e);
+    }
+    if (changed) saveLB(lb);
+    for (const e of missing) uploadEntry(e, true);
+  }
+  function uploadEntry(entry, backfill) {
+    inFlight.add(entry.ts);
+    const body = { name: playerName || entry.name, score: entry.score, ts: entry.ts || Date.now(), pid: PID };
+    if (backfill) body.backfill = true;
+    return fetch(REMOTE_DB + '/scores.json', { method: 'POST', body: JSON.stringify(body) })
+      .then(r => { if (r.ok) markUploaded(entry); })
+      .catch(() => {})
+      .finally(() => inFlight.delete(entry.ts));
+  }
+  function pushRemoteScore(entry) {
+    if (!REMOTE_DB || !entry) return;
+    uploadEntry(entry, false).then(refreshRemoteLB);
   }
   async function renameRemote(oldName, newName) {
     if (!REMOTE_DB || oldName === newName) return;
     try {
-      const res = await fetch(REMOTE_DB + '/scores.json');
-      const data = await res.json() || {};
+      const data = await fetchRemoteScores();
       const updates = {};
       for (const [k, e] of Object.entries(data)) {
         if (e && e.pid === PID) updates[k + '/name'] = newName;
@@ -1324,8 +1364,7 @@
         localStorage.setItem('royalNemoBest', best);
       }
       if (score > 0) {
-        addToLB(playerName, score);
-        pushRemoteScore(playerName, score);
+        pushRemoteScore(addToLB(playerName, score));
       }
     }
     logPlay(score);
@@ -1341,8 +1380,7 @@
         best = score;
         localStorage.setItem('royalNemoBest', best);
       }
-      addToLB(playerName, score);
-      pushRemoteScore(playerName, score);
+      pushRemoteScore(addToLB(playerName, score));
     }
     logPlay(score);
   }
@@ -2294,9 +2332,9 @@
       text("Nemo's Tappy", W / 2, H * 0.19, 40 * s, '#ffd94a');
       text('Adventure', W / 2, H * 0.26, 40 * s, '#ffd94a');
       text('🐠', W / 2, H * 0.32, 26 * s);
-      text('🔊', W / 2, H * 0.41, 22 * s);
-      text('Sound ON highly recommended', W / 2, H * 0.465, Math.min(18 * s, W * 0.052), '#ffe34d');
-      text('for the laughs... trust us.', W / 2, H * 0.51, Math.min(15 * s, W * 0.045), '#cdeef5');
+      text('🔊', W / 2, H * 0.745, 20 * s);
+      text('Sound ON highly recommended', W / 2, H * 0.79, Math.min(17 * s, W * 0.05), '#ffe34d');
+      text('for the laughs... trust us.', W / 2, H * 0.825, Math.min(14 * s, W * 0.042), '#cdeef5');
       text('Tap to swim!', W / 2, H * 0.62, 26 * s);
       if (best > 0) text(`Best: ${best}`, W / 2, H * 0.68, 20 * s, '#cdeef5');
       text(VERSION, W / 2, H * 0.95, 13 * s, 'rgba(255,255,255,0.55)', 'rgba(0,0,0,0.25)');

@@ -69,11 +69,37 @@
   }
   .err { color: #ff8b6b; font-size: 13px; margin: 8px 0; }
   .hidden { display: none; }
+  #health {
+    background: #14365c;
+    border: 1px solid #1f4a78;
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  #health.bad { border-color: #ff8b6b; }
+  #health.good { border-color: #4caf7d; }
+  #health button { margin-top: 10px; }
+  #rulesHelp { margin-top: 10px; font-size: 13px; color: #cdeef5; }
+  #rulesHelp ol { margin: 6px 0 8px 18px; }
+  #rulesText {
+    width: 100%;
+    height: 150px;
+    font: 11px monospace;
+    background: #0d2440;
+    color: #fff;
+    border: 1px solid #1f4a78;
+    border-radius: 8px;
+    padding: 8px;
+  }
 </style>
 </head>
 <body>
 <h1>🐠 Nemo's Tappy — Dev Dashboard</h1>
 <div class="sub">Who's playing, when, and how far they got</div>
+
+<div id="health">Checking the leaderboard database…</div>
 
 <div id="keyForm" class="hidden">
   <p><b>One-time setup:</b> this page needs your private database key so only you can read the log.
@@ -116,8 +142,34 @@
   <tbody id="recent"></tbody></table>
 </div>
 
+<script type="application/json" id="dbRules">
+{
+  "rules": {
+    "scores": {
+      ".read": true,
+      "$id": {
+        ".write": "newData.exists()",
+        ".validate": "newData.hasChildren(['name', 'score'])",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24"
+        },
+        "score": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000"
+        }
+      }
+    },
+    "plays": {
+      ".read": false,
+      "$id": {
+        ".write": "!data.exists() && newData.exists()"
+      }
+    }
+  }
+}
+</script>
 <script>
 const DB = 'https://royal-nemo-default-rtdb.firebaseio.com';
+const RULES = document.getElementById('dbRules').textContent.trim();
 const $ = id => document.getElementById(id);
 
 function getKey() { return localStorage.getItem('nemoAdminKey') || ''; }
@@ -166,9 +218,67 @@ async function load() {
   loadScores();
 }
 
+function authQS() { return getKey() ? '?auth=' + encodeURIComponent(getKey()) : ''; }
+
+async function checkHealth() {
+  const el = $('health');
+  let r;
+  try {
+    r = await fetch(DB + '/scores.json?shallow=true');
+  } catch (e) {
+    el.className = '';
+    el.textContent = '⚪ Could not reach the database — are you online?';
+    return;
+  }
+  if (r.ok) {
+    el.className = 'good';
+    el.innerHTML = '🟢 <b>Leaderboard is live.</b> Players can read and save scores.';
+    return;
+  }
+  el.className = 'bad';
+  el.innerHTML = '🔴 <b>Leaderboard is locked</b> (the database answered ' + r.status + '). ' +
+    'Scores are not being saved and the play log is not recording. ' +
+    'This happens when Firebase\'s temporary "test mode" rules expire.<br>' +
+    '<button onclick="revive()">Revive leaderboard</button>' +
+    '<div id="rulesHelp" class="hidden"></div>';
+}
+
+async function revive() {
+  if (!getKey()) {
+    showRulesHelp('Paste your database secret in the box below first, then tap Revive again — or publish the rules by hand:');
+    changeKey();
+    return;
+  }
+  let r;
+  try {
+    r = await fetch(DB + '/.settings/rules.json?auth=' + encodeURIComponent(getKey()), { method: 'PUT', body: RULES });
+  } catch (e) {
+    showRulesHelp('The database could not be reached from this page. Publish the rules by hand instead:');
+    return;
+  }
+  if (!r.ok) {
+    showRulesHelp('The database refused the key (' + r.status + '). Check it, or publish the rules by hand:');
+    return;
+  }
+  await checkHealth();
+  load();
+}
+
+function showRulesHelp(lead) {
+  const h = $('rulesHelp');
+  if (!h) return;
+  h.classList.remove('hidden');
+  h.innerHTML = esc(lead) +
+    '<ol><li>Open the Firebase console → your <b>royal-nemo</b> project → <b>Realtime Database</b> → <b>Rules</b> tab.</li>' +
+    '<li>Replace everything there with the text below.</li><li>Tap <b>Publish</b>.</li></ol>' +
+    '<textarea id="rulesText" readonly></textarea>';
+  $('rulesText').value = RULES;
+}
+
 async function loadScores() {
   try {
-    const res = await fetch(DB + '/scores.json'); // scores are public-read
+    const res = await fetch(DB + '/scores.json' + authQS());
+    if (!res.ok) throw new Error('scores HTTP ' + res.status);
     const data = await res.json() || {};
     const rows = Object.entries(data)
       .filter(([k, e]) => e && e.name)
@@ -183,7 +293,8 @@ async function loadScores() {
 async function bulkRename() {
   const from = $('bulkFrom').value.trim(), to = $('bulkTo').value.trim().slice(0, 12);
   if (!from || !to) return;
-  const res = await fetch(DB + '/scores.json');
+  const res = await fetch(DB + '/scores.json' + authQS());
+  if (!res.ok) { alert('Could not read the scores (' + res.status + ') — is your admin key set?'); return; }
   const data = await res.json() || {};
   const updates = {};
   let n = 0;
@@ -272,6 +383,7 @@ function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+checkHealth();
 load();
 </script>
 </body>
