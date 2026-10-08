@@ -148,20 +148,51 @@
     "scores": {
       ".read": true,
       "$id": {
-        ".write": "newData.exists()",
-        ".validate": "newData.hasChildren(['name', 'score'])",
+        ".write": "newData.exists() && (!data.exists() || (newData.child('score').val() === data.child('score').val() && newData.child('pid').val() === data.child('pid').val()))",
+        ".validate": "newData.hasChildren(['name', 'score']) && $id.matches(/^-[A-Za-z0-9_-]{19}$/)",
         "name": {
           ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24"
         },
         "score": {
-          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000"
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 150 && newData.val() % 1 === 0"
+        },
+        "ts": {
+          ".validate": "newData.isNumber()"
+        },
+        "pid": {
+          ".validate": "newData.isString() && newData.val().length <= 32"
+        },
+        "backfill": {
+          ".validate": "newData.isBoolean()"
+        },
+        "$other": {
+          ".validate": false
         }
       }
     },
     "plays": {
       ".read": false,
       "$id": {
-        ".write": "!data.exists() && newData.exists()"
+        ".write": "!data.exists() && newData.exists()",
+        ".validate": "newData.hasChildren(['ts']) && $id.matches(/^-[A-Za-z0-9_-]{19}$/)",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length <= 24"
+        },
+        "ts": {
+          ".validate": "newData.isNumber()"
+        },
+        "v": {
+          ".validate": "newData.isString() && newData.val().length <= 16"
+        },
+        "score": {
+          ".validate": "newData.isNumber()"
+        },
+        "lvl": {
+          ".validate": "newData.isNumber()"
+        },
+        "$other": {
+          ".validate": false
+        }
       }
     }
   }
@@ -196,6 +227,7 @@ function fmtWhen(ts) {
 
 async function load() {
   $('keyErr').classList.add('hidden');
+  checkHealth();
   let res;
   try {
     // try open read first (in case /plays was left public), then with the key
@@ -270,7 +302,7 @@ function showRulesHelp(lead) {
   h.classList.remove('hidden');
   h.innerHTML = esc(lead) +
     '<ol><li>Open the Firebase console → your <b>royal-nemo</b> project → <b>Realtime Database</b> → <b>Rules</b> tab.</li>' +
-    '<li>Replace everything there with the text below.</li><li>Tap <b>Publish</b>.</li></ol>' +
+    '<li>Replace everything there with the text below.</li><li>Tap <b>Publish</b>, then tap 🔄 Refresh on this page.</li></ol>' +
     '<textarea id="rulesText" readonly></textarea>';
   $('rulesText').value = RULES;
 }
@@ -280,16 +312,28 @@ async function loadScores() {
     const res = await fetch(DB + '/scores.json' + authQS());
     if (!res.ok) throw new Error('scores HTTP ' + res.status);
     const data = await res.json() || {};
+    scoreData = data;
     const rows = Object.entries(data)
       .filter(([k, e]) => e && e.name)
-      .sort((a, b) => b[1].score - a[1].score);
+      .sort((a, b) => (Number(b[1].score) || 0) - (Number(a[1].score) || 0));
     $('scoreRows').innerHTML = rows.map(([k, e]) =>
-      `<tr><td class="name">${esc(e.name)}</td><td>${e.score}</td>` +
-      `<td style="white-space:nowrap"><button class="ghost" onclick="renameScore('${k}', '${esc(e.name)}')">✏️</button> ` +
-      `<button class="ghost" onclick="delScore('${k}')">🗑</button></td></tr>`).join('')
+      `<tr><td class="name">${esc(e.name)}${e.backfill ? ' <span class="muted" title="uploaded after the leaderboard outage">↺ restored</span>' : ''}</td>` +
+      `<td>${esc(e.score)}</td>` +
+      `<td style="white-space:nowrap"><button class="ghost" data-act="rename" data-key="${esc(k)}">✏️</button> ` +
+      `<button class="ghost" data-act="delete" data-key="${esc(k)}">🗑</button></td></tr>`).join('')
       || '<tr><td colspan="3" class="muted">no scores yet</td></tr>';
-  } catch (e) { /* leave section empty */ }
+  } catch (e) {
+    $('scoreRows').innerHTML = '<tr><td colspan="3" class="muted">Could not read the scores. ' +
+      (getKey() ? 'Check your admin key.' : 'Save your admin key to see them while the leaderboard is locked.') + '</td></tr>';
+  }
 }
+let scoreData = {};
+document.addEventListener('click', ev => {
+  const b = ev.target.closest && ev.target.closest('#scoreRows button[data-act]');
+  if (!b) return;
+  if (b.dataset.act === 'rename') renameScore(b.dataset.key);
+  else delScore(b.dataset.key);
+});
 async function bulkRename() {
   const from = $('bulkFrom').value.trim(), to = $('bulkTo').value.trim().slice(0, 12);
   if (!from || !to) return;
@@ -310,17 +354,18 @@ async function bulkRename() {
   if (!r.ok) alert('Bulk rename failed (' + r.status + ') — is your admin key set?');
   loadScores();
 }
-async function renameScore(key, cur) {
+async function renameScore(key) {
+  const cur = (scoreData[key] && scoreData[key].name) || '';
   const nn = prompt('New name for this entry:', cur);
   if (!nn || !nn.trim()) return;
-  const r = await fetch(DB + '/scores/' + key + '.json?auth=' + encodeURIComponent(getKey()),
+  const r = await fetch(DB + '/scores/' + encodeURIComponent(key) + '.json?auth=' + encodeURIComponent(getKey()),
     { method: 'PATCH', body: JSON.stringify({ name: nn.trim().slice(0, 12) }) });
   if (!r.ok) alert('Rename failed (' + r.status + ') — is your admin key set?');
   loadScores();
 }
 async function delScore(key) {
   if (!confirm('Delete this score entry?')) return;
-  const r = await fetch(DB + '/scores/' + key + '.json?auth=' + encodeURIComponent(getKey()),
+  const r = await fetch(DB + '/scores/' + encodeURIComponent(key) + '.json?auth=' + encodeURIComponent(getKey()),
     { method: 'DELETE' });
   if (!r.ok) alert('Delete failed (' + r.status + ') — is your admin key set?');
   loadScores();
@@ -363,19 +408,19 @@ function render(plays) {
   for (const p of plays) {
     const e = byName[p.name] || (byName[p.name] = { n: 0, best: 0, last: 0 });
     e.n++;
-    e.best = Math.max(e.best, p.score || 0);
+    e.best = Math.max(e.best, Number(p.score) || 0);
     e.last = Math.max(e.last, p.ts);
   }
   $('byPlayer').innerHTML = Object.entries(byName)
     .sort((a, b) => b[1].n - a[1].n)
     .map(([name, e]) =>
-      `<tr><td class="name">${esc(name)}</td><td>${e.n}</td><td>${e.best}</td><td>${fmtWhen(e.last)}</td></tr>`)
+      `<tr><td class="name">${esc(name)}</td><td>${esc(e.n)}</td><td>${esc(e.best)}</td><td>${esc(fmtWhen(e.last))}</td></tr>`)
     .join('');
 
   // recent plays (latest 50)
   $('recent').innerHTML = plays.slice(0, 50).map(p =>
-    `<tr><td class="name">${esc(p.name)}</td><td>${fmtWhen(p.ts)}</td>` +
-    `<td>${p.score ?? '–'}</td><td>${p.lvl ?? '–'}</td><td class="muted">${esc(p.v || '')}</td></tr>`)
+    `<tr><td class="name">${esc(p.name)}</td><td>${esc(fmtWhen(p.ts))}</td>` +
+    `<td>${esc(p.score ?? '–')}</td><td>${esc(p.lvl ?? '–')}</td><td class="muted">${esc(p.v || '')}</td></tr>`)
     .join('');
 }
 
@@ -383,7 +428,6 @@ function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-checkHealth();
 load();
 </script>
 </body>

@@ -38,7 +38,7 @@ jobs:
             echo "===== /$p"
             curl -sS --max-time 30 -w '\nHTTP %{http_code}\n' "$db/$p" | head -c 300; echo
           done
-          curl -sS --max-time 30 -o scores.json "$db/scores.json"
+          curl -sS --max-time 30 -o scores.json "$db/scores.json" || echo 'scores fetch failed'
           python3 - <<'PY'
           import json, datetime
           try:
@@ -49,11 +49,12 @@ jobs:
               print('SCORES BLOCKED:', d['error']); raise SystemExit
           rows = [v for v in (d or {}).values() if isinstance(v, dict)]
           print('score entries:', len(rows))
-          ts = [e['ts'] for e in rows if e.get('ts')]
+          num = lambda v: v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+          ts = [num(e.get('ts')) for e in rows if num(e.get('ts')) and 0 < num(e.get('ts')) < 4e12]
           if ts:
               print('newest score:', datetime.datetime.utcfromtimestamp(max(ts) / 1000).isoformat(), 'UTC')
-          print('backfilled entries:', sum(1 for e in rows if e.get('backfill')))
-          rows.sort(key=lambda e: -(e.get('score') or 0))
+          print('restored after the outage:', sum(1 for e in rows if e.get('backfill') is True))
+          rows.sort(key=lambda e: -(num(e.get('score')) or 0))
           for e in rows[:10]:
               print(' ', e.get('score'), e.get('name'))
           PY
@@ -111,17 +112,24 @@ jobs:
 
   netlify:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Does Netlify serve this commit?
         run: |
           want=$(grep -oE "const VERSION = '[^']*'" index.html | head -1)
           echo "This commit ships: $want"
-          for i in $(seq 1 20); do
-            got=$(curl -sS --max-time 20 "https://royal-nemo.netlify.app/?probe=$i$RANDOM" | grep -oE "const VERSION = '[^']*'" | head -1)
-            echo "check $i: Netlify serves: $got"
+          end=$((SECONDS + 300)); i=0; got=''
+          while [ $SECONDS -lt $end ]; do
+            i=$((i + 1))
+            got=$(curl -sS --max-time 8 "https://royal-nemo.netlify.app/?probe=$i$RANDOM" 2>/dev/null | grep -oE "const VERSION = '[^']*'" | head -1)
+            echo "check $i: Netlify serves: ${got:-nothing (unreachable)}"
             if [ "$got" = "$want" ]; then echo "NETLIFY IN SYNC"; exit 0; fi
             sleep 15
           done
-          echo "::warning::NETLIFY STALE: still serving $got five minutes after this push; it is no longer deploying this branch"
+          if [ -z "$got" ]; then
+            echo "::error::Netlify did not answer for five minutes; the site may be down or paused"
+          else
+            echo "::error::NETLIFY STALE: still serving $got five minutes after this push; Netlify is no longer deploying this branch (relink it to STRY-Nemo/Royal-Nemo)"
+          fi
+          exit 1

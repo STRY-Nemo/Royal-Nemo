@@ -200,7 +200,7 @@
   const LVL3_AT = 60;   // samurai level
   const LVL4_AT = 90;   // neon rave level
   const LVL5_AT = 120;  // royal kingdom finale
-  const WIN_AT = 150;   // beat level 5 to win the game
+  const WIN_AT = 150;   // beat level 5 to win the game; database.rules.json caps scores here too
 
   // dev/test shortcut: ?start=39 begins one point before level 2, etc.
   // (debug runs don't touch the leaderboard or best score)
@@ -316,14 +316,13 @@
   function setName(newName) {
     newName = (newName || '').trim().slice(0, 12) || 'Nemo';
     // renaming carries all of your existing leaderboard scores with you
-    const oldName = playerName;
     const lb = getLB();
     for (const e of lb) e.name = newName; // the local board is this device's own scores
     saveLB(lb);
     playerName = newName;
     localStorage.setItem('royalNemoName', newName);
     nameBtn.textContent = '👤 ' + newName;
-    renameRemote(oldName, newName);
+    refreshRemoteLB(); // carries the new name to this device's shared entries
   }
 
   // ---------- Cross-device leaderboard (Firebase Realtime DB over REST) ----------
@@ -331,7 +330,8 @@
   // 'https://royal-nemo-default-rtdb.firebaseio.com' — empty = this device only.
   const REMOTE_DB = 'https://royal-nemo-default-rtdb.firebaseio.com';
   let remoteLB = null; // latest global top-100; null while the shared board can't be reached
-  const inFlight = new Set(); // local entries currently being uploaded (by timestamp)
+  const inFlight = new Set(); // timestamps of local runs currently being uploaded
+  let renaming = false;
 
   function lbTop() {
     return remoteLB || getLB();
@@ -344,34 +344,81 @@
   }
   async function refreshRemoteLB() {
     if (!REMOTE_DB) return;
+    let data;
     try {
-      const all = Object.values(await fetchRemoteScores())
-        .filter(e => e && e.name && typeof e.score === 'number');
-      backfillLocalScores(all);
-      all.sort((a, b) => b.score - a.score);
-      remoteLB = all.slice(0, 100);
+      data = await fetchRemoteScores();
     } catch (e) {
       remoteLB = null; // unreachable or locked: show this device's own board instead
+      return;
     }
+    const all = Object.values(data).filter(e => e && e.name && typeof e.score === 'number');
+    syncRemoteNames(data);
+    backfillLocalScores(all);
+    all.sort((a, b) => b.score - a.score);
+    remoteLB = all.slice(0, 100);
   }
   // Runs finished while the shared board was unreachable only reached this
-  // device's board. Once it answers again, upload the ones it is missing,
-  // matched by device id and score so renames don't matter. An entry is only
-  // ever uploaded once, so scores the developer deletes stay deleted.
+  // device's board. Once it answers again, upload the ones it is missing.
+  // Server copies are paired with local runs by timestamp, or by score for
+  // runs that older versions uploaded under a different timestamp. A run is
+  // uploaded at most once, so a score deleted after that stays deleted.
   function backfillLocalScores(remoteAll) {
-    const onServer = {};
-    for (const e of remoteAll) if (e.pid === PID) onServer[e.score] = (onServer[e.score] || 0) + 1;
+    // wait for pending uploads: their server copies could otherwise be
+    // paired with a different run of the same score
+    if (inFlight.size) return;
     const lb = getLB();
-    for (const e of lb) if (e.pid === PID && e.up && onServer[e.score] > 0) onServer[e.score]--;
-    const missing = [];
     let changed = false;
+    lb.forEach((e, i) => {
+      // older versions stored runs without a timestamp; give each a stable, unique one
+      if (e.pid === PID && !e.ts) { e.ts = Date.now() - lb.length + i; changed = true; }
+    });
+    const serverLeft = remoteAll.filter(e => e.pid === PID);
+    const take = match => {
+      const i = serverLeft.findIndex(match);
+      if (i < 0) return false;
+      serverLeft.splice(i, 1);
+      return true;
+    };
+    const unpaired = [];
     for (const e of lb) {
-      if (e.pid !== PID || e.up || inFlight.has(e.ts)) continue;
-      if (onServer[e.score] > 0) { onServer[e.score]--; e.up = 1; changed = true; }
+      if (e.pid !== PID) continue;
+      if (take(s => s.ts === e.ts)) { if (!e.up) { e.up = 1; changed = true; } }
+      else unpaired.push(e);
+    }
+    for (const e of unpaired) if (e.up) take(s => s.score === e.score);
+    const missing = [];
+    for (const e of unpaired) {
+      if (e.up) continue;
+      if (take(s => s.score === e.score)) { e.up = 1; changed = true; }
       else missing.push(e);
     }
     if (changed) saveLB(lb);
     for (const e of missing) uploadEntry(e, true);
+  }
+  // A rename made while the shared board was unreachable is applied the next
+  // time it answers. After the first sync, only entries still carrying the
+  // name this device last synced change, so a name the developer edits on
+  // the dashboard stays.
+  function syncRemoteNames(data) {
+    if (!playerName || renaming) return;
+    const synced = localStorage.getItem('royalNemoSyncedName');
+    if (synced === playerName) return;
+    const updates = {};
+    for (const [k, e] of Object.entries(data)) {
+      if (e && e.pid === PID && e.name !== playerName && (synced === null || e.name === synced)) {
+        updates[k + '/name'] = playerName;
+      }
+    }
+    const target = playerName;
+    if (!Object.keys(updates).length) {
+      localStorage.setItem('royalNemoSyncedName', target);
+      return;
+    }
+    renaming = true;
+    fetch(REMOTE_DB + '/scores.json', { method: 'PATCH', body: JSON.stringify(updates) })
+      .then(r => { if (r.ok) localStorage.setItem('royalNemoSyncedName', target); })
+      .catch(() => {})
+      .finally(() => { renaming = false; });
   }
   function uploadEntry(entry, backfill) {
     inFlight.add(entry.ts);
@@ -385,20 +432,6 @@
   function pushRemoteScore(entry) {
     if (!REMOTE_DB || !entry) return;
     uploadEntry(entry, false).then(refreshRemoteLB);
-  }
-  async function renameRemote(oldName, newName) {
-    if (!REMOTE_DB || oldName === newName) return;
-    try {
-      const data = await fetchRemoteScores();
-      const updates = {};
-      for (const [k, e] of Object.entries(data)) {
-        if (e && e.pid === PID) updates[k + '/name'] = newName;
-      }
-      if (Object.keys(updates).length) {
-        await fetch(REMOTE_DB + '/scores.json', { method: 'PATCH', body: JSON.stringify(updates) });
-      }
-      refreshRemoteLB();
-    } catch (e) { /* offline */ }
   }
 
   // ---------- Ambient particles (bubbles / stars / petals per level) ----------

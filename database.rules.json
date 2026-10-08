@@ -3,16 +3,27 @@
     "scores": {
       ".read": true,
       "$id": {
-        ".write": "newData.exists()",
-        ".validate": "newData.hasChildren(['name', 'score'])",
+        ".write": "newData.exists() && (!data.exists() || (newData.child('score').val() === data.child('score').val() && newData.child('pid').val() === data.child('pid').val()))",
+        ".validate": "newData.hasChildren(['name', 'score']) && $id.matches(/^-[A-Za-z0-9_-]{19}$/)",
         "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24" },
-        "score": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000" }
+        "score": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 150 && newData.val() % 1 === 0" },
+        "ts": { ".validate": "newData.isNumber()" },
+        "pid": { ".validate": "newData.isString() && newData.val().length <= 32" },
+        "backfill": { ".validate": "newData.isBoolean()" },
+        "$other": { ".validate": false }
       }
     },
     "plays": {
       ".read": false,
       "$id": {
-        ".write": "!data.exists() && newData.exists()"
+        ".write": "!data.exists() && newData.exists()",
+        ".validate": "newData.hasChildren(['ts']) && $id.matches(/^-[A-Za-z0-9_-]{19}$/)",
+        "name": { ".validate": "newData.isString() && newData.val().length <= 24" },
+        "ts": { ".validate": "newData.isNumber()" },
+        "v": { ".validate": "newData.isString() && newData.val().length <= 16" },
+        "score": { ".validate": "newData.isNumber()" },
+        "lvl": { ".validate": "newData.isNumber()" },
+        "$other": { ".validate": false }
       }
     }
   }
