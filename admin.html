@@ -36,7 +36,9 @@
   th { text-align: left; color: #8fb8d4; font-size: 12px; font-weight: 600; padding: 6px 8px; border-bottom: 1px solid #1f4a78; }
   td { padding: 8px; border-bottom: 1px solid #143656; }
   tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
-  .name { font-weight: 700; color: #ffd94a; }
+  .name { font-weight: 700; color: #ffd94a; max-width: 0; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .name bdi { unicode-bidi: isolate; }
+  .tag { font-size: 11px; color: #8fb8d4; font-weight: normal; margin-left: 4px; }
   .muted { color: #8fb8d4; font-size: 12px; }
   button, .btn {
     font: bold 14px inherit;
@@ -134,7 +136,7 @@
     <input id="bulkTo" value="Nemo" placeholder="to name" style="font:14px inherit;padding:9px;border-radius:8px;border:1px solid #1f4a78;background:#0d2440;color:#fff;width:110px">
     <button onclick="bulkRename()">Rename all</button>
   </div>
-  <h2>Leaderboard entries <span class="muted" style="font-weight:normal">(✏️ rename / 🗑 delete)</span></h2>
+  <h2>Leaderboard entries <span class="muted" style="font-weight:normal">(✏️ rename / 🙈 hide / 👁 show)</span></h2>
   <table><thead><tr><th>player</th><th>score</th><th></th></tr></thead>
   <tbody id="scoreRows"></tbody></table>
   <h2>Recent plays</h2>
@@ -148,22 +150,28 @@
     "scores": {
       ".read": true,
       "$id": {
-        ".write": "newData.exists() && (!data.exists() || (newData.child('score').val() === data.child('score').val() && newData.child('pid').val() === data.child('pid').val()))",
-        ".validate": "newData.hasChildren(['name', 'score']) && $id.matches(/^-[A-Za-z0-9_-]{19}$/)",
+        ".write": "newData.exists() && (!data.exists() || (newData.child('score').val() === data.child('score').val() && newData.child('pid').val() === data.child('pid').val() && newData.child('ts').val() === data.child('ts').val() && newData.child('backfill').val() === data.child('backfill').val() && newData.child('hidden').val() === data.child('hidden').val() && newData.child('mod').val() === data.child('mod').val()))",
+        ".validate": "newData.hasChild('name') && newData.getPriority() === null && (data.exists() || (newData.hasChild('score') && $id.matches(/^-[A-Za-z0-9_-]{19}$/)))",
         "name": {
-          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24"
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24 && !newData.val().matches(/^ /) && !newData.val().matches(/ $/) && !newData.val().contains('\u200b') && !newData.val().contains('\u2060') && !newData.val().contains('\ufeff') && !newData.val().contains('\u202a') && !newData.val().contains('\u202b') && !newData.val().contains('\u202c') && !newData.val().contains('\u202d') && !newData.val().contains('\u202e') && newData.getPriority() === null"
         },
         "score": {
-          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 150 && newData.val() % 1 === 0"
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 150 && newData.val() % 1 === 0 && newData.getPriority() === null"
         },
         "ts": {
-          ".validate": "newData.isNumber()"
+          ".validate": "newData.isNumber() && newData.val() <= now + 86400000 && newData.getPriority() === null"
         },
         "pid": {
-          ".validate": "newData.isString() && newData.val().length <= 32"
+          ".validate": "newData.isString() && newData.val().length <= 32 && newData.getPriority() === null"
         },
         "backfill": {
-          ".validate": "newData.isBoolean()"
+          ".validate": "newData.isBoolean() && newData.getPriority() === null"
+        },
+        "hidden": {
+          ".validate": false
+        },
+        "mod": {
+          ".validate": false
         },
         "$other": {
           ".validate": false
@@ -174,21 +182,21 @@
       ".read": false,
       "$id": {
         ".write": "!data.exists() && newData.exists()",
-        ".validate": "newData.hasChildren(['ts']) && $id.matches(/^-[A-Za-z0-9_-]{19}$/)",
+        ".validate": "newData.hasChildren(['ts']) && newData.getPriority() === null && $id.matches(/^-[A-Za-z0-9_-]{19}$/)",
         "name": {
-          ".validate": "newData.isString() && newData.val().length <= 24"
+          ".validate": "newData.isString() && newData.val().length <= 24 && newData.getPriority() === null"
         },
         "ts": {
-          ".validate": "newData.isNumber()"
+          ".validate": "newData.isNumber() && newData.val() <= now + 86400000 && newData.getPriority() === null"
         },
         "v": {
-          ".validate": "newData.isString() && newData.val().length <= 16"
+          ".validate": "newData.isString() && newData.val().length <= 16 && newData.getPriority() === null"
         },
         "score": {
-          ".validate": "newData.isNumber()"
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 150 && newData.val() % 1 === 0 && newData.getPriority() === null"
         },
         "lvl": {
-          ".validate": "newData.isNumber()"
+          ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 5 && newData.val() % 1 === 0 && newData.getPriority() === null"
         },
         "$other": {
           ".validate": false
@@ -243,8 +251,9 @@ async function load() {
     return;
   }
   const data = await res.json() || {};
+  const latest = Date.now() + 864e5;
   const plays = Object.values(data)
-    .filter(p => p && p.ts && p.name)
+    .filter(p => p && typeof p.ts === 'number' && p.ts > 0 && p.ts <= latest && p.name)
     .sort((a, b) => b.ts - a.ts);
   render(plays);
   loadScores();
@@ -312,15 +321,19 @@ async function loadScores() {
     const res = await fetch(DB + '/scores.json' + authQS());
     if (!res.ok) throw new Error('scores HTTP ' + res.status);
     const data = await res.json() || {};
-    scoreData = data;
-    const rows = Object.entries(data)
-      .filter(([k, e]) => e && e.name)
-      .sort((a, b) => (Number(b[1].score) || 0) - (Number(a[1].score) || 0));
+    scoreData = (data && typeof data === 'object') ? data : {};
+    const num = v => (typeof v === 'number' && isFinite(v)) ? v : 0;
+    const rows = Object.entries(scoreData)
+      .filter(([k, e]) => e && typeof e === 'object' && e.name !== undefined)
+      .sort((a, b) => num(b[1].score) - num(a[1].score));
     $('scoreRows').innerHTML = rows.map(([k, e]) =>
-      `<tr><td class="name">${esc(e.name)}${e.backfill ? ' <span class="muted" title="uploaded after the leaderboard outage">↺ restored</span>' : ''}</td>` +
-      `<td>${esc(e.score)}</td>` +
+      `<tr${e.hidden ? ' style="opacity:.5"' : ''}><td class="name" title="${esc(e.name)}"><bdi>${esc(short(e.name))}</bdi>` +
+      (e.hidden ? '<span class="tag">hidden</span>' : '') +
+      (e.backfill === true ? '<span class="tag" title="uploaded after the leaderboard outage">↺ restored</span>' : '') +
+      (e.mod ? '<span class="tag" title="renamed here; the player\'s game leaves this name alone">✎ edited</span>' : '') +
+      `</td><td>${esc(e.score)}</td>` +
       `<td style="white-space:nowrap"><button class="ghost" data-act="rename" data-key="${esc(k)}">✏️</button> ` +
-      `<button class="ghost" data-act="delete" data-key="${esc(k)}">🗑</button></td></tr>`).join('')
+      `<button class="ghost" data-act="${e.hidden ? 'unhide' : 'hide'}" data-key="${esc(k)}" title="${e.hidden ? 'show again' : 'hide from the leaderboard'}">${e.hidden ? '👁' : '🙈'}</button></td></tr>`).join('')
       || '<tr><td colspan="3" class="muted">no scores yet</td></tr>';
   } catch (e) {
     $('scoreRows').innerHTML = '<tr><td colspan="3" class="muted">Could not read the scores. ' +
@@ -332,10 +345,10 @@ document.addEventListener('click', ev => {
   const b = ev.target.closest && ev.target.closest('#scoreRows button[data-act]');
   if (!b) return;
   if (b.dataset.act === 'rename') renameScore(b.dataset.key);
-  else delScore(b.dataset.key);
+  else setHidden(b.dataset.key, b.dataset.act === 'hide');
 });
 async function bulkRename() {
-  const from = $('bulkFrom').value.trim(), to = $('bulkTo').value.trim().slice(0, 12);
+  const from = $('bulkFrom').value.trim(), to = cutName($('bulkTo').value);
   if (!from || !to) return;
   const res = await fetch(DB + '/scores.json' + authQS());
   if (!res.ok) { alert('Could not read the scores (' + res.status + ') — is your admin key set?'); return; }
@@ -345,7 +358,7 @@ async function bulkRename() {
   for (const [k, e] of Object.entries(data)) {
     // only legacy entries without a device id: post-v25 scores belong
     // verifiably to their device and shouldn't be mass-renamed
-    if (e && e.name === from && !e.pid) { updates[k + '/name'] = to; n++; }
+    if (e && e.name === from && !e.pid) { updates[k + '/name'] = to; updates[k + '/mod'] = true; n++; }
   }
   if (!n) { alert('No legacy entries named "' + from + '" found.'); return; }
   if (!confirm('Rename ' + n + ' entr' + (n > 1 ? 'ies' : 'y') + ' from "' + from + '" to "' + to + '"?')) return;
@@ -354,20 +367,32 @@ async function bulkRename() {
   if (!r.ok) alert('Bulk rename failed (' + r.status + ') — is your admin key set?');
   loadScores();
 }
+// names are cut by characters (not UTF-16 halves) to the 24 the rules allow
+function cutName(s) { return [...String(s).trim()].slice(0, 24).join(''); }
+function short(s) {
+  const t = [...toText(s)];
+  return t.length > 40 ? t.slice(0, 40).join('') + '…' : t.join('');
+}
 async function renameScore(key) {
-  const cur = (scoreData[key] && scoreData[key].name) || '';
+  const e = scoreData[key] || {};
+  const cur = typeof e.name === 'string' ? e.name : toText(e.name);
   const nn = prompt('New name for this entry:', cur);
   if (!nn || !nn.trim()) return;
+  // marked as edited here, so the player's game won't rename it back
   const r = await fetch(DB + '/scores/' + encodeURIComponent(key) + '.json?auth=' + encodeURIComponent(getKey()),
-    { method: 'PATCH', body: JSON.stringify({ name: nn.trim().slice(0, 12) }) });
+    { method: 'PATCH', body: JSON.stringify({ name: cutName(nn), mod: true }) });
   if (!r.ok) alert('Rename failed (' + r.status + ') — is your admin key set?');
   loadScores();
 }
-async function delScore(key) {
-  if (!confirm('Delete this score entry?')) return;
+// Hidden entries stay in the database, so the player's game still recognises
+// the run as uploaded and doesn't send it again.
+async function setHidden(key, hide) {
+  const e = scoreData[key] || {};
+  const what = '"' + short(e.name) + '" (' + toText(e.score) + ')';
+  if (hide && !confirm('Hide ' + what + ' from the leaderboard?')) return;
   const r = await fetch(DB + '/scores/' + encodeURIComponent(key) + '.json?auth=' + encodeURIComponent(getKey()),
-    { method: 'DELETE' });
-  if (!r.ok) alert('Delete failed (' + r.status + ') — is your admin key set?');
+    { method: 'PATCH', body: JSON.stringify({ hidden: hide ? true : null }) });
+  if (!r.ok) alert((hide ? 'Hide' : 'Unhide') + ' failed (' + r.status + ') — is your admin key set?');
   loadScores();
 }
 
@@ -388,7 +413,7 @@ function render(plays) {
   $('stTotal').textContent = plays.length;
   $('stToday').textContent = plays.filter(p => p.ts >= +todayStart).length;
   $('stWeek').textContent = plays.filter(p => now - p.ts < 7 * 864e5).length;
-  $('stPlayers').textContent = new Set(plays.map(p => p.name)).size;
+  $('stPlayers').textContent = new Set(plays.map(p => toText(p.name))).size;
 
   // plays per day, last 14 days
   const days = [];
@@ -404,28 +429,37 @@ function render(plays) {
     `<div class="day">${d.label}</div></div>`).join('');
 
   // by player
-  const byName = {};
+  const byName = new Map();
   for (const p of plays) {
-    const e = byName[p.name] || (byName[p.name] = { n: 0, best: 0, last: 0 });
+    const name = toText(p.name);
+    if (!byName.has(name)) byName.set(name, { n: 0, best: 0, last: 0 });
+    const e = byName.get(name);
     e.n++;
-    e.best = Math.max(e.best, Number(p.score) || 0);
+    if (typeof p.score === 'number' && isFinite(p.score)) e.best = Math.max(e.best, p.score);
     e.last = Math.max(e.last, p.ts);
   }
-  $('byPlayer').innerHTML = Object.entries(byName)
+  $('byPlayer').innerHTML = [...byName.entries()]
     .sort((a, b) => b[1].n - a[1].n)
     .map(([name, e]) =>
-      `<tr><td class="name">${esc(name)}</td><td>${esc(e.n)}</td><td>${esc(e.best)}</td><td>${esc(fmtWhen(e.last))}</td></tr>`)
+      `<tr><td class="name" title="${esc(name)}"><bdi>${esc(short(name))}</bdi></td><td>${esc(e.n)}</td><td>${esc(e.best)}</td><td>${esc(fmtWhen(e.last))}</td></tr>`)
     .join('');
 
   // recent plays (latest 50)
   $('recent').innerHTML = plays.slice(0, 50).map(p =>
-    `<tr><td class="name">${esc(p.name)}</td><td>${esc(fmtWhen(p.ts))}</td>` +
+    `<tr><td class="name" title="${esc(p.name)}"><bdi>${esc(short(p.name))}</bdi></td><td>${esc(fmtWhen(p.ts))}</td>` +
     `<td>${esc(p.score ?? '–')}</td><td>${esc(p.lvl ?? '–')}</td><td class="muted">${esc(p.v || '')}</td></tr>`)
     .join('');
 }
 
+function toText(s) {
+  try {
+    return (s !== null && typeof s === 'object') ? JSON.stringify(s) : String(s);
+  } catch (e) {
+    return '?';
+  }
+}
 function esc(s) {
-  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  return toText(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 load();

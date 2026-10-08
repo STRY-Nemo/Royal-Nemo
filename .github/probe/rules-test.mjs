@@ -33,6 +33,14 @@ expect('publish rules as the owner', await req('PUT', '/.settings/rules.json', r
 
 console.log('\n-- the game, current version (public, no key) --');
 expect('read the leaderboard', await req('GET', '/scores.json'), true);
+const run = { name: 'Nemo', score: 33, ts: 1791439617207, pid: 'dev1' };
+const runKey = '-0muz4w793vpwzmxfr43'; // the game derives this from the device id and the run's timestamp
+expect('save a run under its own key', await req('PUT', `/scores/${runKey}.json`, run), true);
+expect('re-send the same run (second tab, lost reply)', await req('PUT', `/scores/${runKey}.json`, run), true);
+expect('re-send the same run under a new name', await req('PUT', `/scores/${runKey}.json`, { ...run, name: 'King' }), true);
+expect('re-send the run with a different score', await req('PUT', `/scores/${runKey}.json`, { ...run, score: 34 }), false);
+expect('re-send the run flagged as restored', await req('PUT', `/scores/${runKey}.json`, { ...run, backfill: true }), false);
+expect('name with an emoji family (zero-width joiners)', await req('POST', '/scores.json', { name: '👨‍👩‍👧 Fam', score: 4, ts: Date.now(), pid: 'dev1' }), true);
 const mine = await req('POST', '/scores.json', { name: 'Nemo', score: 42, ts: Date.now(), pid: 'dev1' });
 expect('save a score', mine, true);
 const k = key(mine);
@@ -46,6 +54,8 @@ expect('v8-v24 score (no device id)', await req('POST', '/scores.json', { name: 
 expect('v19 play (no score or level)', await req('POST', '/plays.json', { name: 'Old', ts: Date.now(), v: 'v19' }), true);
 const seeded = await req('POST', '/scores.json', { name: 'Legacy', score: 3 }, true);
 expect('rename a legacy entry with no device id or timestamp', await req('PATCH', '/scores.json', { [`${key(seeded)}/name`]: 'Leg' }), true);
+await req('PUT', '/scores/oldkey.json', { name: 'Junk' }, true); // legacy junk: no score, non-push key
+expect('rename a legacy entry with no score under an old-style key', await req('PATCH', '/scores.json', { 'oldkey/name': 'Fixed', [`${key(seeded)}/name`]: 'Leg2' }), true);
 
 console.log('\n-- a vandal (public, no key) --');
 expect('read the private play log', await req('GET', '/plays.json'), false);
@@ -72,10 +82,29 @@ expect('log a play with no timestamp', await req('POST', '/plays.json', { name: 
 const play = await req('POST', '/plays.json', { name: 'a', ts: 1 });
 expect('overwrite a logged play', await req('PUT', `/plays/${key(play)}.json`, { name: 'b', ts: 2 }), false);
 expect('wipe the play log', await req('DELETE', '/plays.json'), false);
+expect('change an entry\'s timestamp', await req('PATCH', '/scores.json', { [`${k}/ts`]: 1e300 }), false);
+expect('forge the restored flag on an entry', await req('PATCH', '/scores.json', { [`${k}/backfill`]: true }), false);
+expect('hide an entry', await req('PATCH', '/scores.json', { [`${k}/hidden`]: true }), false);
+expect('save a score pre-marked as moderated', await req('POST', '/scores.json', { name: 'x', score: 1, mod: true }), false);
+expect('hide a score with a priority payload', await req('PUT', `/scores/${k}/.priority.json`, 'x'.repeat(1000)), false);
+expect('save a score carrying a priority', await req('POST', '/scores.json', { name: 'x', score: 1, '.priority': 'y'.repeat(1000) }), false);
+expect('log a play carrying a priority', await req('POST', '/plays.json', { ts: 1, '.priority': 'y' }), false);
+expect('a blank-looking name (a space)', await req('POST', '/scores.json', { name: ' ', score: 1 }), false);
+expect('a name with a trailing space', await req('POST', '/scores.json', { name: 'Eve ', score: 1 }), false);
+expect('an invisible name (zero-width space)', await req('POST', '/scores.json', { name: '\u200b', score: 1 }), false);
+expect('a name that flips text direction', await req('POST', '/scores.json', { name: '\u202eEve', score: 1 }), false);
+expect('a score dated two days ahead', await req('POST', '/scores.json', { name: 'x', score: 1, ts: Date.now() + 2 * 864e5 }), false);
+expect('a play dated two days ahead', await req('POST', '/plays.json', { name: 'a', ts: Date.now() + 2 * 864e5 }), false);
+expect('a play with an impossible score', await req('POST', '/plays.json', { name: 'a', ts: 1, score: 151 }), false);
+expect('a play on level 6', await req('POST', '/plays.json', { name: 'a', ts: 1, lvl: 6 }), false);
 
 console.log('\n-- the admin dashboard (with the key) --');
 expect('read the play log', await req('GET', '/plays.json', undefined, true), true);
-expect('rename one entry', await req('PATCH', `/scores/${k}.json`, { name: 'Nemo' }, true), true);
+expect('rename one entry (marked moderated)', await req('PATCH', `/scores/${k}.json`, { name: 'Nemo', mod: true }, true), true);
+expect('hide an entry', await req('PATCH', `/scores/${runKey}.json`, { hidden: true }, true), true);
+expect('game: re-send a hidden run (stays hidden)', await req('PUT', `/scores/${runKey}.json`, run), false);
+expect('game: rename a moderated entry\'s sibling fields untouched', await req('PATCH', '/scores.json', { [`${k}/name`]: 'Again' }), true);
+expect('unhide an entry', await req('PATCH', `/scores/${runKey}.json`, { hidden: null }, true), true);
 expect('bulk rename', await req('PATCH', '/scores.json', { [`${k}/name`]: 'Nemo' }, true), true);
 expect('delete an entry', await req('DELETE', `/scores/${k}.json`, undefined, true), true);
 

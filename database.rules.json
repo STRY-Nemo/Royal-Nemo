@@ -3,27 +3,57 @@
     "scores": {
       ".read": true,
       "$id": {
-        ".write": "newData.exists() && (!data.exists() || (newData.child('score').val() === data.child('score').val() && newData.child('pid').val() === data.child('pid').val()))",
-        ".validate": "newData.hasChildren(['name', 'score']) && $id.matches(/^-[A-Za-z0-9_-]{19}$/)",
-        "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24" },
-        "score": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 150 && newData.val() % 1 === 0" },
-        "ts": { ".validate": "newData.isNumber()" },
-        "pid": { ".validate": "newData.isString() && newData.val().length <= 32" },
-        "backfill": { ".validate": "newData.isBoolean()" },
-        "$other": { ".validate": false }
+        ".write": "newData.exists() && (!data.exists() || (newData.child('score').val() === data.child('score').val() && newData.child('pid').val() === data.child('pid').val() && newData.child('ts').val() === data.child('ts').val() && newData.child('backfill').val() === data.child('backfill').val() && newData.child('hidden').val() === data.child('hidden').val() && newData.child('mod').val() === data.child('mod').val()))",
+        ".validate": "newData.hasChild('name') && newData.getPriority() === null && (data.exists() || (newData.hasChild('score') && $id.matches(/^-[A-Za-z0-9_-]{19}$/)))",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24 && !newData.val().matches(/^ /) && !newData.val().matches(/ $/) && !newData.val().contains('\u200b') && !newData.val().contains('\u2060') && !newData.val().contains('\ufeff') && !newData.val().contains('\u202a') && !newData.val().contains('\u202b') && !newData.val().contains('\u202c') && !newData.val().contains('\u202d') && !newData.val().contains('\u202e') && newData.getPriority() === null"
+        },
+        "score": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 150 && newData.val() % 1 === 0 && newData.getPriority() === null"
+        },
+        "ts": {
+          ".validate": "newData.isNumber() && newData.val() <= now + 86400000 && newData.getPriority() === null"
+        },
+        "pid": {
+          ".validate": "newData.isString() && newData.val().length <= 32 && newData.getPriority() === null"
+        },
+        "backfill": {
+          ".validate": "newData.isBoolean() && newData.getPriority() === null"
+        },
+        "hidden": {
+          ".validate": false
+        },
+        "mod": {
+          ".validate": false
+        },
+        "$other": {
+          ".validate": false
+        }
       }
     },
     "plays": {
       ".read": false,
       "$id": {
         ".write": "!data.exists() && newData.exists()",
-        ".validate": "newData.hasChildren(['ts']) && $id.matches(/^-[A-Za-z0-9_-]{19}$/)",
-        "name": { ".validate": "newData.isString() && newData.val().length <= 24" },
-        "ts": { ".validate": "newData.isNumber()" },
-        "v": { ".validate": "newData.isString() && newData.val().length <= 16" },
-        "score": { ".validate": "newData.isNumber()" },
-        "lvl": { ".validate": "newData.isNumber()" },
-        "$other": { ".validate": false }
+        ".validate": "newData.hasChildren(['ts']) && newData.getPriority() === null && $id.matches(/^-[A-Za-z0-9_-]{19}$/)",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length <= 24 && newData.getPriority() === null"
+        },
+        "ts": {
+          ".validate": "newData.isNumber() && newData.val() <= now + 86400000 && newData.getPriority() === null"
+        },
+        "v": {
+          ".validate": "newData.isString() && newData.val().length <= 16 && newData.getPriority() === null"
+        },
+        "score": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 150 && newData.val() % 1 === 0 && newData.getPriority() === null"
+        },
+        "lvl": {
+          ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 5 && newData.val() % 1 === 0 && newData.getPriority() === null"
+        },
+        "$other": {
+          ".validate": false
+        }
       }
     }
   }

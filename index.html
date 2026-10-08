@@ -313,8 +313,27 @@
     const e = lb.find(x => !x.up && x.pid === entry.pid && x.score === entry.score && x.ts === entry.ts);
     if (e) { e.up = 1; saveLB(lb); }
   }
+  // every name this device has used, so a later rename can find its older entries
+  function knownNames() {
+    try { return JSON.parse(localStorage.getItem('royalNemoNames')) || []; }
+    catch (e) { return []; }
+  }
+  function rememberName(n) {
+    const names = knownNames();
+    if (n && !names.includes(n)) {
+      names.push(n);
+      localStorage.setItem('royalNemoNames', JSON.stringify(names.slice(-20)));
+    }
+  }
+  rememberName(playerName);
+  // the name as of right now, even if another tab of the game changed it
+  function currentName() {
+    return localStorage.getItem('royalNemoName') || playerName;
+  }
   function setName(newName) {
     newName = (newName || '').trim().slice(0, 12) || 'Nemo';
+    rememberName(playerName);
+    rememberName(newName);
     // renaming carries all of your existing leaderboard scores with you
     const lb = getLB();
     for (const e of lb) e.name = newName; // the local board is this device's own scores
@@ -324,6 +343,12 @@
     nameBtn.textContent = '👤 ' + newName;
     refreshRemoteLB(); // carries the new name to this device's shared entries
   }
+  window.addEventListener('storage', e => {
+    if (e.key === 'royalNemoName' && e.newValue) {
+      playerName = e.newValue;
+      nameBtn.textContent = '👤 ' + playerName;
+    }
+  });
 
   // ---------- Cross-device leaderboard (Firebase Realtime DB over REST) ----------
   // Set to a Firebase Realtime Database URL, e.g.
@@ -332,6 +357,7 @@
   let remoteLB = null; // latest global top-100; null while the shared board can't be reached
   const inFlight = new Set(); // timestamps of local runs currently being uploaded
   let renaming = false;
+  let writeEpoch = 0; // changes whenever an upload or rename starts or settles
 
   function lbTop() {
     return remoteLB || getLB();
@@ -344,6 +370,7 @@
   }
   async function refreshRemoteLB() {
     if (!REMOTE_DB) return;
+    const epoch = writeEpoch;
     let data;
     try {
       data = await fetchRemoteScores();
@@ -351,27 +378,57 @@
       remoteLB = null; // unreachable or locked: show this device's own board instead
       return;
     }
-    const all = Object.values(data).filter(e => e && e.name && typeof e.score === 'number');
-    syncRemoteNames(data);
-    backfillLocalScores(all);
+    if (typeof data !== 'object') data = {};
+    // a snapshot read while this device was writing may predate those writes
+    if (epoch === writeEpoch) {
+      syncRemoteNames(data);
+      backfillLocalScores(Object.values(data).filter(e => e && typeof e.score === 'number'));
+    }
+    const all = Object.values(data).filter(e =>
+      e && !e.hidden && typeof e.name === 'string' && e.name && typeof e.score === 'number');
     all.sort((a, b) => b.score - a.score);
     remoteLB = all.slice(0, 100);
+  }
+  // A run's server key comes from this device's id and the run's timestamp,
+  // so re-sending it (from a second tab, or after a lost reply) rewrites the
+  // same entry instead of adding a copy. Keys are shaped like Firebase push
+  // ids because the database rules require that.
+  function entryKey(ts) {
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < PID.length; i++) {
+      const c = PID.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 2654435761);
+      h2 = Math.imul(h2 ^ c, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    const device = (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36).padStart(10, '0').slice(-10);
+    return '-' + Math.floor(ts).toString(36).padStart(9, '0').slice(-9) + device;
   }
   // Runs finished while the shared board was unreachable only reached this
   // device's board. Once it answers again, upload the ones it is missing.
   // Server copies are paired with local runs by timestamp, or by score for
-  // runs that older versions uploaded under a different timestamp. A run is
-  // uploaded at most once, so a score deleted after that stays deleted.
+  // runs that older versions uploaded under a different timestamp. Entries
+  // the developer hides stay on the server, so their runs pair and are not
+  // sent again.
   function backfillLocalScores(remoteAll) {
     // wait for pending uploads: their server copies could otherwise be
     // paired with a different run of the same score
     if (inFlight.size) return;
     const lb = getLB();
     let changed = false;
-    lb.forEach((e, i) => {
-      // older versions stored runs without a timestamp; give each a stable, unique one
-      if (e.pid === PID && !e.ts) { e.ts = Date.now() - lb.length + i; changed = true; }
-    });
+    // Older versions stored runs without a timestamp. Give each one derived
+    // from the run itself (runs with the same score are interchangeable), so
+    // every tab of the game picks the same one and uploads the same entry.
+    // These sit in 2001, well before any real run.
+    const seen = {};
+    for (const e of lb) {
+      if (e.pid === PID && !e.ts) {
+        const k = seen[e.score] = (seen[e.score] || 0) + 1;
+        e.ts = 1e12 + e.score * 1000 + k;
+        changed = true;
+      }
+    }
     const serverLeft = remoteAll.filter(e => e.pid === PID);
     const take = match => {
       const i = serverLeft.findIndex(match);
@@ -395,39 +452,53 @@
     if (changed) saveLB(lb);
     for (const e of missing) uploadEntry(e, true);
   }
-  // A rename made while the shared board was unreachable is applied the next
-  // time it answers. After the first sync, only entries still carrying the
-  // name this device last synced change, so a name the developer edits on
-  // the dashboard stays.
+  // Carries this device's name to its shared entries, including renames made
+  // while the board was unreachable. The first sync adopts all of them (older
+  // versions kept no name history); after that only names this device has
+  // used are replaced. Entries the developer renamed on the dashboard are
+  // marked and left alone.
   function syncRemoteNames(data) {
-    if (!playerName || renaming) return;
-    const synced = localStorage.getItem('royalNemoSyncedName');
-    if (synced === playerName) return;
+    const me = currentName();
+    if (!me || renaming) return;
+    const firstSync = localStorage.getItem('royalNemoSyncedName') === null;
+    const mine = knownNames();
     const updates = {};
     for (const [k, e] of Object.entries(data)) {
-      if (e && e.pid === PID && e.name !== playerName && (synced === null || e.name === synced)) {
-        updates[k + '/name'] = playerName;
-      }
+      if (!e || e.pid !== PID || e.mod || e.name === me) continue;
+      if (firstSync || mine.includes(e.name)) updates[k + '/name'] = me;
     }
-    const target = playerName;
     if (!Object.keys(updates).length) {
-      localStorage.setItem('royalNemoSyncedName', target);
+      localStorage.setItem('royalNemoSyncedName', me);
       return;
     }
     renaming = true;
+    writeEpoch++;
     fetch(REMOTE_DB + '/scores.json', { method: 'PATCH', body: JSON.stringify(updates) })
-      .then(r => { if (r.ok) localStorage.setItem('royalNemoSyncedName', target); })
+      .then(r => {
+        if (!r.ok) return;
+        localStorage.setItem('royalNemoSyncedName', me);
+        // show the new name right away (the board objects are this snapshot's)
+        for (const path of Object.keys(updates)) {
+          const entry = data[path.slice(0, path.indexOf('/'))];
+          if (entry) entry.name = me;
+        }
+      })
       .catch(() => {})
-      .finally(() => { renaming = false; });
+      .finally(() => {
+        renaming = false;
+        writeEpoch++;
+        if (currentName() !== me) refreshRemoteLB(); // renamed again meanwhile
+      });
   }
   function uploadEntry(entry, backfill) {
     inFlight.add(entry.ts);
-    const body = { name: playerName || entry.name, score: entry.score, ts: entry.ts || Date.now(), pid: PID };
+    writeEpoch++;
+    const body = { name: currentName() || entry.name, score: entry.score, ts: entry.ts, pid: PID };
     if (backfill) body.backfill = true;
-    return fetch(REMOTE_DB + '/scores.json', { method: 'POST', body: JSON.stringify(body) })
+    return fetch(REMOTE_DB + '/scores/' + entryKey(entry.ts) + '.json', { method: 'PUT', body: JSON.stringify(body) })
       .then(r => { if (r.ok) markUploaded(entry); })
       .catch(() => {})
-      .finally(() => inFlight.delete(entry.ts));
+      .finally(() => { inFlight.delete(entry.ts); writeEpoch++; });
   }
   function pushRemoteScore(entry) {
     if (!REMOTE_DB || !entry) return;
@@ -2481,7 +2552,6 @@
   }
 
   reset();
-  refreshRemoteLB();
   requestAnimationFrame(frame);
 })();
 </script>
