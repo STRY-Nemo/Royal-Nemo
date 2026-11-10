@@ -223,7 +223,7 @@
 </div>
 <script>
 (() => {
-  const VERSION = 'v33'; // shown on the title screen so you know which build you're playing
+  const VERSION = 'v34'; // shown on the title screen so you know which build you're playing
   const duelOverlay = document.getElementById('duelOverlay');
   const duelLobby = document.getElementById('duelLobby');
   const duelRoom = document.getElementById('duelRoom');
@@ -356,8 +356,20 @@
   // mode 0 = one player, 1 = two players sharing this phone, 2 = two players on two phones
   let mode = 0;
   let net = null;  // the two-phone duel session, while this phone is in a room
-  let drng = null; // seeded so both phones in a duel swim the same course
-  const rnd = () => (net && drng ? drng() : Math.random());
+  // A seeded course (two-phone duels and the daily course): each gate's shape
+  // comes from the seed and the gate's number on the course, so every device
+  // builds the same course however wide its screen is.
+  let courseSeed = null;
+  const gateRng = i => (courseSeed === null ? Math.random
+    : mulberry32((courseSeed ^ Math.imul(i + 1, 0x9E3779B1)) >>> 0));
+  // mode 3, the daily course: one course a day (UTC), one board a day, and the
+  // ghost of the day's best run swimming it beside you
+  const today = () => Math.floor(Date.now() / 86400000);
+  const GHOST_CH = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let dailyDn = 0, dailyBoard = [], dailyOff = false;
+  let ghost = null;      // the run to race: { pid, name, score, g }
+  let runGhost = null;   // the ghost this run started with
+  let ghostRec = [], ghostDone = false;
   const mulberry32 = a => () => {
     a = (a + 0x6D2B79F5) | 0;
     let x = Math.imul(a ^ (a >>> 15), 1 | a);
@@ -626,6 +638,16 @@
   }
 
   function reset() {
+    if (mode === 3) {
+      dailyDn = today();
+      courseSeed = (Math.imul(dailyDn, 0x9E3779B1) ^ 0x5EEDF15E) >>> 0;
+      refreshDaily();
+    } else if (!net) {
+      courseSeed = null;
+    }
+    ghostRec = [];
+    ghostDone = false;
+    runGhost = null;
     nemo = { x: W * (versus ? 0.36 : 0.3), y: H * 0.45, vy: 0, rot: 0, fin: 0, tail: 0, flame: 0, slice: 0, dead: false };
     p2 = { x: nemo.x - 58 * S(), y: H * 0.45, vy: 0, rot: 0, fin: 0, tail: 2, flame: 0, slice: 0, dead: false, pal: P2_PAL };
     if (net && net.role === 2) {
@@ -963,6 +985,10 @@
     }
     if (state === ST.READY) {
       state = ST.PLAYING;
+      if (mode === 3) {
+        runGhost = ghost && ghost.g.length > 1 ? ghost : null;
+        p2.y = nemo.y;
+      }
       nemo.vy = SWIM_VY * S();
       if (versus) p2.vy = SWIM_VY * S();
       doTapFx();
@@ -1013,11 +1039,11 @@
     if (state !== ST.READY || !modeBtn) return false;
     if (nameOverlay.classList.contains('open') || lbOverlay.classList.contains('open')) return false;
     if (duelOverlay.classList.contains('open') || (net && net.cd > 0)) return false;
-    const m = modeBtn.findIndex(b => cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
-    if (m < 0) return false;
-    if (m !== mode) {
-      mode = m;
-      versus = mode > 0;
+    const hit = modeBtn.find(b => cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
+    if (!hit) return false;
+    if (hit.m !== mode) {
+      mode = hit.m;
+      versus = mode === 1 || mode === 2;
       netClose(); // leaving the two-phone mode leaves its room
       reset();
       sndScore();
@@ -1168,6 +1194,84 @@
     }
   }
 
+  // ---------- Daily course ----------
+  // /daily/<device id> holds that device's best run of its latest day:
+  // { name, score, dn (UTC day number), ts, g (the run's swim path) }.
+  // Today's board is the entries whose dn is today, so nothing piles up.
+  const dailyUrl = p => REMOTE_DB + '/daily' + (p ? '/' + p : '') + '.json';
+  function dailyBestToday() {
+    try {
+      const d = JSON.parse(localStorage.getItem('royalNemoDaily'));
+      return d && d.dn === today() ? d.score : -1;
+    } catch (e) { return -1; }
+  }
+  async function refreshDaily() {
+    if (!REMOTE_DB) return;
+    try {
+      const res = await fetch(dailyUrl());
+      if (!res.ok) { dailyOff = res.status === 401 || res.status === 403; return; }
+      dailyOff = false;
+      const data = await res.json() || {}, dn = today();
+      const rows = Object.entries(data)
+        .filter(([, e]) => e && e.dn === dn && typeof e.score === 'number' && e.name)
+        .map(([pid, e]) => ({ pid, name: String(e.name).slice(0, 24), score: e.score, ts: +e.ts || 0,
+                              g: typeof e.g === 'string' && /^[0-9A-Za-z]*$/.test(e.g) ? e.g : '' }));
+      rows.sort((a, b) => b.score - a.score || a.ts - b.ts);
+      dailyBoard = rows;
+      // race the best run that isn't yours; with nobody else on the board, race your own
+      ghost = rows.find(r => r.pid !== PID && r.g.length > 1) || rows.find(r => r.g.length > 1) || null;
+    } catch (e) { /* offline: keep what we had */ }
+  }
+  // how far along the course the fish is, in quarter-gates: the same number
+  // means the same spot on the course on every device
+  function courseKey() {
+    const s = S();
+    let f = 0;
+    if (phase() === 3) {
+      const st = steels.find(b => b.x + b.w > nemo.x);
+      if (st) f = 1 - (st.x - nemo.x) / (300 * s);
+    } else {
+      const c = corals.find(c => !c.scored);
+      if (c) f = 1 - (c.x + CORAL_W * s - nemo.x) / (CORAL_SPACING * s);
+    }
+    return (score + Math.max(0, Math.min(0.999, f))) * 4;
+  }
+  function ghostStep(dt) {
+    if (vsBanner && (vsBanner.t -= dt) <= 0) vsBanner = null;
+    const s = S(), key = courseKey();
+    // record this run's path, one height per quarter-gate
+    const q = GHOST_CH[Math.round(Math.max(0, Math.min(1, nemo.y / H)) * 61)];
+    while (ghostRec.length <= Math.floor(key) && ghostRec.length < 700) ghostRec.push(q);
+    if (!runGhost || ghostDone) return;
+    // replay the other run: where it was at this same spot on the course
+    const g = runGhost.g, gk = key - 0.5, a = Math.max(0, Math.floor(gk));
+    if (gk >= g.length - 1) {
+      // this is where that run ended
+      ghostDone = true;
+      vsBanner = { msg: `You passed ${runGhost.pid === PID ? 'your best' : runGhost.name}!`, sub: '👻 their run ended here', t: 2.6 };
+      if (runGhost.pid === PID) vsBanner.sub = '👻 your earlier run ended here';
+      launchFireworks(true);
+      return;
+    }
+    const at = i => GHOST_CH.indexOf(g[Math.min(g.length - 1, i)]) / 61 * H;
+    const ty = at(a) + (at(a + 1) - at(a)) * Math.max(0, gk - a);
+    const dy = ty - p2.y;
+    p2.x = nemo.x - 30 * s;
+    p2.y += dy * Math.min(1, dt * 14);
+    p2.rot = Math.max(-0.45, Math.min(0.9, dy / (50 * s)));
+    p2.fin = (Math.sin(t * 9) + 1) / 2;
+  }
+  function dailyFinish() {
+    const prev = dailyBestToday();
+    if (score > 0 && score >= prev && dailyDn === today()) {
+      localStorage.setItem('royalNemoDaily', JSON.stringify({ dn: dailyDn, score }));
+      const body = { name: currentName() || playerName || 'Nemo', score, dn: dailyDn, ts: Date.now(), g: ghostRec.join('') };
+      fetch(dailyUrl(PID), { method: 'PUT', body: JSON.stringify(body) }).catch(() => {}).then(refreshDaily);
+    } else {
+      refreshDaily();
+    }
+  }
+
   // ---------- Two-phone duel (rooms in the realtime database) ----------
   // Each phone simulates only its own fish on a course built from a shared
   // seed, reports its height and gate count a few times a second, and draws
@@ -1209,7 +1313,7 @@
     // tell the other phone we left
     try { fetch(duelUrl(net.code + '/' + net.me), { method: 'DELETE', keepalive: true }).catch(() => {}); } catch (e) {}
     net = null;
-    drng = null;
+    courseSeed = null;
   }
   window.addEventListener('pagehide', netClose);
   // fold one server event into our copy of the room
@@ -1272,7 +1376,7 @@
     net.live = false;
     Object.assign(net.opp, { y: 0.45, s: 0, d: 0, seen: performance.now() });
     reset();
-    drng = mulberry32(seed);
+    courseSeed = seed >>> 0;
     net.cd = 3;
     duelOverlay.classList.remove('open');
   }
@@ -1551,23 +1655,26 @@
   // ---------- Coral / tower columns (levels 1, 2, 4, 5) ----------
   function spawnCoral(x) {
     const s = S();
-    // in a two-phone duel the gap narrows by gate number, not by this phone's
-    // score, so both phones build exactly the same course
-    const gap = (net ? Math.max(CORAL_GAP - 5 * Math.min(Math.floor(net.gates++ / 15), 10), 150) : coralGap()) * s;
+    // on a seeded course the gap narrows by gate number, not by this device's
+    // score at the moment of spawning, so every device builds the same course
+    const gi = score + corals.filter(c => !c.scored).length; // this gate's number on the course
+    const rng = gateRng(gi);
+    const gap = (courseSeed !== null ? Math.max(CORAL_GAP - 5 * Math.min(Math.floor(gi / 15), 10), 150) : coralGap()) * s;
     // level 5's gaps drift vertically, so leave headroom for the motion
-    const margin = (70 + (net || phase() === 5 ? 28 : 0)) * s;
+    const margin = (70 + (courseSeed !== null || phase() === 5 ? 28 : 0)) * s;
     const groundY = H - GROUND_H * s;
-    const gapY = margin + rnd() * (groundY - margin * 2 - gap);
-    corals.push({ x, gapY, gap, gapY0: gapY, gap0: gap, seed: rnd() * 7, scored: false });
+    const gapY = margin + rng() * (groundY - margin * 2 - gap);
+    corals.push({ x, gapY, gap, gapY0: gapY, gap0: gap, seed: rng() * 7, scored: false });
   }
 
   // ---------- Steel blocks (level 3) ----------
   function spawnSteel() {
     const s = S();
-    const w = (48 + Math.random() * 28) * s;
-    const h = (60 + Math.random() * 42) * s;
+    const rng = gateRng(score + steels.length);
+    const w = (48 + rng() * 28) * s;
+    const h = (60 + rng() * 42) * s;
     const groundY = H - GROUND_H * s;
-    const y = 60 * s + Math.random() * (groundY - 130 * s - h);
+    const y = 60 * s + rng() * (groundY - 130 * s - h);
     steels.push({ x: W + 80 * s, y, w, h });
   }
 
@@ -1672,9 +1779,9 @@
     }
 
     if (state === ST.READY) {
-      nemo.y = H * 0.45 + Math.sin(t * 3) * 12 * s;
+      nemo.y = H * 0.415 + Math.sin(t * 3) * 12 * s;
       nemo.fin = (Math.sin(t * 8) + 1) / 2;
-      p2.y = H * 0.45 + Math.sin(t * 3 + 1.6) * 12 * s;
+      p2.y = H * 0.415 + Math.sin(t * 3 + 1.6) * 12 * s;
       p2.fin = (Math.sin(t * 8 + 1.6) + 1) / 2;
       if (net && net.cd > 0) {
         // two-phone duel: both phones count down, then the round starts by itself
@@ -1836,6 +1943,7 @@
 
     // PLAYING
     if (versus) { updateVersus(dt); return; }
+    if (mode === 3) ghostStep(dt);
     bgScroll += coralSpeed() * s * dt * 0.5; // background ROYL drifts at half speed
     nemo.vy += GRAVITY * s * dt;
     nemo.y += nemo.vy * dt;
@@ -1952,7 +2060,9 @@
     nemo.vy = Math.min(nemo.vy, 0);
     sndHit();
     setTimeout(sndBlub, 250);
-    if (!START) {
+    if (!START && mode === 3) {
+      dailyFinish(); // the daily course keeps its own board
+    } else if (!START) {
       if (score > best) {
         best = score;
         localStorage.setItem('royalNemoBest', best);
@@ -1969,7 +2079,9 @@
     winT = 0;
     sndChest();
     setTimeout(snd1Up, 900);
-    if (!START) {
+    if (!START && mode === 3) {
+      dailyFinish(); // the daily course keeps its own board
+    } else if (!START) {
       if (score > best) {
         best = score;
         localStorage.setItem('royalNemoBest', best);
@@ -2381,14 +2493,15 @@
     const ph = phase();
 
     // fart clouds render behind everything else
+    const baseAlpha = ctx.globalAlpha; // a ghost is drawn see-through
     for (const f of farts) {
-      ctx.globalAlpha = Math.min(1, f.life * 2) * 0.6;
+      ctx.globalAlpha = Math.min(1, f.life * 2) * 0.6 * baseAlpha;
       ctx.fillStyle = '#b9d96a';
       ctx.beginPath();
       ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = baseAlpha;
 
     ctx.save();
     ctx.translate(k.x, k.y);
@@ -2893,6 +3006,10 @@
            W / 2, safeTop + 62 * s, 16 * s, '#cdeef5');
       // two phones: name the other player's fish
       if (net && !p2.dead) text(net.opp.n, p2.x, p2.y - 30 * s, 12 * s, '#fff');
+      if (mode === 3) {
+        text('DAILY COURSE', W / 2, safeTop + 82 * s, 12 * s, '#ffd94a');
+        if (runGhost && !ghostDone) text('👻 ' + (runGhost.pid === PID ? 'your best' : runGhost.name), p2.x, p2.y - 30 * s, 12 * s, '#fff');
+      }
 
       if (versus && !net) {
         // each player's corner: name while swimming, struck out once bonked
@@ -2912,7 +3029,7 @@
           ctx.globalAlpha = 1;
         }
       }
-      if (versus && vsBanner) {
+      if (vsBanner) {
         ctx.globalAlpha = Math.min(1, vsBanner.t / 0.4);
         text(vsBanner.msg, W / 2, H * 0.3, Math.min(28 * s, W * 0.07), '#ff8b6b');
         text(vsBanner.sub, W / 2, H * 0.36, 17 * s);
@@ -2954,46 +3071,60 @@
       text("Nemo's Tappy", W / 2, H * 0.19, 40 * s, '#ffd94a');
       text('Adventure', W / 2, H * 0.26, 40 * s, '#ffd94a');
       text('🐠', W / 2, H * 0.32, 26 * s);
-      text('🔊', W / 2, H * 0.745, 20 * s);
-      text('Sound ON highly recommended', W / 2, H * 0.79, Math.min(17 * s, W * 0.05), '#ffe34d');
-      text('for the laughs... trust us.', W / 2, H * 0.825, Math.min(14 * s, W * 0.042), '#cdeef5');
+      text('🔊 Sound ON highly recommended', W / 2, H * 0.815, Math.min(16 * s, W * 0.046), '#ffe34d');
+      text('for the laughs... trust us.', W / 2, H * 0.85, Math.min(14 * s, W * 0.042), '#cdeef5');
+      const l1 = H * 0.675, l2 = H * 0.72, l3 = H * 0.76, fit = (px, frac) => Math.min(px * s, W * frac);
       if (mode === 2) {
         if (net && net.cd > 0) {
           text(Math.ceil(net.cd), W / 2, H * 0.36, 90 * s, '#ffd94a');
-          text(`You vs ${net.opp.n}`, W / 2, H * 0.615, 22 * s);
-          text('Get ready… tap to swim!', W / 2, H * 0.665, 17 * s, '#cdeef5');
+          text(`You vs ${net.opp.n}`, W / 2, l1, 22 * s);
+          text('Get ready… tap to swim!', W / 2, l2, 17 * s, '#cdeef5');
         } else if (net) {
-          text(`Room ${net.code}`, W / 2, H * 0.615, 24 * s, '#ffd94a');
-          text(net.status, W / 2, H * 0.665, Math.min(15 * s, W * 0.04), '#cdeef5');
-          text('Tap to see the room code', W / 2, H * 0.705, 14 * s);
+          text(`Room ${net.code}`, W / 2, l1, 24 * s, '#ffd94a');
+          text(net.status, W / 2, l2, fit(15, 0.04), '#cdeef5');
+          text('Tap to see the room code', W / 2, l3, 14 * s);
         } else {
-          text('Play a friend on their own phone', W / 2, H * 0.615, Math.min(19 * s, W * 0.05));
-          text('Tap to host or join a duel', W / 2, H * 0.665, 18 * s, '#ffd94a');
+          text('Play a friend on their own phone', W / 2, l1, fit(19, 0.05));
+          text('Tap to host or join a duel', W / 2, l2, 18 * s, '#ffd94a');
         }
+      } else if (mode === 3) {
+        const lead = dailyBoard[0], mine = dailyBestToday();
+        text('Same course for everyone, new every day', W / 2, l1, fit(16, 0.043));
+        if (dailyOff) {
+          text('The daily board is not switched on yet', W / 2, l2, fit(15, 0.04), '#ff8b6b');
+        } else if (lead) {
+          text(`Today's leader: ${lead.pid === PID ? 'YOU' : lead.name} — ${lead.score}`, W / 2, l2, fit(17, 0.045), '#ffd94a');
+        } else {
+          text('No scores yet today. Be the first!', W / 2, l2, fit(17, 0.045), '#ffd94a');
+        }
+        text((ghost ? `Tap to race ${ghost.pid === PID ? 'your own' : ghost.name + "'s"} ghost 👻` : 'Tap to swim!') +
+             (mine > 0 ? `  ·  your best: ${mine}` : ''), W / 2, l3, fit(15, 0.04), '#cdeef5');
       } else if (versus) {
-        text('Last fish swimming wins!', W / 2, H * 0.615, 20 * s);
-        text('◀ Nemo: tap the LEFT half', W / 2, H * 0.66, 16 * s, '#ffb45c');
-        text('Bubbles: tap the RIGHT half ▶', W / 2, H * 0.7, 16 * s, '#c9e8ff');
+        text('Last fish swimming wins!', W / 2, l1, 20 * s);
+        text('◀ Nemo: tap the LEFT half', W / 2, l2, 16 * s, '#ffb45c');
+        text('Bubbles: tap the RIGHT half ▶', W / 2, l3, 16 * s, '#c9e8ff');
       } else {
-        text('Tap to swim!', W / 2, H * 0.62, 26 * s);
-        if (best > 0) text(`Best: ${best}`, W / 2, H * 0.68, 20 * s, '#cdeef5');
+        text('Tap to swim!', W / 2, l1 + 6 * s, 26 * s);
+        if (best > 0) text(`Best: ${best}`, W / 2, l3 - 6 * s, 20 * s, '#cdeef5');
       }
-      // mode buttons: three of the same size in a row, the chosen one lit up
-      const gap = 8 * s, bw = Math.min(118 * s, (W - 24 * s - gap * 2) / 3), bh = 54 * s;
-      const rowX = W / 2 - (bw * 3 + gap * 2) / 2, by = H * 0.535 - bh / 2;
-      const fs1 = Math.min(15 * s, bw * 0.15), fs2 = Math.min(12.5 * s, bw * 0.125);
-      modeBtn = [['1 PLAYER', '👤 solo'], ['2 PLAYERS', '👥 1 phone'], ['2 PLAYERS', '📱 2 phones']].map((label, m) => {
-        const bx = rowX + m * (bw + gap), on = m === mode;
-        ctx.fillStyle = !on ? 'rgba(13, 50, 90, 0.6)' : m === 2 ? 'rgba(20, 120, 90, 0.95)' : m === 1 ? 'rgba(193, 39, 45, 0.9)' : 'rgba(30, 95, 170, 0.95)';
-        roundRect(bx, by, bw, bh, 14 * s);
+      // mode buttons: four of the same size, two by two, the chosen one lit up
+      const gap = 8 * s, bw = Math.min(150 * s, (W - 24 * s - gap) / 2), bh = 44 * s;
+      const gx = W / 2 - bw - gap / 2, gy = H * 0.495;
+      const fs1 = Math.min(15 * s, bw * 0.12), fs2 = Math.min(12.5 * s, bw * 0.1);
+      const tint = ['rgba(30, 95, 170, 0.95)', 'rgba(193, 39, 45, 0.9)', 'rgba(20, 120, 90, 0.95)', 'rgba(150, 90, 200, 0.95)'];
+      modeBtn = [[0, '1 PLAYER', '👤 solo'], [3, 'DAILY COURSE', '📅 race a ghost'],
+                 [1, '2 PLAYERS', '👥 1 phone'], [2, '2 PLAYERS', '📱 2 phones']].map(([m, top, sub], i) => {
+        const bx = gx + (i % 2) * (bw + gap), by = gy + Math.floor(i / 2) * (bh + gap), on = m === mode;
+        ctx.fillStyle = on ? tint[m] : 'rgba(13, 50, 90, 0.6)';
+        roundRect(bx, by, bw, bh, 13 * s);
         ctx.strokeStyle = on ? '#ffd94a' : 'rgba(255, 255, 255, 0.35)';
         ctx.lineWidth = (on ? 3 : 1.5) * s;
         ctx.stroke();
         ctx.globalAlpha = on ? 1 : 0.75;
-        text(label[0], bx + bw / 2, by + bh * 0.34, fs1);
-        text(label[1], bx + bw / 2, by + bh * 0.7, fs2, on ? '#ffd94a' : '#cdeef5');
+        text(top, bx + bw / 2, by + bh * 0.33, fs1);
+        text(sub, bx + bw / 2, by + bh * 0.71, fs2, on ? '#ffd94a' : '#cdeef5');
         ctx.globalAlpha = 1;
-        return { x: bx, y: by, w: bw, h: bh };
+        return { x: bx, y: by, w: bw, h: bh, m };
       });
       text(VERSION, W / 2, H * 0.95, 13 * s, 'rgba(255,255,255,0.55)', 'rgba(0,0,0,0.25)');
     } else if (state === ST.OUTRO) {
@@ -3037,9 +3168,9 @@
         text('YOU WIN!', W / 2, H * 0.12, 38 * s, '#ffd94a');
         text('ROYL #1 CHAMPION', W / 2, H * 0.19, 22 * s, '#aef1b8');
         text(`Score: ${score}`, W / 2, H * 0.25, 28 * s);
-        const lb = lbTop().slice(0, 10);
+        const lb = (mode === 3 ? dailyBoard : lbTop()).slice(0, 10);
         if (lb.length) {
-          text(remoteLB ? 'GLOBAL TOP 10' : 'TOP 10', W / 2, H * 0.32, 19 * s, '#ffd94a');
+          text(mode === 3 ? "TODAY'S TOP 10" : remoteLB ? 'GLOBAL TOP 10' : 'TOP 10', W / 2, H * 0.32, 19 * s, '#ffd94a');
           lb.forEach((e, i) => {
             const mine = e.pid ? e.pid === PID : e.name === playerName;
             text(`${i + 1}. ${e.name} — ${e.score}`, W / 2, H * (0.365 + i * 0.031),
@@ -3073,13 +3204,22 @@
         } else {
           text('Blub... Game Over', W / 2, H * 0.16, Math.min(34 * s, W * 0.085), '#ff8b6b');
           text(`Score: ${score}`, W / 2, H * 0.24, 28 * s);
-          text(`Best: ${best}`, W / 2, H * 0.30, 20 * s, '#ffd94a');
-          if (score >= best && score > 0 && !START) text('New record!', W / 2, H * 0.345, 18 * s, '#aef1b8');
+          if (mode === 3) {
+            text(`Your best today: ${Math.max(0, dailyBestToday())}`, W / 2, H * 0.30, 20 * s, '#ffd94a');
+            if (runGhost) {
+              const who = runGhost.pid === PID ? 'your earlier best' : runGhost.name + "'s ghost";
+              text(ghostDone ? `You passed ${who}! 👻` : `👻 ${who} reached ${runGhost.score}`,
+                   W / 2, H * 0.345, Math.min(17 * s, W * 0.045), ghostDone ? '#aef1b8' : '#cdeef5');
+            }
+          } else {
+            text(`Best: ${best}`, W / 2, H * 0.30, 20 * s, '#ffd94a');
+            if (score >= best && score > 0 && !START) text('New record!', W / 2, H * 0.345, 18 * s, '#aef1b8');
+          }
         }
 
-        const lb = versus ? [] : lbTop().slice(0, 10);
+        const lb = versus ? [] : (mode === 3 ? dailyBoard : lbTop()).slice(0, 10);
         if (lb.length) {
-          text(remoteLB ? 'GLOBAL TOP 10' : 'TOP 10', W / 2, H * 0.40, 19 * s, '#ffd94a');
+          text(mode === 3 ? "TODAY'S TOP 10" : remoteLB ? 'GLOBAL TOP 10' : 'TOP 10', W / 2, H * 0.40, 19 * s, '#ffd94a');
           lb.forEach((e, i) => {
             const mine = e.pid ? e.pid === PID : e.name === playerName;
             text(`${i + 1}. ${e.name} — ${e.score}`, W / 2, H * (0.445 + i * 0.031),
@@ -3108,7 +3248,17 @@
     drawGround();
     drawAnemone(false); // home base rises behind the fish during outros
     drawSparkles();
-    if (versus) drawNemo(p2);
+    if (versus) {
+      drawNemo(p2);
+    } else if (mode === 3 && state === ST.PLAYING && runGhost && !ghostDone) {
+      // the daily ghost: see-through, and never wearing this player's power-up
+      const ss = ssActive;
+      ssActive = 0;
+      ctx.globalAlpha = 0.5;
+      drawNemo(p2);
+      ctx.globalAlpha = 1;
+      ssActive = ss;
+    }
     drawNemo(nemo);
     drawAnemone(true); // front tentacles wrap around the landed fish
     drawFireworks();

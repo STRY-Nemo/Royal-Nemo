@@ -249,6 +249,31 @@
         }
       }
     },
+    "daily": {
+      ".read": true,
+      "$pid": {
+        ".write": "newData.exists() && (!data.exists() || newData.child('dn').val() > data.child('dn').val() || (newData.child('dn').val() === data.child('dn').val() && newData.child('score').val() >= data.child('score').val()))",
+        ".validate": "newData.hasChildren(['name', 'score', 'dn']) && $pid.matches(/^[A-Za-z0-9_-]{1,32}$/) && newData.getPriority() === null",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24 && !newData.val().matches(/^ /) && !newData.val().matches(/ $/) && !newData.val().contains('\u200b') && !newData.val().contains('\u2060') && !newData.val().contains('\ufeff') && !newData.val().contains('\u202a') && !newData.val().contains('\u202b') && !newData.val().contains('\u202c') && !newData.val().contains('\u202d') && !newData.val().contains('\u202e') && newData.getPriority() === null"
+        },
+        "score": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 150 && newData.val() % 1 === 0 && newData.getPriority() === null"
+        },
+        "dn": {
+          ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= (now - now % 86400000) / 86400000 - 1 && newData.val() <= (now - now % 86400000) / 86400000 + 1 && newData.getPriority() === null"
+        },
+        "ts": {
+          ".validate": "newData.isNumber() && newData.val() <= now + 86400000 && newData.getPriority() === null"
+        },
+        "g": {
+          ".validate": "newData.isString() && newData.val().length <= 700 && newData.val().matches(/^[0-9A-Za-z]*$/) && newData.getPriority() === null"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
     "plays": {
       ".read": false,
       "$id": {
@@ -345,15 +370,17 @@ async function checkHealth() {
   if (r.ok) {
     el.className = 'good';
     el.innerHTML = '🟢 <b>Leaderboard is live.</b> Players can read and save scores.';
-    // two-phone duels need their own rules; an older rule set answers 401 here
-    let d = null;
-    try { d = await fetch(DB + '/duels/ZZZZ.json'); } catch (e) {}
-    if (d && d.ok) {
-      el.innerHTML += '<br>🟢 <b>Two-phone duels are on.</b>';
-    } else if (d) {
-      el.innerHTML += '<br>🟠 <b>Two-phone duels are off</b> (the database answered ' + d.status + '). ' +
-        'The game needs the newer database rules for players to host and join duels.<br>' +
-        '<button onclick="revive()">Switch on two-phone duels</button>' +
+    // newer features need newer rules; an older rule set answers 401 for them
+    const probe = async path => { try { return await fetch(DB + path); } catch (e) { return null; } };
+    const [duels, daily] = await Promise.all([probe('/duels/ZZZZ.json'), probe('/daily.json?shallow=true')]);
+    let behind = false;
+    for (const [res, label, verb] of [[duels, 'Two-phone duels', 'are'], [daily, 'The daily course', 'is']]) {
+      if (res && res.ok) el.innerHTML += '<br>🟢 <b>' + label + ' ' + verb + ' on.</b>';
+      else if (res) { behind = true; el.innerHTML += '<br>🟠 <b>' + label + ' ' + verb + ' off</b> (the database answered ' + res.status + ').'; }
+    }
+    if (behind) {
+      el.innerHTML += '<br>The game needs the newer database rules for these to work.<br>' +
+        '<button onclick="revive()">Publish the latest database rules</button>' +
         '<div id="rulesHelp" class="hidden"></div>';
     }
     return;

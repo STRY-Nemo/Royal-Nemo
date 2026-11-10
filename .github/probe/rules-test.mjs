@@ -140,5 +140,33 @@ expect('a player far off screen', await req('PUT', `${room}/p1.json`, { ...me, y
 expect('a player with a text score', await req('PUT', `${room}/p1.json`, { ...me, s: 'lots' }), false);
 expect('a player carrying a priority', await req('PUT', `${room}/p1.json`, { ...me, '.priority': 'y'.repeat(1000) }), false);
 
+console.log('\n-- the daily course (public, no key) --');
+const dn = Math.floor(Date.now() / 86400000);
+const day = { name: 'Nemo', score: 12, dn, ts: Date.now(), g: '0aZ9kk' };
+expect('read today\'s board', await req('GET', '/daily.json'), true);
+expect('save a first daily run', await req('PUT', '/daily/dev1.json', day), true);
+expect('improve the daily run', await req('PUT', '/daily/dev1.json', { ...day, score: 20 }), true);
+expect('re-send the same daily run', await req('PUT', '/daily/dev1.json', { ...day, score: 20 }), true);
+expect('rename on the daily board', await req('PUT', '/daily/dev1.json', { ...day, score: 20, name: 'King' }), true);
+expect('a daily run from just before midnight (yesterday)', await req('PUT', '/daily/dev2.json', { ...day, dn: dn - 1 }), true);
+expect('the next day\'s first run replaces a higher old score', await req('PUT', '/daily/dev2.json', { ...day, score: 1 }), true);
+expect('a daily run with no ghost path', await req('PUT', '/daily/dev3.json', { name: 'Nemo', score: 3, dn }), true);
+
+console.log('\n-- a vandal on the daily board (public, no key) --');
+expect('lower someone\'s daily score', await req('PUT', '/daily/dev1.json', { ...day, score: 5 }), false);
+expect('wipe a daily entry', await req('DELETE', '/daily/dev1.json'), false);
+expect('wipe the whole daily board', await req('DELETE', '/daily.json'), false);
+expect('overwrite the whole daily board', await req('PUT', '/daily.json', { dev1: day }), false);
+expect('a daily score above the winning score', await req('PUT', '/daily/dev4.json', { ...day, score: 151 }), false);
+expect('a daily run dated next week', await req('PUT', '/daily/dev4.json', { ...day, dn: dn + 7 }), false);
+expect('a daily run dated last week', await req('PUT', '/daily/dev4.json', { ...day, dn: dn - 7 }), false);
+expect('pull a daily entry back to an earlier day', await req('PUT', '/daily/dev1.json', { ...day, dn: dn - 1, score: 150 }), false);
+expect('a huge ghost path', await req('PUT', '/daily/dev4.json', { ...day, g: 'a'.repeat(701) }), false);
+expect('a ghost path with markup in it', await req('PUT', '/daily/dev4.json', { ...day, g: '<img>' }), false);
+expect('a daily entry under a strange device id', await req('PUT', '/daily/dev.4$.json', day), false);
+expect('a daily entry with an unknown field', await req('PUT', '/daily/dev4.json', { ...day, junk: 1 }), false);
+expect('a daily entry with an invisible name', await req('PUT', '/daily/dev4.json', { ...day, name: '​' }), false);
+expect('a daily entry carrying a priority', await req('PUT', '/daily/dev4.json', { ...day, '.priority': 'y'.repeat(1000) }), false);
+
 console.log(failed ? `\n${failed} RULE CHECK(S) FAILED` : '\nALL RULE CHECKS PASSED');
 process.exit(failed ? 1 : 0);
