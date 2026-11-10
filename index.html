@@ -157,7 +157,7 @@
 </div>
 <script>
 (() => {
-  const VERSION = 'v29'; // shown on the title screen so you know which build you're playing
+  const VERSION = 'v30'; // shown on the title screen so you know which build you're playing
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const nameBtn = document.getElementById('nameBtn');
@@ -279,7 +279,15 @@
   let ssCharges = 0, ssActive = 0, ssUnlockT = 0; // super saiyan inventory & timers
   best = +(localStorage.getItem('royalNemoBest') || 0);
 
+  // two-player duel on one screen: left half swims Nemo, right half swims Bubbles
+  let versus = false, p2 = null, vsWinner = 0, vsT = 0, vsBanner = null, modeBtn = null;
+  const P2_PAL = { body: '#3d9be9', dark: '#1f66b3', band: '#ffe26b' };
+  const P_NAME = k => (k === nemo ? 'Nemo' : 'Bubbles');
+  // whoever the celebrations should burst from
+  const star = () => (versus && nemo.dead && !p2.dead ? p2 : nemo);
+
   const phase = () => {
+    if (versus) return [1, 2, 4, 5][Math.floor(score / 30) % 4]; // the duel tours the dodge worlds
     if (state === ST.OUTRO) return outroFrom; // keep the finished level's world during the landing
     return score < LVL2_AT ? 1 : score < LVL3_AT ? 2 : score < LVL4_AT ? 3 : score < LVL5_AT ? 4 : 5;
   };
@@ -535,11 +543,15 @@
   }
 
   function reset() {
-    nemo = { x: W * 0.3, y: H * 0.45, vy: 0, rot: 0, fin: 0, tail: 0, flame: 0, slice: 0 };
+    nemo = { x: W * (versus ? 0.36 : 0.3), y: H * 0.45, vy: 0, rot: 0, fin: 0, tail: 0, flame: 0, slice: 0, dead: false };
+    p2 = { x: nemo.x - 58 * S(), y: H * 0.45, vy: 0, rot: 0, fin: 0, tail: 2, flame: 0, slice: 0, dead: false, pal: P2_PAL };
+    vsWinner = 0;
+    vsT = 0;
+    vsBanner = null;
     corals = [];
     steels = [];
     debris = [];
-    score = START;
+    score = versus ? 0 : START;
     t = 0;
     deathT = 0;
     flashT = 0;
@@ -552,7 +564,7 @@
     molten = [];
     bgScroll = 0;
     // debug starts get the charges they would have earned along the way
-    ssCharges = (START >= 15 ? 1 : 0) + (START >= 75 ? 1 : 0);
+    ssCharges = versus ? 0 : (START >= 15 ? 1 : 0) + (START >= 75 ? 1 : 0);
     ssActive = 0;
     ssUnlockT = 0;
     fartTaps = 0;
@@ -852,17 +864,21 @@
   });
   lbClose.addEventListener('click', () => lbOverlay.classList.remove('open'));
 
-  function tapAction() {
+  // who: 1 = Nemo, 2 = Bubbles (only matters during a two-player duel)
+  function tapAction(who = 1) {
     if (nameOverlay.classList.contains('open') || lbOverlay.classList.contains('open')) return;
     if (state === ST.READY) {
       state = ST.PLAYING;
       nemo.vy = SWIM_VY * S();
+      if (versus) p2.vy = SWIM_VY * S();
       doTapFx();
       loadFartSamples();
     } else if (state === ST.PLAYING) {
-      nemo.vy = SWIM_VY * S();
-      nemo.fin = 1;
-      doTapFx();
+      const k = versus && who === 2 ? p2 : nemo;
+      if (k.dead) return;
+      k.vy = SWIM_VY * S();
+      k.fin = 1;
+      doTapFx(k);
     } else if (state === ST.SPLASH) {
       if (splashT > 0.8) resumeFromSplash(); // must read the screen first
     } else if (state === ST.DEAD && deathT > 0.6) {
@@ -871,22 +887,22 @@
       reset();
     }
   }
-  function doTapFx() {
+  function doTapFx(k = nemo) {
     const ph = phase();
     if (ph === 2) {
-      nemo.flame = 1;
+      k.flame = 1;
       sndRocket();
     } else if (ph === 3) {
-      nemo.slice = 0.25;
+      k.slice = 0.25;
       spawnFart();
       sndFart();
       sndSlice();
     } else if (ph === 4) {
       sndRave();
-      burstParticles(nemo.x, nemo.y, ['#00ffd0', '#ff00d0', '#ffe600'], 6, 0.6);
+      burstParticles(k.x, k.y, ['#00ffd0', '#ff00d0', '#ffe600'], 6, 0.6);
     } else if (ph === 5) {
       sndTrumpet();
-      burstParticles(nemo.x, nemo.y, ['#ffd94a', '#fff'], 5, 0.5);
+      burstParticles(k.x, k.y, ['#ffd94a', '#fff'], 5, 0.5);
     } else {
       sndSwim();
     }
@@ -897,23 +913,43 @@
       playFartSample(Math.random() < 0.5 ? 'tap' : 'proud', 0.9 + Math.random() * 0.2, 1);
     }
   }
+  // the 1 PLAYER / 2 PLAYERS switch on the title screen
+  function tryModeBtn(cx, cy) {
+    if (state !== ST.READY || !modeBtn) return false;
+    if (nameOverlay.classList.contains('open') || lbOverlay.classList.contains('open')) return false;
+    if (cx < modeBtn.x || cx > modeBtn.x + modeBtn.w || cy < modeBtn.y || cy > modeBtn.y + modeBtn.h) return false;
+    versus = !versus;
+    reset();
+    sndScore();
+    return true;
+  }
+  const sideOf = cx => (cx < W / 2 ? 1 : 2);
   const onUI = e => e.target !== canvas; // taps on the name button/overlay don't count
   window.addEventListener('touchstart', e => {
     if (onUI(e)) return;
     e.preventDefault();
+    if (versus && state === ST.PLAYING) {
+      // every new finger swims the fish whose half of the screen it landed on
+      for (let i = 0; i < e.changedTouches.length; i++) tapAction(sideOf(e.changedTouches[i].clientX));
+      return;
+    }
     if (e.touches && e.touches.length >= 2) { activateSS(); return; } // 2-finger tap transforms
     const tch = e.touches && e.touches[0];
+    if (tch && tryModeBtn(tch.clientX, tch.clientY)) return;
     if (tch && tryActivateAt(tch.clientX, tch.clientY)) return; // tapping the ⚡ button transforms
     tapAction();
   }, { passive: false });
   window.addEventListener('mousedown', e => {
     if (onUI(e)) return;
+    if (tryModeBtn(e.clientX, e.clientY)) return;
     if (tryActivateAt(e.clientX, e.clientY)) return;
-    tapAction();
+    tapAction(sideOf(e.clientX));
   });
   window.addEventListener('keydown', e => {
     if (document.activeElement === nameInput) return;
-    if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); tapAction(); }
+    // duel keys: W or Space swims Nemo, the up arrow swims Bubbles
+    if (e.code === 'Space' || e.code === 'KeyW') { e.preventDefault(); tapAction(1); }
+    if (e.code === 'ArrowUp') { e.preventDefault(); tapAction(2); }
     if (e.code === 'KeyS') { e.preventDefault(); activateSS(); }
   });
 
@@ -951,7 +987,7 @@
     outroSlashed = false;
     outroBeatN = -1;
     outroFlash = 0;
-    outroStart = { x: nemo.x, y: nemo.y };
+    outroStart = { x: star().x, y: star().y };
     anemone.x = W * 0.62;
     corals = [];
     steels = [];
@@ -986,7 +1022,7 @@
 
   // ---------- Super Saiyan power ----------
   function activateSS() {
-    if (state !== ST.PLAYING || ssActive > 0 || ssCharges <= 0) return;
+    if (versus || state !== ST.PLAYING || ssActive > 0 || ssCharges <= 0) return;
     ssCharges--;
     ssActive = 3; // invincible for the next 3 points
     if (ssGain) ssGain.gain.value = 1; // riff comes back at full power
@@ -1030,6 +1066,95 @@
     }
   }
 
+  // ---------- Two-player duel ----------
+  function onScoreVersus() {
+    score++;
+    sndScore();
+    burstSparkles();
+    const newWorld = score % 30 === 0, step = score % 15 === 0;
+    if (newWorld) { initAmbient(); sndChest(); }
+    else if (step) snd1Up();
+    if (score % 5 === 0) launchFireworks(!step);
+  }
+  function killPlayer(k) {
+    if (k.dead) return;
+    k.dead = true;
+    k.diedT = t;
+    k.vy = Math.min(k.vy, 0);
+    sndHit();
+    setTimeout(sndBlub, 250);
+    const other = k === nemo ? p2 : nemo;
+    if (other.dead) {
+      // last fish swimming wins; bonking on the same frame is a tie
+      vsWinner = other.diedT === k.diedT ? 0 : (k === nemo ? 1 : 2);
+      state = ST.DEAD;
+      deathT = 0;
+      flashT = 1;
+      vsBanner = null;
+      if (vsWinner) setTimeout(sndFireworks, 600);
+    } else {
+      vsBanner = { msg: `${P_NAME(k)} is out!`, sub: `${P_NAME(other)} wins — keep swimming!`, t: 2.4 };
+    }
+  }
+  function settleFallen(k, dt, scroll) {
+    const s = S(), floor = H - GROUND_H * s - NEMO_R * s;
+    k.rot = Math.min(k.rot + dt * 6, Math.PI / 2);
+    if (k.y >= floor) {
+      k.y = floor;
+      k.vy = 0;
+      if (scroll) k.x -= coralSpeed() * s * dt; // left behind as the world scrolls on
+    }
+  }
+  function updateVersus(dt) {
+    const s = S(), r = NEMO_R * s, groundY = H - GROUND_H * s, ph = phase();
+    vsT += dt;
+    if (vsBanner && (vsBanner.t -= dt) <= 0) vsBanner = null;
+    bgScroll += coralSpeed() * s * dt * 0.5;
+
+    for (const k of [nemo, p2]) {
+      k.vy += GRAVITY * s * dt;
+      k.y += k.vy * dt;
+      if (k.dead) { settleFallen(k, dt, true); continue; }
+      k.rot = Math.max(-0.45, Math.min(1.2, k.vy / (600 * s)));
+      k.fin = Math.max(0, k.fin - dt * 4);
+      if (k.y - r < 0) { k.y = r; k.vy = 50; }
+      if (k.y + r > groundY) { k.y = groundY - r; killPlayer(k); }
+    }
+
+    for (const p of corals) {
+      p.x -= coralSpeed() * s * dt;
+      if (ph === 4) {
+        p.gap = p.gap0 * (1.08 + 0.14 * Math.sin(t * 4.4 + p.seed));
+        p.gapY = p.gapY0 + (p.gap0 - p.gap) / 2;
+      } else if (ph === 5) {
+        p.gapY = p.gapY0 + Math.sin(t * 1.6 + p.seed) * 22 * s;
+      }
+    }
+    if (corals.length === 0 || corals[corals.length - 1].x < W - CORAL_SPACING * s) {
+      spawnCoral(Math.max(W + 40, corals.length ? corals[corals.length - 1].x + CORAL_SPACING * s : W + 40));
+    }
+    while (corals.length && corals[0].x < -CORAL_W * s - 20) corals.shift();
+
+    const pw = CORAL_W * s;
+    for (const p of corals) {
+      const alive = [nemo, p2].filter(k => !k.dead);
+      if (!alive.length) break;
+      // a gate counts once every fish still swimming has cleared it
+      if (!p.scored && p.x + pw < Math.min(...alive.map(k => k.x))) {
+        p.scored = true;
+        onScoreVersus();
+      }
+      for (const k of alive) {
+        if (k.x + r > p.x && k.x - r < p.x + pw &&
+            (k.y - r < p.gapY || k.y + r > p.gapY + p.gap)) killPlayer(k);
+      }
+    }
+
+    updateSparkles(dt);
+    updateFireworks(dt);
+    updateEffects(dt);
+  }
+
   function burstParticles(x, y, colors, n = 20, speed = 1) {
     const s = S();
     for (let i = 0; i < n; i++) {
@@ -1053,13 +1178,13 @@
       const a = (i / 26) * Math.PI * 2 + Math.random() * 0.3;
       const sp = (90 + Math.random() * 180) * s;
       fireworks.push({
-        x: nemo.x, y: nemo.y,
+        x: star().x, y: star().y,
         vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
         life: 0.9 + Math.random() * 0.5,
         color: colors[i % colors.length]
       });
     }
-    fwTexts.push({ x: nemo.x, y: nemo.y - 50 * s, life: 1.6 });
+    fwTexts.push({ x: star().x, y: star().y - 50 * s, life: 1.6 });
   }
   function updateFireworks(dt) {
     for (const f of fireworks) {
@@ -1195,6 +1320,8 @@
     nemo.tail += dt * 7;
     nemo.flame = Math.max(0, nemo.flame - dt * 3);
     nemo.slice = Math.max(0, nemo.slice - dt);
+    p2.tail += dt * 7;
+    p2.flame = Math.max(0, p2.flame - dt * 3);
     ssUnlockT = Math.max(0, ssUnlockT - dt);
     if (ssGain) {
       // guitar volume follows the remaining power: 3 points loud, 1 point faint
@@ -1213,6 +1340,8 @@
     if (state === ST.READY) {
       nemo.y = H * 0.45 + Math.sin(t * 3) * 12 * s;
       nemo.fin = (Math.sin(t * 8) + 1) / 2;
+      p2.y = H * 0.45 + Math.sin(t * 3 + 1.6) * 12 * s;
+      p2.fin = (Math.sin(t * 8 + 1.6) + 1) / 2;
       return;
     }
 
@@ -1333,7 +1462,13 @@
       deathT += dt;
       flashT = Math.max(0, flashT - dt * 3);
       const groundY = H - GROUND_H * s;
-      if (nemo.y < groundY - NEMO_R * s) {
+      if (versus) {
+        for (const k of [nemo, p2]) {
+          k.vy += GRAVITY * s * dt;
+          k.y += k.vy * dt;
+          settleFallen(k, dt, false);
+        }
+      } else if (nemo.y < groundY - NEMO_R * s) {
         nemo.vy += GRAVITY * s * dt;
         nemo.y += nemo.vy * dt;
         nemo.rot = Math.min(nemo.rot + dt * 6, Math.PI / 2);
@@ -1346,6 +1481,7 @@
     }
 
     // PLAYING
+    if (versus) { updateVersus(dt); return; }
     bgScroll += coralSpeed() * s * dt * 0.5; // background ROYL drifts at half speed
     nemo.vy += GRAVITY * s * dt;
     nemo.y += nemo.vy * dt;
@@ -1493,7 +1629,7 @@
     for (let i = 0; i < 8; i++) {
       const a = Math.random() * Math.PI * 2;
       sparkles.push({
-        x: nemo.x, y: nemo.y,
+        x: star().x, y: star().y,
         vx: Math.cos(a) * (60 + Math.random() * 120),
         vy: Math.sin(a) * (60 + Math.random() * 120) - 60,
         life: 0.6 + Math.random() * 0.3
@@ -1886,8 +2022,7 @@
   }
 
   // ---------- Drawing: the fish (and his vehicles/weapons) ----------
-  function drawNemo() {
-    const k = nemo;
+  function drawNemo(k = nemo) {
     const s = S();
     const ph = phase();
 
@@ -1941,7 +2076,7 @@
     } else {
       drawCrown();
     }
-    drawShades(ph);
+    drawShades(ph, k);
     if (ph === 3) drawKatana(k);
 
     ctx.restore();
@@ -2099,9 +2234,10 @@
   }
 
   function drawFishBody(k) {
-    const orange = '#ff8c2e';
-    const orangeDark = '#d96a10';
-    const band = '#fdf7ec';
+    // (a second player brings their own colours in k.pal)
+    const orange = k.pal ? k.pal.body : '#ff8c2e';
+    const orangeDark = k.pal ? k.pal.dark : '#d96a10';
+    const band = k.pal ? k.pal.band : '#fdf7ec';
 
     // tail fin (wags)
     const tw = Math.sin(k.tail) * 5;
@@ -2260,8 +2396,8 @@
     ctx.stroke();
   }
 
-  function drawShades(ph) {
-    const dead = state === ST.DEAD;
+  function drawShades(ph, k = nemo) {
+    const dead = k.dead || (!versus && state === ST.DEAD);
     if (dead) {
       ctx.strokeStyle = '#3a2a16';
       ctx.lineWidth = 2;
@@ -2399,7 +2535,32 @@
         ctx.fillRect(0, 0, W, H);
       }
       text(score, W / 2, safeTop + 30 * s, 52 * s);
-      text(`LVL ${phase()}`, W / 2, safeTop + 62 * s, 16 * s, '#cdeef5');
+      text(versus ? '2 PLAYER DUEL' : `LVL ${phase()}`, W / 2, safeTop + 62 * s, 16 * s, '#cdeef5');
+
+      if (versus) {
+        // each player's corner: name while swimming, struck out once bonked
+        const tagY = H - GROUND_H * s * 0.45;
+        text(nemo.dead ? '✖ Nemo' : '◀ NEMO', W * 0.25, tagY, 17 * s, nemo.dead ? '#9aa0ad' : '#ffb45c');
+        text(p2.dead ? 'Bubbles ✖' : 'BUBBLES ▶', W * 0.75, tagY, 17 * s, p2.dead ? '#9aa0ad' : '#c9e8ff');
+        // opening seconds: show whose half of the screen is whose
+        if (vsT < 3.5) {
+          ctx.globalAlpha = Math.min(1, (3.5 - vsT) / 0.6) * 0.8;
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 2 * s;
+          ctx.setLineDash([10 * s, 10 * s]);
+          ctx.beginPath(); ctx.moveTo(W / 2, H * 0.2); ctx.lineTo(W / 2, H - GROUND_H * s); ctx.stroke();
+          ctx.setLineDash([]);
+          text('tap this side', W * 0.25, H * 0.8, 15 * s);
+          text('tap this side', W * 0.75, H * 0.8, 15 * s);
+          ctx.globalAlpha = 1;
+        }
+        if (vsBanner) {
+          ctx.globalAlpha = Math.min(1, vsBanner.t / 0.4);
+          text(vsBanner.msg, W / 2, H * 0.3, 28 * s, '#ff8b6b');
+          text(vsBanner.sub, W / 2, H * 0.36, 17 * s);
+          ctx.globalAlpha = 1;
+        }
+      }
 
       // unlock banner flashes with the how-to
       if (ssUnlockT > 0 && Math.floor(ssUnlockT * 3) % 3 !== 0) {
@@ -2439,8 +2600,24 @@
       text('🔊', W / 2, H * 0.745, 20 * s);
       text('Sound ON highly recommended', W / 2, H * 0.79, Math.min(17 * s, W * 0.05), '#ffe34d');
       text('for the laughs... trust us.', W / 2, H * 0.825, Math.min(14 * s, W * 0.042), '#cdeef5');
-      text('Tap to swim!', W / 2, H * 0.62, 26 * s);
-      if (best > 0) text(`Best: ${best}`, W / 2, H * 0.68, 20 * s, '#cdeef5');
+      if (versus) {
+        text('Last fish swimming wins!', W / 2, H * 0.615, 20 * s);
+        text('◀ Nemo: tap the LEFT half', W / 2, H * 0.66, 16 * s, '#ffb45c');
+        text('Bubbles: tap the RIGHT half ▶', W / 2, H * 0.7, 16 * s, '#c9e8ff');
+      } else {
+        text('Tap to swim!', W / 2, H * 0.62, 26 * s);
+        if (best > 0) text(`Best: ${best}`, W / 2, H * 0.68, 20 * s, '#cdeef5');
+      }
+      // mode switch
+      const bw = 190 * s, bh = 40 * s, bx = W / 2 - bw / 2, by = H * 0.535 - bh / 2;
+      ctx.fillStyle = versus ? 'rgba(193, 39, 45, 0.85)' : 'rgba(13, 50, 90, 0.75)';
+      roundRect(bx, by, bw, bh, bh / 2);
+      ctx.strokeStyle = '#ffd94a';
+      ctx.lineWidth = 2 * s;
+      ctx.stroke();
+      text(versus ? '👥 2 PLAYERS' : '👤 1 PLAYER', W / 2, by + bh / 2, 18 * s);
+      text(versus ? 'tap here for 1 player' : 'tap here for 2 players', W / 2, by + bh + 11 * s, 12 * s, '#cdeef5');
+      modeBtn = { x: bx, y: by, w: bw, h: bh };
       text(VERSION, W / 2, H * 0.95, 13 * s, 'rgba(255,255,255,0.55)', 'rgba(0,0,0,0.25)');
     } else if (state === ST.OUTRO) {
       const pop = Math.max(0.2, Math.min(1, outroT / 0.4));
@@ -2504,12 +2681,19 @@
       if (deathT > 0.4) {
         ctx.fillStyle = 'rgba(0,0,0,0.45)';
         ctx.fillRect(0, 0, W, H);
-        text('Blub... Game Over', W / 2, H * 0.16, 34 * s, '#ff8b6b');
-        text(`Score: ${score}`, W / 2, H * 0.24, 28 * s);
-        text(`Best: ${best}`, W / 2, H * 0.30, 20 * s, '#ffd94a');
-        if (score >= best && score > 0 && !START) text('New record!', W / 2, H * 0.345, 18 * s, '#aef1b8');
+        if (versus) {
+          const head = vsWinner === 1 ? 'NEMO WINS! 🏆' : vsWinner === 2 ? 'BUBBLES WINS! 🏆' : "IT'S A TIE! 🤝";
+          text(head, W / 2, H * 0.26, Math.min(40 * s, W * 0.09), vsWinner === 2 ? '#c9e8ff' : '#ffd94a');
+          text(vsWinner ? 'Last fish swimming' : 'You bonked at the same moment', W / 2, H * 0.34, 20 * s);
+          text(`Gates cleared: ${score}`, W / 2, H * 0.44, 26 * s, '#aef1b8');
+        } else {
+          text('Blub... Game Over', W / 2, H * 0.16, Math.min(34 * s, W * 0.085), '#ff8b6b');
+          text(`Score: ${score}`, W / 2, H * 0.24, 28 * s);
+          text(`Best: ${best}`, W / 2, H * 0.30, 20 * s, '#ffd94a');
+          if (score >= best && score > 0 && !START) text('New record!', W / 2, H * 0.345, 18 * s, '#aef1b8');
+        }
 
-        const lb = lbTop().slice(0, 10);
+        const lb = versus ? [] : lbTop().slice(0, 10);
         if (lb.length) {
           text(remoteLB ? 'GLOBAL TOP 10' : 'TOP 10', W / 2, H * 0.40, 19 * s, '#ffd94a');
           lb.forEach((e, i) => {
@@ -2520,7 +2704,7 @@
         }
 
         if (deathT > 0.6 && Math.floor(deathT * 2) % 2 === 0) {
-          text('Tap to try again', W / 2, H * 0.79, 22 * s);
+          text(versus ? 'Tap for a rematch' : 'Tap to try again', W / 2, H * 0.79, 22 * s);
         }
       }
     }
@@ -2540,7 +2724,8 @@
     drawGround();
     drawAnemone(false); // home base rises behind the fish during outros
     drawSparkles();
-    drawNemo();
+    if (versus) drawNemo(p2);
+    drawNemo(nemo);
     drawAnemone(true); // front tentacles wrap around the landed fish
     drawFireworks();
     drawUI();
