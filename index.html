@@ -52,6 +52,26 @@
     padding: 7px 14px;
     cursor: pointer;
   }
+  #moreGames {
+    position: fixed;
+    left: 0; right: 0;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    z-index: 5;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 10px;
+    pointer-events: none;
+  }
+  #moreGames a {
+    pointer-events: auto;
+    font: bold 13px -apple-system, "Segoe UI", Arial, sans-serif;
+    color: #fff;
+    text-decoration: none;
+    background: rgba(13, 50, 90, 0.75);
+    border: 2px solid #ffd94a;
+    border-radius: 16px;
+    padding: 6px 12px;
+  }
   #lbOverlay {
     position: fixed;
     inset: 0;
@@ -187,6 +207,10 @@
 <canvas id="game"></canvas>
 <button id="nameBtn" type="button">👤</button>
 <button id="lbBtn" type="button">🏆 Top 100</button>
+<div id="moreGames">
+  <a href="stack.html">🧱 Reef Stack</a>
+  <a href="swing.html">🪝 Kelp Swing</a>
+</div>
 <div id="lbOverlay">
   <div id="lbCard">
     <h2>🏆 TOP 100</h2>
@@ -223,7 +247,7 @@
 </div>
 <script>
 (() => {
-  const VERSION = 'v34'; // shown on the title screen so you know which build you're playing
+  const VERSION = 'v35'; // shown on the title screen so you know which build you're playing
   const duelOverlay = document.getElementById('duelOverlay');
   const duelLobby = document.getElementById('duelLobby');
   const duelRoom = document.getElementById('duelRoom');
@@ -241,6 +265,7 @@
   const lbList = document.getElementById('lbList');
   const lbSub = document.getElementById('lbSub');
   const lbClose = document.getElementById('lbClose');
+  const moreGames = document.getElementById('moreGames');
 
   // ---------- Sizing (crisp on Retina) ----------
   let W = 0, H = 0, dpr = 1;
@@ -3266,6 +3291,7 @@
 
     nameBtn.style.display = (state === ST.PLAYING || state === ST.SPLASH || state === ST.OUTRO) ? 'none' : 'block';
     lbBtn.style.display = state === ST.READY ? 'block' : 'none';
+    moreGames.style.display = state === ST.READY && !(net && net.cd > 0) ? 'flex' : 'none';
 
     requestAnimationFrame(frame);
   }
