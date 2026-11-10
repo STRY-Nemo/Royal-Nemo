@@ -223,7 +223,7 @@
 </div>
 <script>
 (() => {
-  const VERSION = 'v31'; // shown on the title screen so you know which build you're playing
+  const VERSION = 'v32'; // shown on the title screen so you know which build you're playing
   const duelOverlay = document.getElementById('duelOverlay');
   const duelLobby = document.getElementById('duelLobby');
   const duelRoom = document.getElementById('duelRoom');
@@ -2983,7 +2983,8 @@
       ctx.stroke();
       text(['👤 1 PLAYER', '👥 2 PLAYERS · 1 PHONE', '📱 2 PLAYERS · 2 PHONES'][mode], W / 2, by + bh / 2, Math.min(17 * s, W * 0.045));
       text(['tap here for 2 players', 'tap here to play on 2 phones', 'tap here for 1 player'][mode], W / 2, by + bh + 11 * s, 12 * s, '#cdeef5');
-      modeBtn = { x: bx, y: by, w: bw, h: bh };
+      // the hint line under the pill says "tap here", so it counts as part of the button
+      modeBtn = { x: bx, y: by - 4 * s, w: bw, h: bh + 26 * s };
       text(VERSION, W / 2, H * 0.95, 13 * s, 'rgba(255,255,255,0.55)', 'rgba(0,0,0,0.25)');
     } else if (state === ST.OUTRO) {
       const pop = Math.max(0.2, Math.min(1, outroT / 0.4));
