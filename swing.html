@@ -24,7 +24,7 @@
   #home {
     position: fixed;
     top: max(10px, env(safe-area-inset-top));
-    right: 10px;
+    left: 10px;
     z-index: 5;
     font: bold 14px -apple-system, "Segoe UI", Arial, sans-serif;
     color: #fff;
@@ -42,7 +42,7 @@
 <script src="nemo-kit.js"></script>
 <script>
 (() => {
-  const VERSION = 'swing v2';
+  const VERSION = 'swing v3';
   const K = window.NemoKit; // Nemo himself, his sounds and the five worlds
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
@@ -79,6 +79,7 @@
   let fish, anchors, hazards, hook, rope, held, cam, t, overT, score, banner, bubbles, trail, x0, cause;
   const PUFFER_R = 20;
   let best = +(localStorage.getItem('kelpSwingBest') || 0);
+  const board = K.board('swing', 'm'); // the shared Top 100
 
   function addAnchor() {
     const last = anchors[anchors.length - 1];
@@ -136,6 +137,7 @@
     return bestA;
   }
   function press() {
+    if (board.isOpen()) return;
     if (state === 'over') { if (overT > 0.6) reset(); return; }
     held = true;
     if (state === 'ready') { state = 'play'; K.loadFartSamples(); return; } // already hanging from the first hook
@@ -180,6 +182,7 @@
     setTimeout(() => K.playFartSample('proud', 0.9, 1), 450); // a long sad one to finish
     fx.fart(fish.x, fish.y + 8, 1, -1, 9);
     if (score > best) { best = score; localStorage.setItem('kelpSwingBest', best); }
+    if (score >= best) board.submit(score); // a record, or a tie the board may have missed
   }
   function update(dt) {
     t += dt;
@@ -378,9 +381,10 @@
       text("Nemo's Kelp Swing", W / 2, H * 0.1, Math.min(34 * s, W * 0.082), '#ffd94a');
       text('HOLD to hook on · LET GO to fart away', W / 2, H * 0.66, Math.min(19 * s, W * 0.046));
       text('Swing from jellyfish to jellyfish. Mind the urchins!', W / 2, H * 0.71, Math.min(14 * s, W * 0.036), '#cdeef5');
-      if (best > 0) text(`Best: ${best} m`, W / 2, H * 0.77, 19 * s, '#ffd94a');
-      text('🔊 Sound ON highly recommended', W / 2, H * 0.835, Math.min(16 * s, W * 0.046), '#ffe34d');
-      text('for the laughs... trust us.', W / 2, H * 0.87, Math.min(14 * s, W * 0.042), '#cdeef5');
+      if (best > 0) text(`Best: ${best} m`, W / 2, H * 0.76, 19 * s, '#ffd94a');
+      text(board.line(), W / 2, H * 0.8, Math.min(15 * s, W * 0.038), '#aef1b8');
+      text('🔊 Sound ON highly recommended', W / 2, H * 0.85, Math.min(16 * s, W * 0.046), '#ffe34d');
+      text('for the laughs... trust us.', W / 2, H * 0.885, Math.min(14 * s, W * 0.042), '#cdeef5');
       text(VERSION, W / 2, H * 0.965, 12 * s, 'rgba(255,255,255,0.55)', 'rgba(0,0,0,0.25)');
     } else if (overT > 0.4) {
       ctx.fillStyle = 'rgba(0,0,20,0.45)';
@@ -389,9 +393,11 @@
       text(`Ouch, ${cause}!`, W / 2, H * 0.3, Math.min(20 * s, W * 0.05), '#cdeef5');
       text(`${score} m`, W / 2, H * 0.4, 44 * s, '#ffd94a');
       text(score >= best && score > 0 ? 'New record! 👑' : `Best: ${best} m`, W / 2, H * 0.48, 20 * s, score >= best && score > 0 ? '#aef1b8' : '#fff');
-      if (overT > 0.6 && Math.floor(overT * 2) % 2 === 0) text('Tap to try again', W / 2, H * 0.6, 22 * s);
+      text(board.line(), W / 2, H * 0.55, Math.min(15 * s, W * 0.038), '#aef1b8');
+      if (overT > 0.6 && Math.floor(overT * 2) % 2 === 0) text('Tap to try again', W / 2, H * 0.64, 22 * s);
     }
     home.style.display = state === 'play' ? 'none' : 'block';
+    board.show(state !== 'play');
   }
 
   let last = performance.now();

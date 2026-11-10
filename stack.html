@@ -42,7 +42,7 @@
 <script src="nemo-kit.js"></script>
 <script>
 (() => {
-  const VERSION = 'stack v2';
+  const VERSION = 'stack v3';
   const K = window.NemoKit; // Nemo himself, his sounds and the five worlds
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
@@ -78,6 +78,7 @@
   let blocks, cur, debris, bubbles, pops, score, perfect, cam, t, overT, banner, shake, bgScroll, fallen;
   const fx = K.fx();                       // fart clouds and fireworks, in tower space
   let best = +(localStorage.getItem('reefStackBest') || 0);
+  const board = K.board('stack', 'floors'); // the shared Top 100
 
   function reset() {
     const w = FIELD() * 0.5;
@@ -113,6 +114,7 @@
 
   // ---------- the one move: drop the sliding block ----------
   function tap() {
+    if (board.isOpen()) return;
     if (state === 'ready') { state = 'play'; K.loadFartSamples(); return; }
     if (state === 'over') { if (overT > 0.6) reset(); return; }
     const top = blocks[blocks.length - 1], s = S();
@@ -133,6 +135,7 @@
       setTimeout(() => K.playFartSample('proud', 0.9, 1), 450); // a long sad one to finish
       fx.fart(nemoX, nemoY + 10 * s, s, -1, 9);
       if (score > best) { best = score; localStorage.setItem('reefStackBest', best); }
+      if (score >= best) board.submit(score); // a record, or a tie the board may have missed
       return;
     }
     let x = left, w = overlap;
@@ -367,18 +370,21 @@
       text('Tap to drop the block', W / 2, H * 0.34, 24 * s);
       text('Line it up. Whatever hangs over is cut off.', W / 2, H * 0.39, Math.min(15 * s, W * 0.038), '#cdeef5');
       if (best > 0) text(`Best: ${best} floors`, W / 2, H * 0.45, 19 * s, '#ffd94a');
-      text('🔊 Sound ON highly recommended', W / 2, H * 0.53, Math.min(16 * s, W * 0.046), '#ffe34d');
-      text('for the laughs... trust us.', W / 2, H * 0.565, Math.min(14 * s, W * 0.042), '#cdeef5');
+      text(board.line(), W / 2, H * 0.5, Math.min(15 * s, W * 0.038), '#aef1b8');
+      text('🔊 Sound ON highly recommended', W / 2, H * 0.56, Math.min(16 * s, W * 0.046), '#ffe34d');
+      text('for the laughs... trust us.', W / 2, H * 0.595, Math.min(14 * s, W * 0.042), '#cdeef5');
       text(VERSION, W / 2, H * 0.965, 12 * s, 'rgba(255,255,255,0.55)', 'rgba(0,0,0,0.25)');
     } else if (overT > 0.4) {
       ctx.fillStyle = 'rgba(0,0,20,0.45)';
-      ctx.fillRect(0, 0, W, H * 0.3);
+      ctx.fillRect(0, 0, W, H * 0.34);
       text('Blub... it toppled!', W / 2, H * 0.065, Math.min(20 * s, W * 0.048), '#ff8b6b');
       text(`${score} ${score === 1 ? 'floor' : 'floors'}`, W / 2, H * 0.125, 40 * s, '#ffd94a');
       text(score >= best && score > 0 ? 'New record! 👑' : `Best: ${best}`, W / 2, H * 0.19, 20 * s, score >= best && score > 0 ? '#aef1b8' : '#fff');
-      if (overT > 0.6 && Math.floor(overT * 2) % 2 === 0) text('Tap to try again', W / 2, H * 0.25, 20 * s);
+      text(board.line(), W / 2, H * 0.245, Math.min(15 * s, W * 0.038), '#aef1b8');
+      if (overT > 0.6 && Math.floor(overT * 2) % 2 === 0) text('Tap to try again', W / 2, H * 0.3, 20 * s);
     }
     home.style.display = state === 'play' ? 'none' : 'block';
+    board.show(state !== 'play');
   }
 
   let last = performance.now();

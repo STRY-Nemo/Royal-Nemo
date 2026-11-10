@@ -274,6 +274,28 @@
         }
       }
     },
+    "boards": {
+      "$game": {
+        ".read": "$game === 'stack' || $game === 'swing'",
+        ".validate": "$game === 'stack' || $game === 'swing'",
+        "$pid": {
+          ".write": "newData.exists() && (!data.exists() || newData.child('score').val() >= data.child('score').val())",
+          ".validate": "newData.hasChildren(['name', 'score']) && $pid.matches(/^[A-Za-z0-9_-]{1,32}$/) && newData.getPriority() === null",
+          "name": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24 && !newData.val().matches(/^ /) && !newData.val().matches(/ $/) && !newData.val().contains('\u200b') && !newData.val().contains('\u2060') && !newData.val().contains('\ufeff') && !newData.val().contains('\u202a') && !newData.val().contains('\u202b') && !newData.val().contains('\u202c') && !newData.val().contains('\u202d') && !newData.val().contains('\u202e') && newData.getPriority() === null"
+          },
+          "score": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000 && newData.val() % 1 === 0 && newData.getPriority() === null"
+          },
+          "ts": {
+            ".validate": "newData.isNumber() && newData.val() <= now + 86400000 && newData.getPriority() === null"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
     "plays": {
       ".read": false,
       "$id": {
@@ -372,9 +394,9 @@ async function checkHealth() {
     el.innerHTML = '🟢 <b>Leaderboard is live.</b> Players can read and save scores.';
     // newer features need newer rules; an older rule set answers 401 for them
     const probe = async path => { try { return await fetch(DB + path); } catch (e) { return null; } };
-    const [duels, daily] = await Promise.all([probe('/duels/ZZZZ.json'), probe('/daily.json?shallow=true')]);
+    const [duels, daily, boards] = await Promise.all([probe('/duels/ZZZZ.json'), probe('/daily.json?shallow=true'), probe('/boards/stack.json?shallow=true')]);
     let behind = false;
-    for (const [res, label, verb] of [[duels, 'Two-phone duels', 'are'], [daily, 'The daily course', 'is']]) {
+    for (const [res, label, verb] of [[duels, 'Two-phone duels', 'are'], [daily, 'The daily course', 'is'], [boards, 'The Reef Stack and Kelp Swing leaderboards', 'are']]) {
       if (res && res.ok) el.innerHTML += '<br>🟢 <b>' + label + ' ' + verb + ' on.</b>';
       else if (res) { behind = true; el.innerHTML += '<br>🟠 <b>' + label + ' ' + verb + ' off</b> (the database answered ' + res.status + ').'; }
     }

@@ -168,5 +168,31 @@ expect('a daily entry with an unknown field', await req('PUT', '/daily/dev4.json
 expect('a daily entry with an invisible name', await req('PUT', '/daily/dev4.json', { ...day, name: '​' }), false);
 expect('a daily entry carrying a priority', await req('PUT', '/daily/dev4.json', { ...day, '.priority': 'y'.repeat(1000) }), false);
 
+console.log('\n-- the Reef Stack and Kelp Swing leaderboards (public, no key) --');
+const row = { name: 'Nemo', score: 21, ts: Date.now() };
+expect('read the stack board', await req('GET', '/boards/stack.json'), true);
+expect('read the swing board', await req('GET', '/boards/swing.json'), true);
+expect('save a first stack score', await req('PUT', '/boards/stack/dev1.json', row), true);
+expect('beat it', await req('PUT', '/boards/stack/dev1.json', { ...row, score: 30 }), true);
+expect('re-send the same score under a new name', await req('PUT', '/boards/stack/dev1.json', { ...row, score: 30, name: 'King' }), true);
+expect('save a long swing', await req('PUT', '/boards/swing/dev1.json', { ...row, score: 4321 }), true);
+expect('look up one device\'s row', await req('GET', '/boards/swing/dev1.json'), true);
+
+console.log('\n-- a vandal on those leaderboards (public, no key) --');
+expect('lower someone\'s score', await req('PUT', '/boards/stack/dev1.json', { ...row, score: 2 }), false);
+expect('wipe someone\'s row', await req('DELETE', '/boards/stack/dev1.json'), false);
+expect('wipe a whole board', await req('DELETE', '/boards/stack.json'), false);
+expect('overwrite a whole board', await req('PUT', '/boards/stack.json', { dev1: row }), false);
+expect('list every board at once', await req('GET', '/boards.json'), false);
+expect('read a board for a game that does not exist', await req('GET', '/boards/chess.json'), false);
+expect('start a board for a game that does not exist', await req('PUT', '/boards/chess/dev1.json', row), false);
+expect('an absurd score', await req('PUT', '/boards/swing/dev9.json', { ...row, score: 1e9 }), false);
+expect('a fractional score', await req('PUT', '/boards/swing/dev9.json', { ...row, score: 1.5 }), false);
+expect('a row with no name', await req('PUT', '/boards/swing/dev9.json', { score: 5 }), false);
+expect('a row with an invisible name', await req('PUT', '/boards/swing/dev9.json', { ...row, name: '​' }), false);
+expect('a row with an unknown field', await req('PUT', '/boards/swing/dev9.json', { ...row, junk: 'x'.repeat(1000) }), false);
+expect('a row under a strange device id', await req('PUT', '/boards/swing/dev.9$.json', row), false);
+expect('a row carrying a priority', await req('PUT', '/boards/swing/dev9.json', { ...row, '.priority': 'y'.repeat(1000) }), false);
+
 console.log(failed ? `\n${failed} RULE CHECK(S) FAILED` : '\nALL RULE CHECKS PASSED');
 process.exit(failed ? 1 : 0);

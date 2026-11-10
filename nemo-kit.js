@@ -415,9 +415,113 @@
     };
   }
 
+  // ---------- leaderboards for the spin-off games ----------
+  // /boards/<game>/<device id> = { name, score, ts }: one entry per device per
+  // game, and the rules only let a score go up, so a board can never hold
+  // more rows than there are players. Name and device id are the main game's.
+  const DB = 'https://royal-nemo-default-rtdb.firebaseio.com';
+  const boardUrl = (g, p) => DB + '/boards/' + g + (p ? '/' + p : '') + '.json';
+  const GAMES = ['stack', 'swing'];
+  function deviceId() {
+    let id = localStorage.getItem('royalNemoPid');
+    if (!id) {
+      id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      localStorage.setItem('royalNemoPid', id);
+    }
+    return id;
+  }
+  const cleanName = n => Array.from(String(n || '').trim()).slice(0, 12).join('').trim();
+  const playerName = () => cleanName(localStorage.getItem('royalNemoName'));
+  function board(game, unit) {
+    const PID = deviceId();
+    let rows = null, off = false, shown = true;
+    const css = 'font:bold 14px -apple-system,"Segoe UI",Arial,sans-serif;color:#fff;';
+    const el = (tag, style, txt) => { const e = document.createElement(tag); e.style.cssText = style; if (txt) e.textContent = txt; return e; };
+    const btn = el('button', css + 'position:fixed;top:max(10px,env(safe-area-inset-top));right:10px;z-index:5;background:rgba(13,50,90,0.7);border:2px solid #ffd94a;border-radius:18px;padding:7px 14px;cursor:pointer;', '🏆 Top 100');
+    btn.type = 'button';
+    const overlay = el('div', 'position:fixed;inset:0;z-index:10;display:none;align-items:center;justify-content:center;background:rgba(0,20,40,0.7);');
+    const card = el('div', css + 'background:#0d4a7a;border:3px solid #ffd94a;border-radius:16px;padding:18px;width:min(88vw,340px);max-height:82vh;display:flex;flex-direction:column;text-align:center;');
+    const title = el('div', 'font-size:20px;color:#ffd94a;margin-bottom:4px;', '🏆 TOP 100');
+    const sub = el('div', 'font-size:12px;font-weight:normal;color:#cdeef5;margin-bottom:10px;');
+    const list = el('div', 'overflow-y:auto;text-align:left;font-size:15px;flex:1;min-height:60px;');
+    const who = el('button', css + 'font-size:13px;background:transparent;border:1px solid #39a9d8;border-radius:10px;padding:7px 12px;margin-top:10px;color:#cdeef5;cursor:pointer;');
+    const close = el('button', 'font:bold 16px -apple-system,"Segoe UI",Arial,sans-serif;color:#123a5c;background:#ffd94a;border:none;border-radius:10px;padding:9px 24px;margin-top:10px;cursor:pointer;', 'Close');
+    who.type = close.type = 'button';
+    card.append(title, sub, list, who, close);
+    overlay.append(card);
+    document.body.append(btn, overlay);
+
+    function render() {
+      who.textContent = '👤 Playing as ' + (playerName() || 'Nemo') + ' · change name';
+      list.textContent = '';
+      if (off) { sub.textContent = 'The leaderboard is not switched on yet.'; return; }
+      if (!rows) { sub.textContent = 'loading…'; return; }
+      sub.textContent = rows.length ? rows.length + (rows.length === 1 ? ' player' : ' players') + ' so far' : 'No scores yet. Be the first!';
+      rows.slice(0, 100).forEach((r, i) => {
+        const mine = r.pid === PID;
+        const row = el('div', 'display:flex;gap:8px;padding:5px 4px;border-bottom:1px solid rgba(255,255,255,0.12);' + (mine ? 'color:#ffd94a;' : ''));
+        row.append(el('span', 'width:30px;text-align:right;opacity:0.8;', (i + 1) + '.'),
+                   el('span', 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;', r.name),
+                   el('span', '', r.score + ' ' + unit));
+        list.append(row);
+      });
+    }
+    async function refresh() {
+      try {
+        const res = await fetch(boardUrl(game));
+        if (!res.ok) { off = res.status === 401 || res.status === 403; render(); return; }
+        off = false;
+        const data = await res.json() || {};
+        rows = Object.entries(data)
+          .filter(([, e]) => e && typeof e.score === 'number' && e.name)
+          .map(([pid, e]) => ({ pid, name: String(e.name).slice(0, 24), score: e.score, ts: +e.ts || 0 }))
+          .sort((a, b) => b.score - a.score || a.ts - b.ts);
+        render();
+      } catch (e) { /* offline: keep what we had */ }
+    }
+    function askName() {
+      const n = cleanName(window.prompt('Your name for the leaderboard (up to 12 letters):', playerName() || ''));
+      if (!n) return false;
+      localStorage.setItem('royalNemoName', n);
+      // carry the new name onto this device's row in every spin-off board
+      for (const g of GAMES) {
+        fetch(boardUrl(g, PID)).then(r => (r.ok ? r.json() : null)).then(e => {
+          if (!e || typeof e.score !== 'number') return;
+          return fetch(boardUrl(g, PID), { method: 'PUT', body: JSON.stringify({ name: n, score: e.score, ts: +e.ts || Date.now() }) });
+        }).then(() => { if (g === game) refresh(); }).catch(() => {});
+      }
+      render();
+      return true;
+    }
+    function submit(score) {
+      if (!(score > 0)) return;
+      if (!playerName()) askName(); // first score on this device: ask once
+      const body = { name: playerName() || 'Nemo', score: Math.floor(score), ts: Date.now() };
+      fetch(boardUrl(game, PID), { method: 'PUT', body: JSON.stringify(body) }).catch(() => {}).then(refresh);
+    }
+    btn.addEventListener('click', () => { overlay.style.display = 'flex'; render(); refresh(); });
+    close.addEventListener('click', () => { overlay.style.display = 'none'; });
+    who.addEventListener('click', askName);
+    refresh();
+    return {
+      refresh, submit,
+      isOpen: () => overlay.style.display === 'flex',
+      show(v) { if (v !== shown) { shown = v; btn.style.display = v ? 'block' : 'none'; } },
+      // this device's saved row, so a game can re-send a best the board never got
+      mine: () => (rows ? rows.find(r => r.pid === PID) || null : undefined),
+      // one line for the title and game-over screens
+      line() {
+        if (off || !rows || !rows.length) return '';
+        const i = rows.findIndex(r => r.pid === PID), top = rows[0];
+        const lead = top.pid === PID ? "You're #1!" : `#1 ${top.name}: ${top.score} ${unit}`;
+        return i > 0 ? `🌍 You're #${i + 1} of ${rows.length}  ·  ${lead}` : '🌍 ' + lead;
+      }
+    };
+  }
+
   window.NemoKit = {
     beep, fart, loadFartSamples, playFartSample, sndFart, sndFartSong,
     sndScore, sndHit, sndBlub, sndFireworks, snd1Up, sndChest,
-    drawNemo, drawBackdrop, blockColors, WORLDS, fx
+    drawNemo, drawBackdrop, blockColors, WORLDS, fx, board
   };
 })();
