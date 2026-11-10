@@ -39,9 +39,11 @@
 <body>
 <canvas id="game"></canvas>
 <a id="home" href="index.html">🐠 Nemo</a>
+<script src="nemo-kit.js"></script>
 <script>
 (() => {
-  const VERSION = 'swing v1';
+  const VERSION = 'swing v2';
+  const K = window.NemoKit; // Nemo himself, his sounds and the five worlds
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const home = document.getElementById('home');
@@ -116,22 +118,10 @@
     state = 'ready';
   }
 
-  // ---------- sound ----------
-  let actx = null;
-  function beep(freq, dur, type = 'triangle', vol = 0.08, slide = 0) {
-    try {
-      if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
-      if (actx.state === 'suspended') actx.resume();
-      const o = actx.createOscillator(), g = actx.createGain();
-      o.type = type;
-      o.frequency.setValueAtTime(freq, actx.currentTime);
-      if (slide) o.frequency.exponentialRampToValueAtTime(slide, actx.currentTime + dur);
-      g.gain.setValueAtTime(vol, actx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + dur);
-      o.connect(g); g.connect(actx.destination);
-      o.start(); o.stop(actx.currentTime + dur);
-    } catch (e) { /* audio is optional */ }
-  }
+  const beep = K.beep;
+  const fx = K.fx(); // fart clouds and fireworks, in world units
+  const WORLD_EVERY = 100; // metres per world
+  const worldOf = m => Math.floor(m / WORLD_EVERY) % K.WORLDS.length;
 
   // ---------- the one control: hold to hook on, let go to fly ----------
   // the hook you would grab right now: the nearest one ahead, else the nearest at all
@@ -148,7 +138,7 @@
   function press() {
     if (state === 'over') { if (overT > 0.6) reset(); return; }
     held = true;
-    if (state === 'ready') { state = 'play'; return; } // already hanging from the first hook
+    if (state === 'ready') { state = 'play'; K.loadFartSamples(); return; } // already hanging from the first hook
     if (hook) return;
     const a = reachable();
     if (!a) { beep(160, 0.08, 'square', 0.04); return; } // nothing in reach
@@ -161,10 +151,12 @@
     held = false;
     if (state !== 'play' || !hook) return;
     hook = null;
-    // a little kick off the rope makes a well-timed release feel good
+    // Nemo lets go with a fart: the kick that makes a well-timed release fly
     fish.vx *= 1.08;
     fish.vy = fish.vy * 1.08 - 50;
-    beep(420, 0.1, 'sine', 0.07, 760);
+    const back = fish.vx < 0 ? 1 : -1;
+    K.sndFart();
+    fx.fart(fish.x + back * 20, fish.y + 6, 1, back, 7);
   }
 
   window.addEventListener('touchstart', e => { if (e.target !== canvas) return; e.preventDefault(); press(); }, { passive: false });
@@ -183,7 +175,10 @@
     overT = 0;
     hook = null;
     held = false;
-    beep(180, 0.35, 'sawtooth', 0.12, 50);
+    K.sndHit();
+    setTimeout(K.sndBlub, 250);
+    setTimeout(() => K.playFartSample('proud', 0.9, 1), 450); // a long sad one to finish
+    fx.fart(fish.x, fish.y + 8, 1, -1, 9);
     if (score > best) { best = score; localStorage.setItem('kelpSwingBest', best); }
   }
   function update(dt) {
@@ -193,6 +188,7 @@
       if (b.y < -20) { b.y = 720; b.x = Math.random() * 1200; }
     }
     if (banner && (banner.t -= dt) <= 0) banner = null;
+    fx.update(dt, 1);
     if (state === 'over') {
       overT += dt;
       // sink onto the seabed
@@ -240,9 +236,13 @@
     if (state === 'play') {
       const m = Math.floor((fish.x - x0) / METRE);
       if (m > score) {
-        if (Math.floor(m / 100) > Math.floor(score / 100)) {
-          banner = { msg: `${Math.floor(m / 100) * 100} m!`, t: 1.8 };
-          [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, 0.13, 'triangle', 0.08), i * 90));
+        if (Math.floor(m / WORLD_EVERY) > Math.floor(score / WORLD_EVERY)) {
+          // every 100 m Nemo swings into the next world of the main game
+          const hundreds = Math.floor(m / WORLD_EVERY);
+          banner = { msg: K.WORLDS[worldOf(m)].name, sub: `${hundreds * WORLD_EVERY} m!`, t: 2.2 };
+          fx.fireworks(fish.x, fish.y, 1);
+          if (hundreds % 3 === 0) { K.sndChest(); K.sndFartSong(Math.min(hundreds / 3, 4)); }
+          else K.snd1Up();
         }
         score = m;
       }
@@ -268,21 +268,22 @@
   }
   function draw() {
     const s = S(), vw = VW();
-    const zone = Math.floor(score / 100) % 4;
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    const top = ['#39a9d8', '#3a7fd6', '#6a55c9', '#12325c'][zone], bot = ['#0d4a7a', '#122e6e', '#2a1757', '#050d24'][zone];
-    g.addColorStop(0, top);
-    g.addColorStop(1, bot);
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
+    const world = worldOf(score);
+    K.drawBackdrop(ctx, W, H, world, cam * 0.25 * s, t);
 
     ctx.save();
     ctx.scale(s, s); // from here on, draw in design units
     for (const b of bubbles) {
       const bx = ((b.x - cam * 0.2) % 1200 + 1200) % 1200;
-      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.arc(bx, b.y, b.r, 0, Math.PI * 2); ctx.stroke();
+      if (world === 1) {
+        // out in space the bubbles are stars
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.beginPath(); ctx.arc(bx, b.y, b.r * 0.3, 0, Math.PI * 2); ctx.fill();
+      } else {
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(bx, b.y, b.r, 0, Math.PI * 2); ctx.stroke();
+      }
     }
     // distant reef, drifting slower than the foreground
     ctx.fillStyle = 'rgba(10, 40, 80, 0.5)';
@@ -349,39 +350,43 @@
       ctx.fillStyle = `rgba(255,255,255,${p.life * 0.5})`;
       ctx.beginPath(); ctx.arc(p.x, p.y, 3 * p.life * 2, 0, Math.PI * 2); ctx.fill();
     }
-    // Nemo, nose pointing where he is going (the emoji faces left, so mirror it)
+    fx.drawFarts(ctx);
+    // Nemo, crown and shades on, nose pointing where he is going
     ctx.save();
     ctx.translate(fish.x, fish.y);
-    const ang = state === 'over' ? Math.PI / 2 : Math.atan2(fish.vy, Math.max(120, Math.abs(fish.vx)) * (fish.vx < -40 ? -1 : 1));
-    ctx.rotate(ang);
-    ctx.scale(-1, 1);
-    ctx.font = '30px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('🐠', 0, 1);
+    const facing = fish.vx < -60 ? -1 : 1;
+    ctx.scale(facing, 1);
+    ctx.rotate(state === 'over' ? Math.PI / 2 : Math.atan2(fish.vy, Math.max(160, Math.abs(fish.vx))));
+    ctx.scale(1.15, 1.15);
+    K.drawNemo(ctx, { tail: t * (hook ? 9 : 6), fin: hook ? 1 : (Math.sin(t * 8) + 1) / 2, dead: state === 'over', rave: world === 3, t });
     ctx.restore();
+    fx.drawSparks(ctx, 1);
     ctx.restore(); // camera
     ctx.restore(); // design units
 
     // ---------- UI ----------
     if (state === 'play') {
       text(score + ' m', W / 2, 70 * s, 46 * s);
-      if (score < 12) text(hook ? 'let go to fly!' : 'HOLD to hook on', W / 2, H * 0.94, 18 * s, '#ffd94a');
+      if (score < 12) text(hook ? 'let go to fart away!' : 'HOLD to hook on', W / 2, H * 0.94, 18 * s, '#ffd94a');
       if (banner) {
         ctx.globalAlpha = Math.min(1, banner.t / 0.4);
-        text(banner.msg, W / 2, H * 0.3, 36 * s, '#ffd94a');
+        text(banner.msg, W / 2, H * 0.18, Math.min(32 * s, W * 0.075), '#ffd94a');
+        if (banner.sub) text(banner.sub, W / 2, H * 0.235, 19 * s);
         ctx.globalAlpha = 1;
       }
     } else if (state === 'ready') {
       text("Nemo's Kelp Swing", W / 2, H * 0.1, Math.min(34 * s, W * 0.082), '#ffd94a');
-      text('HOLD to hook on · LET GO to fly', W / 2, H * 0.66, Math.min(20 * s, W * 0.05));
+      text('HOLD to hook on · LET GO to fart away', W / 2, H * 0.66, Math.min(19 * s, W * 0.046));
       text('Swing from jellyfish to jellyfish. Mind the urchins!', W / 2, H * 0.71, Math.min(14 * s, W * 0.036), '#cdeef5');
       if (best > 0) text(`Best: ${best} m`, W / 2, H * 0.77, 19 * s, '#ffd94a');
+      text('🔊 Sound ON highly recommended', W / 2, H * 0.835, Math.min(16 * s, W * 0.046), '#ffe34d');
+      text('for the laughs... trust us.', W / 2, H * 0.87, Math.min(14 * s, W * 0.042), '#cdeef5');
       text(VERSION, W / 2, H * 0.965, 12 * s, 'rgba(255,255,255,0.55)', 'rgba(0,0,0,0.25)');
     } else if (overT > 0.4) {
       ctx.fillStyle = 'rgba(0,0,20,0.45)';
       ctx.fillRect(0, 0, W, H);
-      text(`Ouch... ${cause}!`, W / 2, H * 0.3, Math.min(34 * s, W * 0.085), '#ff8b6b');
+      text('Blub... Game Over', W / 2, H * 0.22, Math.min(34 * s, W * 0.085), '#ff8b6b');
+      text(`Ouch, ${cause}!`, W / 2, H * 0.3, Math.min(20 * s, W * 0.05), '#cdeef5');
       text(`${score} m`, W / 2, H * 0.4, 44 * s, '#ffd94a');
       text(score >= best && score > 0 ? 'New record! 👑' : `Best: ${best} m`, W / 2, H * 0.48, 20 * s, score >= best && score > 0 ? '#aef1b8' : '#fff');
       if (overT > 0.6 && Math.floor(overT * 2) % 2 === 0) text('Tap to try again', W / 2, H * 0.6, 22 * s);
@@ -408,7 +413,7 @@
         fish: { ...fish },
         hook: hook && { x: hook.x, y: hook.y },
         next: a && { x: a.x, y: a.y },
-        cause, hazards: hazards.length,
+        cause, hazards: hazards.length, world: worldOf(score),
         floor: FLOOR
       };
     }
