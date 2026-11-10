@@ -223,7 +223,7 @@
 </div>
 <script>
 (() => {
-  const VERSION = 'v32'; // shown on the title screen so you know which build you're playing
+  const VERSION = 'v33'; // shown on the title screen so you know which build you're playing
   const duelOverlay = document.getElementById('duelOverlay');
   const duelLobby = document.getElementById('duelLobby');
   const duelRoom = document.getElementById('duelRoom');
@@ -1008,17 +1008,21 @@
       playFartSample(Math.random() < 0.5 ? 'tap' : 'proud', 0.9 + Math.random() * 0.2, 1);
     }
   }
-  // the 1 PLAYER / 2 PLAYERS switch on the title screen
+  // the three mode buttons on the title screen
   function tryModeBtn(cx, cy) {
     if (state !== ST.READY || !modeBtn) return false;
     if (nameOverlay.classList.contains('open') || lbOverlay.classList.contains('open')) return false;
     if (duelOverlay.classList.contains('open') || (net && net.cd > 0)) return false;
-    if (cx < modeBtn.x || cx > modeBtn.x + modeBtn.w || cy < modeBtn.y || cy > modeBtn.y + modeBtn.h) return false;
-    mode = (mode + 1) % 3;
-    versus = mode > 0;
-    netClose(); // leaving the two-phone mode leaves its room
-    reset();
-    sndScore();
+    const m = modeBtn.findIndex(b => cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
+    if (m < 0) return false;
+    if (m !== mode) {
+      mode = m;
+      versus = mode > 0;
+      netClose(); // leaving the two-phone mode leaves its room
+      reset();
+      sndScore();
+    }
+    if (mode === 2) showDuel(); // straight to hosting or joining
     return true;
   }
   const sideOf = cx => (cx < W / 2 ? 1 : 2);
@@ -2974,17 +2978,23 @@
         text('Tap to swim!', W / 2, H * 0.62, 26 * s);
         if (best > 0) text(`Best: ${best}`, W / 2, H * 0.68, 20 * s, '#cdeef5');
       }
-      // mode switch
-      const bw = Math.min(250 * s, W * 0.86), bh = 40 * s, bx = W / 2 - bw / 2, by = H * 0.535 - bh / 2;
-      ctx.fillStyle = mode === 2 ? 'rgba(20, 120, 90, 0.9)' : versus ? 'rgba(193, 39, 45, 0.85)' : 'rgba(13, 50, 90, 0.75)';
-      roundRect(bx, by, bw, bh, bh / 2);
-      ctx.strokeStyle = '#ffd94a';
-      ctx.lineWidth = 2 * s;
-      ctx.stroke();
-      text(['👤 1 PLAYER', '👥 2 PLAYERS · 1 PHONE', '📱 2 PLAYERS · 2 PHONES'][mode], W / 2, by + bh / 2, Math.min(17 * s, W * 0.045));
-      text(['tap here for 2 players', 'tap here to play on 2 phones', 'tap here for 1 player'][mode], W / 2, by + bh + 11 * s, 12 * s, '#cdeef5');
-      // the hint line under the pill says "tap here", so it counts as part of the button
-      modeBtn = { x: bx, y: by - 4 * s, w: bw, h: bh + 26 * s };
+      // mode buttons: three of the same size in a row, the chosen one lit up
+      const gap = 8 * s, bw = Math.min(118 * s, (W - 24 * s - gap * 2) / 3), bh = 54 * s;
+      const rowX = W / 2 - (bw * 3 + gap * 2) / 2, by = H * 0.535 - bh / 2;
+      const fs1 = Math.min(15 * s, bw * 0.15), fs2 = Math.min(12.5 * s, bw * 0.125);
+      modeBtn = [['1 PLAYER', '👤 solo'], ['2 PLAYERS', '👥 1 phone'], ['2 PLAYERS', '📱 2 phones']].map((label, m) => {
+        const bx = rowX + m * (bw + gap), on = m === mode;
+        ctx.fillStyle = !on ? 'rgba(13, 50, 90, 0.6)' : m === 2 ? 'rgba(20, 120, 90, 0.95)' : m === 1 ? 'rgba(193, 39, 45, 0.9)' : 'rgba(30, 95, 170, 0.95)';
+        roundRect(bx, by, bw, bh, 14 * s);
+        ctx.strokeStyle = on ? '#ffd94a' : 'rgba(255, 255, 255, 0.35)';
+        ctx.lineWidth = (on ? 3 : 1.5) * s;
+        ctx.stroke();
+        ctx.globalAlpha = on ? 1 : 0.75;
+        text(label[0], bx + bw / 2, by + bh * 0.34, fs1);
+        text(label[1], bx + bw / 2, by + bh * 0.7, fs2, on ? '#ffd94a' : '#cdeef5');
+        ctx.globalAlpha = 1;
+        return { x: bx, y: by, w: bw, h: bh };
+      });
       text(VERSION, W / 2, H * 0.95, 13 * s, 'rgba(255,255,255,0.55)', 'rgba(0,0,0,0.25)');
     } else if (state === ST.OUTRO) {
       const pop = Math.max(0.2, Math.min(1, outroT / 0.4));
