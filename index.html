@@ -124,6 +124,54 @@
     color: #123a5c;
     margin-bottom: 14px;
   }
+  #duelOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 20, 40, 0.7);
+  }
+  #duelOverlay.open { display: flex; }
+  #duelCard {
+    background: #0d4a7a;
+    border: 3px solid #ffd94a;
+    border-radius: 16px;
+    padding: 20px;
+    width: min(86vw, 330px);
+    text-align: center;
+    font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+    color: #fff;
+  }
+  #duelCard h2 { margin-bottom: 12px; font-size: 20px; color: #ffd94a; }
+  #duelRoom { display: none; }
+  .duelHint { font-size: 13px; color: #cdeef5; margin: 10px 0 8px; }
+  .duelBtn {
+    font: bold 16px inherit;
+    color: #123a5c;
+    background: #ffd94a;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 22px;
+    cursor: pointer;
+  }
+  .duelBtn.ghost { background: transparent; color: #cdeef5; border: 1px solid #39a9d8; font-size: 14px; padding: 8px 18px; margin-top: 10px; }
+  #duelCode {
+    width: 130px;
+    font: bold 24px inherit;
+    letter-spacing: 6px;
+    text-align: center;
+    text-transform: uppercase;
+    padding: 7px 4px 7px 10px;
+    border: 2px solid #39a9d8;
+    border-radius: 10px;
+    background: #fff;
+    color: #123a5c;
+    margin-right: 6px;
+  }
+  #duelCodeBig { font: bold 46px inherit; letter-spacing: 10px; color: #ffd94a; margin-left: 10px; }
+  #duelStatus { min-height: 38px; font-size: 14px; color: #fff; margin-top: 12px; line-height: 1.35; }
   #nameSave {
     font: bold 16px inherit;
     color: #123a5c;
@@ -155,9 +203,33 @@
     <button id="nameSave" type="button">Save</button>
   </div>
 </div>
+<div id="duelOverlay">
+  <div id="duelCard">
+    <h2>📱 2-Phone Duel</h2>
+    <div id="duelLobby">
+      <button id="duelHost" class="duelBtn" type="button">Host a duel</button>
+      <div class="duelHint">— or join a friend's duel —</div>
+      <input id="duelCode" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CODE">
+      <button id="duelJoin" class="duelBtn" type="button">Join</button>
+    </div>
+    <div id="duelRoom">
+      <div class="duelHint">Room code</div>
+      <div id="duelCodeBig"></div>
+      <button id="duelLeave" class="duelBtn ghost" type="button">Leave room</button>
+    </div>
+    <div id="duelStatus"></div>
+    <button id="duelClose" class="duelBtn ghost" type="button">Close</button>
+  </div>
+</div>
 <script>
 (() => {
-  const VERSION = 'v30'; // shown on the title screen so you know which build you're playing
+  const VERSION = 'v31'; // shown on the title screen so you know which build you're playing
+  const duelOverlay = document.getElementById('duelOverlay');
+  const duelLobby = document.getElementById('duelLobby');
+  const duelRoom = document.getElementById('duelRoom');
+  const duelCode = document.getElementById('duelCode');
+  const duelCodeBig = document.getElementById('duelCodeBig');
+  const duelStatusEl = document.getElementById('duelStatus');
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const nameBtn = document.getElementById('nameBtn');
@@ -281,6 +353,17 @@
 
   // two-player duel on one screen: left half swims Nemo, right half swims Bubbles
   let versus = false, p2 = null, vsWinner = 0, vsT = 0, vsBanner = null, modeBtn = null;
+  // mode 0 = one player, 1 = two players sharing this phone, 2 = two players on two phones
+  let mode = 0;
+  let net = null;  // the two-phone duel session, while this phone is in a room
+  let drng = null; // seeded so both phones in a duel swim the same course
+  const rnd = () => (net && drng ? drng() : Math.random());
+  const mulberry32 = a => () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let x = Math.imul(a ^ (a >>> 15), 1 | a);
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
   const P2_PAL = { body: '#3d9be9', dark: '#1f66b3', band: '#ffe26b' };
   const P_NAME = k => (k === nemo ? 'Nemo' : 'Bubbles');
   // whoever the celebrations should burst from
@@ -545,6 +628,11 @@
   function reset() {
     nemo = { x: W * (versus ? 0.36 : 0.3), y: H * 0.45, vy: 0, rot: 0, fin: 0, tail: 0, flame: 0, slice: 0, dead: false };
     p2 = { x: nemo.x - 58 * S(), y: H * 0.45, vy: 0, rot: 0, fin: 0, tail: 2, flame: 0, slice: 0, dead: false, pal: P2_PAL };
+    if (net && net.role === 2) {
+      // the guest swims as Bubbles; the host's fish is the one drawn alongside
+      nemo.pal = P2_PAL;
+      p2.pal = null;
+    }
     vsWinner = 0;
     vsT = 0;
     vsBanner = null;
@@ -867,6 +955,12 @@
   // who: 1 = Nemo, 2 = Bubbles (only matters during a two-player duel)
   function tapAction(who = 1) {
     if (nameOverlay.classList.contains('open') || lbOverlay.classList.contains('open')) return;
+    if (duelOverlay.classList.contains('open')) return;
+    if (mode === 2 && state === ST.READY) {
+      // two phones: rounds start from the room, not from a tap
+      if (!net || net.cd === 0) showDuel();
+      return;
+    }
     if (state === ST.READY) {
       state = ST.PLAYING;
       nemo.vy = SWIM_VY * S();
@@ -874,7 +968,7 @@
       doTapFx();
       loadFartSamples();
     } else if (state === ST.PLAYING) {
-      const k = versus && who === 2 ? p2 : nemo;
+      const k = versus && !net && who === 2 ? p2 : nemo;
       if (k.dead) return;
       k.vy = SWIM_VY * S();
       k.fin = 1;
@@ -883,6 +977,7 @@
       if (splashT > 0.8) resumeFromSplash(); // must read the screen first
     } else if (state === ST.DEAD && deathT > 0.6) {
       reset();
+      if (net) netReady();
     } else if (state === ST.WIN && winT > 1) {
       reset();
     }
@@ -917,8 +1012,11 @@
   function tryModeBtn(cx, cy) {
     if (state !== ST.READY || !modeBtn) return false;
     if (nameOverlay.classList.contains('open') || lbOverlay.classList.contains('open')) return false;
+    if (duelOverlay.classList.contains('open') || (net && net.cd > 0)) return false;
     if (cx < modeBtn.x || cx > modeBtn.x + modeBtn.w || cy < modeBtn.y || cy > modeBtn.y + modeBtn.h) return false;
-    versus = !versus;
+    mode = (mode + 1) % 3;
+    versus = mode > 0;
+    netClose(); // leaving the two-phone mode leaves its room
     reset();
     sndScore();
     return true;
@@ -946,7 +1044,7 @@
     tapAction(sideOf(e.clientX));
   });
   window.addEventListener('keydown', e => {
-    if (document.activeElement === nameInput) return;
+    if (document.activeElement === nameInput || document.activeElement === duelCode) return;
     // duel keys: W or Space swims Nemo, the up arrow swims Bubbles
     if (e.code === 'Space' || e.code === 'KeyW') { e.preventDefault(); tapAction(1); }
     if (e.code === 'ArrowUp') { e.preventDefault(); tapAction(2); }
@@ -1066,6 +1164,212 @@
     }
   }
 
+  // ---------- Two-phone duel (rooms in the realtime database) ----------
+  // Each phone simulates only its own fish on a course built from a shared
+  // seed, reports its height and gate count a few times a second, and draws
+  // the other player from what their phone reports. A room lives at
+  // /duels/<4-letter code>: { ts, seed, go, p1, p2 }. "go" counts rounds; the
+  // host bumps it (with a fresh seed) once both players are ready for it.
+  const duelUrl = p => REMOTE_DB + '/duels/' + p + '.json';
+  const ROOM_TTL = 2 * 3600e3; // a room untouched for two hours can be reused
+  const myDuelName = () => Array.from(playerName || 'Player').slice(0, 12).join('') || 'Player';
+  const netErr = st => (st === 401 || st === 403)
+    ? 'Two-phone duels are not switched on yet. (Developer: publish the new database rules from the dashboard.)'
+    : 'The duel server had a problem. Please try again.';
+  function duelStatus(msg) {
+    duelStatusEl.textContent = msg;
+    if (net) net.status = msg;
+  }
+  function showDuel() {
+    duelLobby.style.display = net ? 'none' : 'block';
+    duelRoom.style.display = net ? 'block' : 'none';
+    if (net) duelCodeBig.textContent = net.code;
+    duelOverlay.classList.add('open');
+  }
+  function netOpen(code, role, round) {
+    net = {
+      code, role, me: 'p' + role, them: 'p' + (3 - role),
+      room: {}, round, rd: round + 1, cd: 0, live: false, gates: 0,
+      sendT: 0, inflight: 0, starting: false, told: false, status: '',
+      opp: { n: '', y: 0.45, s: 0, d: 0, seen: 0, left: false }
+    };
+    const es = net.es = new EventSource(duelUrl(code));
+    const session = net;
+    es.addEventListener('put', e => { if (net === session) netApply(JSON.parse(e.data), false); });
+    es.addEventListener('patch', e => { if (net === session) netApply(JSON.parse(e.data), true); });
+    es.addEventListener('cancel', () => { if (net === session) duelStatus(netErr(401)); });
+  }
+  function netClose() {
+    if (!net) return;
+    net.es.close();
+    // tell the other phone we left
+    try { fetch(duelUrl(net.code + '/' + net.me), { method: 'DELETE', keepalive: true }).catch(() => {}); } catch (e) {}
+    net = null;
+    drng = null;
+  }
+  window.addEventListener('pagehide', netClose);
+  // fold one server event into our copy of the room
+  function netApply(ev, patch) {
+    const parts = String(ev.path || '/').split('/').filter(Boolean);
+    const merge = (old, data) => Object.assign(old && typeof old === 'object' ? old : {}, data);
+    if (!parts.length) {
+      net.room = patch ? merge(net.room, ev.data) : (ev.data || {});
+    } else {
+      let o = net.room;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!o[parts[i]] || typeof o[parts[i]] !== 'object') o[parts[i]] = {};
+        o = o[parts[i]];
+      }
+      const last = parts[parts.length - 1];
+      if (patch) o[last] = merge(o[last], ev.data);
+      else if (ev.data === null) delete o[last];
+      else o[last] = ev.data;
+    }
+    netTick();
+  }
+  function netTick() {
+    const r = net.room, go = +r.go || 0, them = r[net.them], opp = net.opp;
+    if (them && typeof them === 'object') {
+      opp.n = String(them.n || 'Player').slice(0, 24);
+      opp.left = false;
+      opp.seen = performance.now();
+      if (them.g === net.round && net.round > 0) {
+        if (typeof them.y === 'number') opp.y = Math.max(0, Math.min(1, them.y));
+        if (typeof them.s === 'number') opp.s = Math.max(opp.s, Math.floor(them.s));
+        if (them.d) opp.d = 1;
+      }
+      // already asking for the next round means they finished this one
+      if (net.live && them.rd > net.round) opp.d = 1;
+    } else if (opp.n && !opp.left) {
+      // their entry vanished: they left the room
+      opp.left = true;
+      if (net.live) opp.d = 1;
+    }
+    // the host starts a round once both players are ready for it
+    const ready = p => p && p.rd === go + 1;
+    if (net.role === 1 && ready(r.p1) && ready(r.p2) && !net.starting) {
+      net.starting = true;
+      const session = net;
+      fetch(duelUrl(net.code), {
+        method: 'PATCH',
+        body: JSON.stringify({ seed: Math.floor(Math.random() * 4294967296), go: go + 1 })
+      }).catch(() => {}).then(() => setTimeout(() => { session.starting = false; }, 1500));
+    }
+    if (go > net.round && net.rd === go && state !== ST.PLAYING) netStartRound(go, +r.seed || 0);
+    else if (!net.live && net.cd === 0) {
+      duelStatus(!opp.n || opp.left ? 'Share the code with your friend, then wait here.'
+        : ready(r[net.them]) ? `${opp.n} is here! Starting…` : `Waiting for ${opp.n} to be ready…`);
+    }
+  }
+  function netStartRound(go, seed) {
+    net.round = go;
+    net.gates = 0;
+    net.told = false;
+    net.live = false;
+    Object.assign(net.opp, { y: 0.45, s: 0, d: 0, seen: performance.now() });
+    reset();
+    drng = mulberry32(seed);
+    net.cd = 3;
+    duelOverlay.classList.remove('open');
+  }
+  // after a round: tell the room this phone is ready for the next one
+  function netReady() {
+    net.live = false;
+    net.rd = (+net.room.go || 0) + 1;
+    netSend();
+    netTick();
+  }
+  function netSend() {
+    if (net.inflight > 4) return; // a slow connection: skip a beat rather than queue up
+    const body = { n: myDuelName(), rd: net.rd };
+    if (net.live) {
+      body.g = net.round;
+      body.y = Math.round(Math.max(0, Math.min(1, nemo.y / H)) * 1000) / 1000;
+      body.s = score;
+      body.d = nemo.dead ? 1 : 0;
+    }
+    const session = net;
+    session.inflight++;
+    fetch(duelUrl(net.code + '/' + net.me), { method: 'PUT', body: JSON.stringify(body) })
+      .catch(() => {}).then(() => { session.inflight--; });
+  }
+  function netPump(dt) {
+    if (!net.live) return;
+    net.sendT -= dt;
+    if (net.sendT <= 0) {
+      net.sendT = state === ST.PLAYING ? 0.12 : 1;
+      netSend();
+    }
+    // a phone that has gone silent for a while has dropped out
+    const opp = net.opp;
+    if (!opp.d && performance.now() - opp.seen > 8000) { opp.d = 1; opp.left = true; }
+  }
+  // 'win' | 'lose' | 'tie' once it is settled, 'wait' while the other player swims on
+  function netVerdict() {
+    const o = net.opp;
+    if (!nemo.dead) return 'wait';
+    if (!o.d) return o.s > score ? 'lose' : 'wait';
+    return score > o.s ? 'win' : score < o.s ? 'lose' : 'tie';
+  }
+  async function netHost() {
+    duelStatus('Opening a room…');
+    try {
+      const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+      for (let tries = 0; tries < 6; tries++) {
+        let code = '';
+        for (let i = 0; i < 4; i++) code += letters[Math.floor(Math.random() * letters.length)];
+        const res = await fetch(duelUrl(code));
+        if (!res.ok) return duelStatus(netErr(res.status));
+        const room = await res.json();
+        if (room && room.ts && Date.now() - room.ts < ROOM_TTL) continue; // in use: pick another
+        const w = await fetch(duelUrl(code), {
+          method: 'PATCH',
+          body: JSON.stringify({ ts: { '.sv': 'timestamp' }, seed: 0, go: 0, p1: { n: myDuelName(), rd: 1 }, p2: null })
+        });
+        if (!w.ok) return duelStatus(netErr(w.status));
+        if (net || mode !== 2) return;
+        netOpen(code, 1, 0);
+        showDuel();
+        return duelStatus('Share the code with your friend, then wait here.');
+      }
+      duelStatus('Could not find a free room. Please try again.');
+    } catch (e) {
+      duelStatus('No connection. Check your internet and try again.');
+    }
+  }
+  async function netJoin() {
+    const code = duelCode.value.toUpperCase().replace(/[^A-Z]/g, '');
+    if (code.length !== 4) return duelStatus('Type the 4-letter code from your friend\'s phone.');
+    duelStatus('Looking for the room…');
+    try {
+      const res = await fetch(duelUrl(code));
+      if (!res.ok) return duelStatus(netErr(res.status));
+      const room = await res.json();
+      if (!room || !room.p1 || Date.now() - (room.ts || 0) > ROOM_TTL) {
+        return duelStatus('No open room with that code. Check it with your friend.');
+      }
+      const go = +room.go || 0;
+      const w = await fetch(duelUrl(code + '/p2'), { method: 'PUT', body: JSON.stringify({ n: myDuelName(), rd: go + 1 }) });
+      if (!w.ok) return duelStatus(netErr(w.status));
+      if (net || mode !== 2) return;
+      netOpen(code, 2, go);
+      showDuel();
+      duelStatus('Joined! Starting soon…');
+    } catch (e) {
+      duelStatus('No connection. Check your internet and try again.');
+    }
+  }
+  document.getElementById('duelHost').addEventListener('click', netHost);
+  document.getElementById('duelJoin').addEventListener('click', netJoin);
+  duelCode.addEventListener('keydown', e => { if (e.code === 'Enter') netJoin(); });
+  document.getElementById('duelClose').addEventListener('click', () => duelOverlay.classList.remove('open'));
+  document.getElementById('duelLeave').addEventListener('click', () => {
+    netClose();
+    reset();
+    showDuel();
+    duelStatus('');
+  });
+
   // ---------- Two-player duel ----------
   function onScoreVersus() {
     score++;
@@ -1083,6 +1387,15 @@
     k.vy = Math.min(k.vy, 0);
     sndHit();
     setTimeout(sndBlub, 250);
+    if (net) {
+      // two phones: this phone's fish is out; the result screen follows the other player live
+      state = ST.DEAD;
+      deathT = 0;
+      flashT = 1;
+      vsBanner = null;
+      netSend();
+      return;
+    }
     const other = k === nemo ? p2 : nemo;
     if (other.dead) {
       // last fish swimming wins; bonking on the same frame is a tie
@@ -1111,7 +1424,21 @@
     if (vsBanner && (vsBanner.t -= dt) <= 0) vsBanner = null;
     bgScroll += coralSpeed() * s * dt * 0.5;
 
+    if (net && net.opp.d && !net.told) {
+      net.told = true;
+      vsBanner = { msg: `${net.opp.n} is out!`, t: 2.6,
+                   sub: score > net.opp.s ? 'You win — keep swimming!' : `Clear ${net.opp.s + 1} gates to win!` };
+    }
     for (const k of [nemo, p2]) {
+      if (net && k === p2 && !k.dead) {
+        // the other phone's fish: glide to the height it last reported
+        if (net.opp.d) { k.dead = true; k.vy = 0; continue; }
+        const dy = net.opp.y * H - k.y;
+        k.y += dy * Math.min(1, dt * 12);
+        k.rot = Math.max(-0.45, Math.min(0.9, dy / (60 * s)));
+        k.fin = (Math.sin(t * 9) + 1) / 2;
+        continue;
+      }
       k.vy += GRAVITY * s * dt;
       k.y += k.vy * dt;
       if (k.dead) { settleFallen(k, dt, true); continue; }
@@ -1137,7 +1464,7 @@
 
     const pw = CORAL_W * s;
     for (const p of corals) {
-      const alive = [nemo, p2].filter(k => !k.dead);
+      const alive = (net ? [nemo] : [nemo, p2]).filter(k => !k.dead);
       if (!alive.length) break;
       // a gate counts once every fish still swimming has cleared it
       if (!p.scored && p.x + pw < Math.min(...alive.map(k => k.x))) {
@@ -1220,12 +1547,14 @@
   // ---------- Coral / tower columns (levels 1, 2, 4, 5) ----------
   function spawnCoral(x) {
     const s = S();
-    const gap = coralGap() * s;
+    // in a two-phone duel the gap narrows by gate number, not by this phone's
+    // score, so both phones build exactly the same course
+    const gap = (net ? Math.max(CORAL_GAP - 5 * Math.min(Math.floor(net.gates++ / 15), 10), 150) : coralGap()) * s;
     // level 5's gaps drift vertically, so leave headroom for the motion
-    const margin = (70 + (phase() === 5 ? 28 : 0)) * s;
+    const margin = (70 + (net || phase() === 5 ? 28 : 0)) * s;
     const groundY = H - GROUND_H * s;
-    const gapY = margin + Math.random() * (groundY - margin * 2 - gap);
-    corals.push({ x, gapY, gap, gapY0: gapY, gap0: gap, seed: Math.random() * 7, scored: false });
+    const gapY = margin + rnd() * (groundY - margin * 2 - gap);
+    corals.push({ x, gapY, gap, gapY0: gapY, gap0: gap, seed: rnd() * 7, scored: false });
   }
 
   // ---------- Steel blocks (level 3) ----------
@@ -1293,6 +1622,7 @@
   function update(dt) {
     const s = S();
     t += dt;
+    if (net) netPump(dt);
 
     // ambient particles: bubbles/orbs rise, stars stream, petals/confetti fall
     const ph = phase();
@@ -1342,6 +1672,20 @@
       nemo.fin = (Math.sin(t * 8) + 1) / 2;
       p2.y = H * 0.45 + Math.sin(t * 3 + 1.6) * 12 * s;
       p2.fin = (Math.sin(t * 8 + 1.6) + 1) / 2;
+      if (net && net.cd > 0) {
+        // two-phone duel: both phones count down, then the round starts by itself
+        const before = Math.ceil(net.cd);
+        net.cd = Math.max(0, net.cd - dt);
+        if (Math.ceil(net.cd) < before && net.cd > 0) beep(660, 0.09, 'triangle', 0.08);
+        if (net.cd === 0) {
+          net.live = true;
+          net.sendT = 0;
+          state = ST.PLAYING;
+          nemo.vy = SWIM_VY * s;
+          beep(990, 0.25, 'triangle', 0.09);
+          loadFartSamples();
+        }
+      }
       return;
     }
 
@@ -1464,6 +1808,12 @@
       const groundY = H - GROUND_H * s;
       if (versus) {
         for (const k of [nemo, p2]) {
+          if (net && k === p2 && !net.opp.d) {
+            // still swimming on their phone: keep showing where they are
+            k.y += (net.opp.y * H - k.y) * Math.min(1, dt * 12);
+            k.fin = (Math.sin(t * 9) + 1) / 2;
+            continue;
+          }
           k.vy += GRAVITY * s * dt;
           k.y += k.vy * dt;
           settleFallen(k, dt, false);
@@ -2535,9 +2885,12 @@
         ctx.fillRect(0, 0, W, H);
       }
       text(score, W / 2, safeTop + 30 * s, 52 * s);
-      text(versus ? '2 PLAYER DUEL' : `LVL ${phase()}`, W / 2, safeTop + 62 * s, 16 * s, '#cdeef5');
+      text(net ? `${net.opp.n}: ${net.opp.s}${net.opp.d ? ' ✖' : ''}` : versus ? '2 PLAYER DUEL' : `LVL ${phase()}`,
+           W / 2, safeTop + 62 * s, 16 * s, '#cdeef5');
+      // two phones: name the other player's fish
+      if (net && !p2.dead) text(net.opp.n, p2.x, p2.y - 30 * s, 12 * s, '#fff');
 
-      if (versus) {
+      if (versus && !net) {
         // each player's corner: name while swimming, struck out once bonked
         const tagY = H - GROUND_H * s * 0.45;
         text(nemo.dead ? '✖ Nemo' : '◀ NEMO', W * 0.25, tagY, 17 * s, nemo.dead ? '#9aa0ad' : '#ffb45c');
@@ -2554,12 +2907,12 @@
           text('tap this side', W * 0.75, H * 0.8, 15 * s);
           ctx.globalAlpha = 1;
         }
-        if (vsBanner) {
-          ctx.globalAlpha = Math.min(1, vsBanner.t / 0.4);
-          text(vsBanner.msg, W / 2, H * 0.3, 28 * s, '#ff8b6b');
-          text(vsBanner.sub, W / 2, H * 0.36, 17 * s);
-          ctx.globalAlpha = 1;
-        }
+      }
+      if (versus && vsBanner) {
+        ctx.globalAlpha = Math.min(1, vsBanner.t / 0.4);
+        text(vsBanner.msg, W / 2, H * 0.3, Math.min(28 * s, W * 0.07), '#ff8b6b');
+        text(vsBanner.sub, W / 2, H * 0.36, 17 * s);
+        ctx.globalAlpha = 1;
       }
 
       // unlock banner flashes with the how-to
@@ -2600,7 +2953,20 @@
       text('🔊', W / 2, H * 0.745, 20 * s);
       text('Sound ON highly recommended', W / 2, H * 0.79, Math.min(17 * s, W * 0.05), '#ffe34d');
       text('for the laughs... trust us.', W / 2, H * 0.825, Math.min(14 * s, W * 0.042), '#cdeef5');
-      if (versus) {
+      if (mode === 2) {
+        if (net && net.cd > 0) {
+          text(Math.ceil(net.cd), W / 2, H * 0.36, 90 * s, '#ffd94a');
+          text(`You vs ${net.opp.n}`, W / 2, H * 0.615, 22 * s);
+          text('Get ready… tap to swim!', W / 2, H * 0.665, 17 * s, '#cdeef5');
+        } else if (net) {
+          text(`Room ${net.code}`, W / 2, H * 0.615, 24 * s, '#ffd94a');
+          text(net.status, W / 2, H * 0.665, Math.min(15 * s, W * 0.04), '#cdeef5');
+          text('Tap to see the room code', W / 2, H * 0.705, 14 * s);
+        } else {
+          text('Play a friend on their own phone', W / 2, H * 0.615, Math.min(19 * s, W * 0.05));
+          text('Tap to host or join a duel', W / 2, H * 0.665, 18 * s, '#ffd94a');
+        }
+      } else if (versus) {
         text('Last fish swimming wins!', W / 2, H * 0.615, 20 * s);
         text('◀ Nemo: tap the LEFT half', W / 2, H * 0.66, 16 * s, '#ffb45c');
         text('Bubbles: tap the RIGHT half ▶', W / 2, H * 0.7, 16 * s, '#c9e8ff');
@@ -2609,14 +2975,14 @@
         if (best > 0) text(`Best: ${best}`, W / 2, H * 0.68, 20 * s, '#cdeef5');
       }
       // mode switch
-      const bw = 190 * s, bh = 40 * s, bx = W / 2 - bw / 2, by = H * 0.535 - bh / 2;
-      ctx.fillStyle = versus ? 'rgba(193, 39, 45, 0.85)' : 'rgba(13, 50, 90, 0.75)';
+      const bw = Math.min(250 * s, W * 0.86), bh = 40 * s, bx = W / 2 - bw / 2, by = H * 0.535 - bh / 2;
+      ctx.fillStyle = mode === 2 ? 'rgba(20, 120, 90, 0.9)' : versus ? 'rgba(193, 39, 45, 0.85)' : 'rgba(13, 50, 90, 0.75)';
       roundRect(bx, by, bw, bh, bh / 2);
       ctx.strokeStyle = '#ffd94a';
       ctx.lineWidth = 2 * s;
       ctx.stroke();
-      text(versus ? '👥 2 PLAYERS' : '👤 1 PLAYER', W / 2, by + bh / 2, 18 * s);
-      text(versus ? 'tap here for 1 player' : 'tap here for 2 players', W / 2, by + bh + 11 * s, 12 * s, '#cdeef5');
+      text(['👤 1 PLAYER', '👥 2 PLAYERS · 1 PHONE', '📱 2 PLAYERS · 2 PHONES'][mode], W / 2, by + bh / 2, Math.min(17 * s, W * 0.045));
+      text(['tap here for 2 players', 'tap here to play on 2 phones', 'tap here for 1 player'][mode], W / 2, by + bh + 11 * s, 12 * s, '#cdeef5');
       modeBtn = { x: bx, y: by, w: bw, h: bh };
       text(VERSION, W / 2, H * 0.95, 13 * s, 'rgba(255,255,255,0.55)', 'rgba(0,0,0,0.25)');
     } else if (state === ST.OUTRO) {
@@ -2681,7 +3047,14 @@
       if (deathT > 0.4) {
         ctx.fillStyle = 'rgba(0,0,0,0.45)';
         ctx.fillRect(0, 0, W, H);
-        if (versus) {
+        if (net) {
+          const v = netVerdict(), o = net.opp;
+          const head = v === 'win' ? 'YOU WIN! 🏆' : v === 'lose' ? `${o.n} WINS!` : v === 'tie' ? "IT'S A TIE! 🤝" : "YOU'RE OUT!";
+          text(head, W / 2, H * 0.26, Math.min(40 * s, W * 0.085), v === 'win' ? '#ffd94a' : v === 'lose' ? '#ff8b6b' : '#fff');
+          text(v === 'wait' ? `${o.n} is still swimming…` : o.left ? `${o.n} left the duel` : 'Most gates cleared wins',
+               W / 2, H * 0.34, Math.min(19 * s, W * 0.05));
+          text(`You: ${score}     ${o.n}: ${o.s}`, W / 2, H * 0.44, Math.min(24 * s, W * 0.06), '#aef1b8');
+        } else if (versus) {
           const head = vsWinner === 1 ? 'NEMO WINS! 🏆' : vsWinner === 2 ? 'BUBBLES WINS! 🏆' : "IT'S A TIE! 🤝";
           text(head, W / 2, H * 0.26, Math.min(40 * s, W * 0.09), vsWinner === 2 ? '#c9e8ff' : '#ffd94a');
           text(vsWinner ? 'Last fish swimming' : 'You bonked at the same moment', W / 2, H * 0.34, 20 * s);

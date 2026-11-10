@@ -108,5 +108,37 @@ expect('unhide an entry', await req('PATCH', `/scores/${runKey}.json`, { hidden:
 expect('bulk rename', await req('PATCH', '/scores.json', { [`${k}/name`]: 'Nemo' }, true), true);
 expect('delete an entry', await req('DELETE', `/scores/${k}.json`, undefined, true), true);
 
+console.log('\n-- two-phone duels (public, no key) --');
+const room = '/duels/KXTP';
+const me = { n: 'Nemo', rd: 1 };
+expect('look up a room that does not exist yet', await req('GET', `${room}.json`), true);
+expect('host opens a room', await req('PATCH', `${room}.json`, { ts: { '.sv': 'timestamp' }, seed: 0, go: 0, p1: me, p2: null }), true);
+expect('guest joins', await req('PUT', `${room}/p2.json`, { n: 'Bubbles', rd: 1 }), true);
+expect('host starts round 1', await req('PATCH', `${room}.json`, { seed: 4123456789, go: 1 }), true);
+expect('a player reports position', await req('PUT', `${room}/p1.json`, { ...me, g: 1, y: 0.42, s: 3, d: 0 }), true);
+expect('a player reports being out', await req('PUT', `${room}/p2.json`, { n: 'Bubbles', rd: 1, g: 1, y: 0.87, s: 3, d: 1 }), true);
+expect('a player asks for a rematch', await req('PUT', `${room}/p2.json`, { n: 'Bubbles', rd: 2 }), true);
+expect('read the room', await req('GET', `${room}.json`), true);
+expect('a player leaves', await req('DELETE', `${room}/p2.json`), true);
+expect('host reopens a stale room', await req('PATCH', `${room}.json`, { ts: { '.sv': 'timestamp' }, seed: 0, go: 0, p1: me, p2: null }), true);
+
+console.log('\n-- a vandal in the duel rooms (public, no key) --');
+expect('list every room', await req('GET', '/duels.json'), false);
+expect('read a room with a malformed code', await req('GET', '/duels/abcd.json'), false);
+expect('open a room with a lowercase code', await req('PATCH', '/duels/abcd.json', { ts: { '.sv': 'timestamp' }, seed: 0, go: 0, p1: me }), false);
+expect('join a room with a long code', await req('PUT', '/duels/ABCDE/p1.json', me), false);
+expect('overwrite a whole room', await req('PUT', `${room}.json`, { go: 5, p1: me }), false);
+expect('delete a whole room', await req('DELETE', `${room}.json`), false);
+expect('a third player', await req('PUT', `${room}/p3.json`, me), false);
+expect('an unknown room field', await req('PATCH', `${room}.json`, { junk: 'x'.repeat(1000) }), false);
+expect('a room dated long ago', await req('PATCH', `${room}.json`, { ts: 1 }), false);
+expect('a fractional round number', await req('PATCH', `${room}.json`, { go: 1.5 }), false);
+expect('a player with an unknown field', await req('PUT', `${room}/p1.json`, { ...me, junk: 1 }), false);
+expect('a player with a huge name', await req('PUT', `${room}/p1.json`, { n: 'x'.repeat(25), rd: 1 }), false);
+expect('a player without a name', await req('PUT', `${room}/p1.json`, { rd: 1 }), false);
+expect('a player far off screen', await req('PUT', `${room}/p1.json`, { ...me, y: 99 }), false);
+expect('a player with a text score', await req('PUT', `${room}/p1.json`, { ...me, s: 'lots' }), false);
+expect('a player carrying a priority', await req('PUT', `${room}/p1.json`, { ...me, '.priority': 'y'.repeat(1000) }), false);
+
 console.log(failed ? `\n${failed} RULE CHECK(S) FAILED` : '\nALL RULE CHECKS PASSED');
 process.exit(failed ? 1 : 0);
