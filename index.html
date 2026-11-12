@@ -284,7 +284,7 @@
 </div>
 <script>
 (() => {
-  const VERSION = 'v36'; // shown on the title screen so you know which build you're playing
+  const VERSION = 'v37'; // shown on the title screen so you know which build you're playing
   const duelOverlay = document.getElementById('duelOverlay');
   const duelLobby = document.getElementById('duelLobby');
   const duelRoom = document.getElementById('duelRoom');
@@ -383,14 +383,14 @@
   const SPLASH_5 = {
     title: 'LEVEL 5',
     emoji: '👑',
-    subtitle: 'THE ROYL KINGDOM',
+    subtitle: 'THE STRY KINGDOM',
     warning: 'THE FINAL LEVEL!',
     lines: [
       'Welcome home, your majesty.',
       'Golden gates guard the throne,',
       'and their gaps DRIFT up and down!',
       'Survive the royal gauntlet to be',
-      'crowned ROYL #1 forever'
+      'crowned STRY #1 forever'
     ],
     prompt: 'Tap to claim your destiny'
   };
@@ -1666,7 +1666,7 @@
     }
   }
 
-  // ---------- Fireworks (every 5 points: "ROYL #1") ----------
+  // ---------- Fireworks (every 5 points: "STRY #1") ----------
   function launchFireworks(jingle = true) {
     if (jingle) sndFireworks();
     const s = S();
@@ -1709,7 +1709,7 @@
     ctx.globalAlpha = 1;
     for (const ft of fwTexts) {
       ctx.globalAlpha = Math.min(1, ft.life);
-      text('ROYL #1', ft.x, ft.y, 30 * S(), '#ffd94a', '#1c1c1e');
+      text('STRY #1', ft.x, ft.y, 30 * S(), '#ffd94a', '#1c1c1e');
       ctx.globalAlpha = 1;
     }
   }
@@ -2006,7 +2006,7 @@
     // PLAYING
     if (versus) { updateVersus(dt); return; }
     if (mode === 3) ghostStep(dt);
-    bgScroll += coralSpeed() * s * dt * 0.5; // background ROYL drifts at half speed
+    bgScroll += coralSpeed() * s * dt * 0.5; // background STRY drifts at half speed
     nemo.vy += GRAVITY * s * dt;
     nemo.y += nemo.vy * dt;
     nemo.rot = Math.max(-0.45, Math.min(1.2, nemo.vy / (600 * s)));
@@ -2203,7 +2203,7 @@
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
 
-    // huge ROYL branding scrolling behind the action
+    // huge STRY branding scrolling behind the action
     const fs = H * 0.3;
     ctx.font = `900 ${fs}px -apple-system, "Segoe UI", Arial, sans-serif`;
     ctx.textAlign = 'left';
@@ -2212,9 +2212,9 @@
                   : ph === 4 ? `hsla(${(t * 50) % 360}, 90%, 60%, 0.1)`
                   : ph === 5 ? 'rgba(255,217,74,0.12)'
                   : 'rgba(255,255,255,0.09)';
-    const tw = ctx.measureText('ROYL').width + W * 0.45;
+    const tw = ctx.measureText('STRY').width + W * 0.45;
     for (let x = -(bgScroll % tw); x < W; x += tw) {
-      ctx.fillText('ROYL', x, H * 0.38);
+      ctx.fillText('STRY', x, H * 0.38);
     }
 
     if (ph === 1) {
@@ -3229,7 +3229,7 @@
         ctx.fillRect(0, 0, W, H);
         text('🏆', W / 2, H * 0.06, 28 * s);
         text('YOU WIN!', W / 2, H * 0.12, 38 * s, '#ffd94a');
-        text('ROYL #1 CHAMPION', W / 2, H * 0.19, 22 * s, '#aef1b8');
+        text('STRY #1 CHAMPION', W / 2, H * 0.19, 22 * s, '#aef1b8');
         text(`Score: ${score}`, W / 2, H * 0.25, 28 * s);
         const lb = (mode === 3 ? dailyBoard : lbTop()).slice(0, 10);
         if (lb.length) {

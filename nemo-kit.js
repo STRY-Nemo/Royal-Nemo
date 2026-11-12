@@ -322,13 +322,13 @@
   // The five worlds of the main game, as backdrops: sky colours, the giant
   // lettering's tint, and the colours its gates are built from.
   const WORLDS = [
-    { name: 'THE REEF', sky: ['#39a9d8', '#1a6ea8', '#0d4a7a'], royl: 'rgba(255,255,255,0.09)', block: ['#d8527c', '#ff7fa5', '#c2406a'], edge: 'rgba(110, 20, 50, 0.45)' },
-    { name: 'SPACE', sky: ['#04040f', '#0b0b28', '#181339'], royl: 'rgba(255,217,74,0.08)', block: ['#6a7686', '#b9c4d2', '#5d6878'], edge: 'rgba(20, 25, 40, 0.55)' },
-    { name: 'SAMURAI SUNSET', sky: ['#f5b16b', '#e0455c', '#5d2a4a'], royl: 'rgba(255,255,255,0.1)', block: ['#aeb9c6', '#cfd8e2', '#5d6878'], edge: 'rgba(25, 32, 45, 0.6)' },
-    { name: 'NEON RAVE', sky: ['#0b001a', '#1a0033', '#2d0a4e'], royl: null, block: null, edge: 'rgba(255, 255, 255, 0.45)' },
-    { name: 'THE ROYL KINGDOM', sky: ['#2a0a3a', '#7a1f4f', '#b8722a'], royl: 'rgba(255,217,74,0.12)', block: ['#9a6a08', '#ffd94a', '#8a5a06'], edge: 'rgba(120, 80, 0, 0.6)' }
+    { name: 'THE REEF', sky: ['#39a9d8', '#1a6ea8', '#0d4a7a'], tint: 'rgba(255,255,255,0.09)', block: ['#d8527c', '#ff7fa5', '#c2406a'], edge: 'rgba(110, 20, 50, 0.45)' },
+    { name: 'SPACE', sky: ['#04040f', '#0b0b28', '#181339'], tint: 'rgba(255,217,74,0.08)', block: ['#6a7686', '#b9c4d2', '#5d6878'], edge: 'rgba(20, 25, 40, 0.55)' },
+    { name: 'SAMURAI SUNSET', sky: ['#f5b16b', '#e0455c', '#5d2a4a'], tint: 'rgba(255,255,255,0.1)', block: ['#aeb9c6', '#cfd8e2', '#5d6878'], edge: 'rgba(25, 32, 45, 0.6)' },
+    { name: 'NEON RAVE', sky: ['#0b001a', '#1a0033', '#2d0a4e'], tint: null, block: null, edge: 'rgba(255, 255, 255, 0.45)' },
+    { name: 'THE STRY KINGDOM', sky: ['#2a0a3a', '#7a1f4f', '#b8722a'], tint: 'rgba(255,217,74,0.12)', block: ['#9a6a08', '#ffd94a', '#8a5a06'], edge: 'rgba(120, 80, 0, 0.6)' }
   ];
-  // sky gradient plus the huge ROYL lettering drifting behind the action
+  // sky gradient plus the huge STRY lettering drifting behind the action
   function drawBackdrop(c, W, H, world, scroll, time) {
     const w = WORLDS[world % WORLDS.length];
     const g = c.createLinearGradient(0, 0, 0, H);
@@ -341,9 +341,9 @@
     c.font = `900 ${fs}px -apple-system, "Segoe UI", Arial, sans-serif`;
     c.textAlign = 'left';
     c.textBaseline = 'middle';
-    c.fillStyle = w.royl || `hsla(${(time * 50) % 360}, 90%, 60%, 0.1)`;
-    const tw = c.measureText('ROYL').width + W * 0.45;
-    for (let x = -(((scroll % tw) + tw) % tw); x < W; x += tw) c.fillText('ROYL', x, H * 0.38);
+    c.fillStyle = w.tint || `hsla(${(time * 50) % 360}, 90%, 60%, 0.1)`;
+    const tw = c.measureText('STRY').width + W * 0.45;
+    for (let x = -(((scroll % tw) + tw) % tw); x < W; x += tw) c.fillText('STRY', x, H * 0.38);
   }
   // the colours for something built in a given world (rave cycles with time)
   function blockColors(world, time, seed) {
@@ -354,7 +354,7 @@
   }
 
   // Effects every game shares: green fart clouds, firework sparks and the
-  // "ROYL #1" lettering that floats up with them. Positions are in whatever
+  // "STRY #1" lettering that floats up with them. Positions are in whatever
   // units the caller draws in; u is the size of one design unit.
   function fx() {
     let farts = [], sparks = [], texts = [];
@@ -368,7 +368,7 @@
           });
         }
       },
-      fireworks(x, y, u, label = 'ROYL #1') {
+      fireworks(x, y, u, label = 'STRY #1') {
         const colors = ['#ffd94a', '#ff8c2e', '#ffffff', '#ff5c8a'];
         for (let i = 0; i < 26; i++) {
           const a = (i / 26) * Math.PI * 2 + Math.random() * 0.3, sp = (90 + Math.random() * 180) * u;
