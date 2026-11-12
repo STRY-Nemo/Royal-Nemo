@@ -55,22 +55,59 @@
   #moreGames {
     position: fixed;
     left: 0; right: 0;
-    bottom: max(8px, env(safe-area-inset-bottom));
+    bottom: max(10px, env(safe-area-inset-bottom));
     z-index: 5;
     display: flex;
-    justify-content: space-between;
-    padding: 0 10px;
+    justify-content: center;
+    gap: 10px;
+    padding: 0 12px;
     pointer-events: none;
   }
   #moreGames a {
     pointer-events: auto;
-    font: bold 13px -apple-system, "Segoe UI", Arial, sans-serif;
+    position: relative;
+    flex: 1;
+    max-width: 210px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-family: -apple-system, "Segoe UI", Arial, sans-serif;
     color: #fff;
     text-decoration: none;
-    background: rgba(13, 50, 90, 0.75);
+    background: linear-gradient(#1c6fb0, #0d3f6e);
     border: 2px solid #ffd94a;
-    border-radius: 16px;
-    padding: 6px 12px;
+    border-radius: 14px;
+    padding: 9px 12px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+  }
+  #moreGames .ico { font-size: 26px; line-height: 1; }
+  #moreGames .name { display: block; font-weight: bold; font-size: 15px; white-space: nowrap; }
+  #moreGames .tag { display: block; font-size: 11px; color: #cdeef5; white-space: nowrap; }
+  #moreGames .new {
+    position: absolute;
+    top: -10px; right: -6px;
+    font: bold 11px -apple-system, "Segoe UI", Arial, sans-serif;
+    letter-spacing: 0.5px;
+    color: #fff;
+    background: #e0304a;
+    border: 2px solid #fff;
+    border-radius: 10px;
+    padding: 2px 7px;
+    transform: rotate(8deg);
+    animation: newPulse 1.1s ease-in-out infinite;
+  }
+  @keyframes newPulse {
+    0%, 100% { transform: rotate(8deg) scale(1); }
+    50% { transform: rotate(8deg) scale(1.18); }
+  }
+  @media (prefers-reduced-motion: reduce) { #moreGames .new { animation: none; } }
+  @media (max-width: 370px) {
+    /* small phones: keep both buttons on screen */
+    #moreGames { gap: 8px; padding: 0 8px; }
+    #moreGames a { min-width: 0; gap: 6px; padding: 9px 8px; }
+    #moreGames .ico { font-size: 22px; }
+    #moreGames .name { font-size: 14px; }
+    #moreGames .tag { display: none; }
   }
   #lbOverlay {
     position: fixed;
@@ -208,8 +245,8 @@
 <button id="nameBtn" type="button">👤</button>
 <button id="lbBtn" type="button">🏆 Top 100</button>
 <div id="moreGames">
-  <a href="stack.html">🧱 Reef Stack</a>
-  <a href="swing.html">🪝 Kelp Swing</a>
+  <a href="stack.html"><span class="new">NEW</span><span class="ico">🧱</span><span><span class="name">Reef Stack</span><span class="tag">build the tallest tower</span></span></a>
+  <a href="swing.html"><span class="new">NEW</span><span class="ico">🪝</span><span><span class="name">Kelp Swing</span><span class="tag">swing and fart away</span></span></a>
 </div>
 <div id="lbOverlay">
   <div id="lbCard">
@@ -247,7 +284,7 @@
 </div>
 <script>
 (() => {
-  const VERSION = 'v35'; // shown on the title screen so you know which build you're playing
+  const VERSION = 'v36'; // shown on the title screen so you know which build you're playing
   const duelOverlay = document.getElementById('duelOverlay');
   const duelLobby = document.getElementById('duelLobby');
   const duelRoom = document.getElementById('duelRoom');
@@ -3151,7 +3188,8 @@
         ctx.globalAlpha = 1;
         return { x: bx, y: by, w: bw, h: bh, m };
       });
-      text(VERSION, W / 2, H * 0.95, 13 * s, 'rgba(255,255,255,0.55)', 'rgba(0,0,0,0.25)');
+      // (the version sits under the top buttons: the bottom of the screen belongs to the new-game buttons)
+      text(VERSION, W / 2, 22 * s, 12 * s, 'rgba(255,255,255,0.55)', 'rgba(0,0,0,0.25)');
     } else if (state === ST.OUTRO) {
       const pop = Math.max(0.2, Math.min(1, outroT / 0.4));
       text(`LEVEL ${outroFrom} CLEAR!`, W / 2, H * 0.16, 40 * s * pop, '#ffd94a');
